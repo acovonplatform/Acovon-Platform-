@@ -100,10 +100,9 @@ import {
 } from '../data/i18nData';
 import { PLATFORM_WIDE_PHRASE_TRANSLATIONS } from '../data/i18nExtendedPhrases';
 import {
-  auth,
-  logoutFromFirebase,
-  syncUserPreferencesToFirestore
-} from '../services/firebase';
+  logoutFromSupabase,
+  syncUserPreferencesToSupabase
+} from '../services/supabase';
 import { INITIAL_STATUSES } from '../data/mockStatuses';
 import {
   MOCK_USERS,
@@ -2292,7 +2291,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const nowDate = new Date().toISOString().split('T')[0];
     const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const newUserId = auth.currentUser?.uid || `user_fan_${Date.now()}`;
+    const newUserId = `user_fan_${Date.now()}`;
 
     // All new registrations automatically receive the default Fan role
     const newUser: User = {
@@ -2472,23 +2471,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logoutUser = () => {
-    logoutFromFirebase().catch(() => {});
+    logoutFromSupabase().catch(() => {});
     setIsAuthenticated(false);
     setActiveRole('fan');
     setCurrentUser(MOCK_USERS.fan1);
   };
 
-  // Sync appearance and language preferences to Cloud Firestore when authenticated with Firebase
+  // Sync appearance and language preferences to Supabase when authenticated
   useEffect(() => {
-    if (auth.currentUser) {
-      syncUserPreferencesToFirestore({
-        uid: auth.currentUser.uid,
+    if (isAuthenticated && currentUser?.id) {
+      syncUserPreferencesToSupabase({
+        uid: currentUser.id,
         appearancePreference: appearanceMode,
         preferredLanguage: activeLanguageCode,
         languageMode: languagePreferenceMode
       }).catch(() => {});
     }
-  }, [appearanceMode, activeLanguageCode, languagePreferenceMode]);
+  }, [isAuthenticated, currentUser?.id, appearanceMode, activeLanguageCode, languagePreferenceMode]);
 
   // Follow System state (persisted per user)
   const [following, setFollowing] = useState<string[]>(() => {

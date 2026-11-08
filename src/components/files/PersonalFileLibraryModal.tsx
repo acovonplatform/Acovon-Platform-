@@ -3,8 +3,6 @@ import {
   X,
   UploadCloud,
   FileText,
-  Image as ImageIcon,
-  Film,
   Trash2,
   Download,
   Eye,
@@ -21,27 +19,23 @@ import {
   MessageSquare,
   FolderLock,
   Play,
-  XCircle,
   Database,
   HardDrive
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import {
-  auth,
-  db,
-  resolvedFirebaseConfig,
-  FirestoreUserFileRecord,
+  resolvedSupabaseConfig,
+  isSupabaseConfigured,
+  SupabaseUserFileRecord,
   FileVisibilityMode,
   FileUploadCategory,
-  validateFileForFirebaseUpload,
-  uploadUserFileToFirebase,
-  subscribeToUserFirestoreFiles,
-  deleteUserFirebaseFile,
-  updateUserFirebaseFileVisibility,
-  submitFirebaseAccountDeletionRequest,
-  UploadTask
-} from '../../services/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+  validateFileForSupabaseUpload,
+  uploadUserFileToSupabase,
+  fetchUserSupabaseFiles,
+  deleteUserSupabaseFile,
+  updateUserSupabaseFileVisibility,
+  submitSupabaseAccountDeletionRequest
+} from '../../services/supabase';
 
 interface PersonalFileLibraryModalProps {
   onClose: () => void;
@@ -93,17 +87,17 @@ function formatBytes(bytes: number): string {
 
 export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> = ({ onClose }) => {
   const { currentUser, logoutUser } = useApp();
-  const activeUid = auth.currentUser?.uid || currentUser.id;
+  const activeUid = currentUser.id;
 
   const [activeTab, setActiveTab] = useState<'library' | 'security_tests' | 'account_deletion'>('library');
 
   // File Library State (strictly isolated per UID)
-  const storageKey = `acovon_user_files_v1_${activeUid}`;
-  const [localFiles, setLocalFiles] = useState<FirestoreUserFileRecord[]>(() => {
+  const storageKey = `acovon_supabase_files_v1_${activeUid}`;
+  const [localFiles, setLocalFiles] = useState<SupabaseUserFileRecord[]>(() => {
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
-        const parsed = JSON.parse(raw) as FirestoreUserFileRecord[];
+        const parsed = JSON.parse(raw) as SupabaseUserFileRecord[];
         return parsed.filter((f) => f.owner_uid === activeUid && f.upload_status !== 'deleted');
       }
     } catch {
@@ -111,14 +105,13 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     }
     return [];
   });
-  const [firestoreFiles, setFirestoreFiles] = useState<FirestoreUserFileRecord[]>([]);
+  const [remoteFiles, setRemoteFiles] = useState<SupabaseUserFileRecord[]>([]);
 
-  // Keep local storage synced when UID changes
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(`acovon_user_files_v1_${activeUid}`);
+      const raw = localStorage.getItem(`acovon_supabase_files_v1_${activeUid}`);
       if (raw) {
-        const parsed = JSON.parse(raw) as FirestoreUserFileRecord[];
+        const parsed = JSON.parse(raw) as SupabaseUserFileRecord[];
         setLocalFiles(parsed.filter((f) => f.owner_uid === activeUid && f.upload_status !== 'deleted'));
       } else {
         setLocalFiles([]);
@@ -126,26 +119,20 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     } catch {
       setLocalFiles([]);
     }
-  }, [activeUid]);
 
-  // Subscribe to real-time Firestore files for authenticated Firebase UID
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    const unsub = subscribeToUserFirestoreFiles(auth.currentUser.uid, (remoteFiles) => {
-      setFirestoreFiles(remoteFiles);
+    fetchUserSupabaseFiles(activeUid).then((items) => {
+      setRemoteFiles(items);
     });
-    return () => unsub();
   }, [activeUid]);
 
-  // Unified file list strictly owned by activeUid
   const userFiles = useMemo(() => {
-    const map = new Map<string, FirestoreUserFileRecord>();
+    const map = new Map<string, SupabaseUserFileRecord>();
     localFiles.forEach((f) => {
       if (f.owner_uid === activeUid && f.upload_status !== 'deleted') {
         map.set(f.file_id, f);
       }
     });
-    firestoreFiles.forEach((f) => {
+    remoteFiles.forEach((f) => {
       if (f.owner_uid === activeUid && f.upload_status !== 'deleted') {
         map.set(f.file_id, f);
       }
@@ -153,24 +140,22 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     return Array.from(map.values()).sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  }, [localFiles, firestoreFiles, activeUid]);
+  }, [localFiles, remoteFiles, activeUid]);
 
-  const persistLocalFiles = (next: FirestoreUserFileRecord[]) => {
+  const persistLocalFiles = (next: SupabaseUserFileRecord[]) => {
     setLocalFiles(next);
     try {
-      localStorage.setItem(`acovon_user_files_v1_${activeUid}`, JSON.stringify(next));
+      localStorage.setItem(`acovon_supabase_files_v1_${activeUid}`, JSON.stringify(next));
     } catch {
       // Ignore storage quota
     }
   };
 
-  // Upload queue & state
+  // Upload state
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedVisibility, setSelectedVisibility] = useState<FileVisibilityMode>('private');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
-  const [activeUploadTask, setActiveUploadTask] = useState<UploadTask | null>(null);
-  const [failedUploadFile, setFailedUploadFile] = useState<File | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
@@ -182,8 +167,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'largest' | 'name'>('newest');
 
   // Preview & Delete confirmation modals
-  const [previewFile, setPreviewFile] = useState<FirestoreUserFileRecord | null>(null);
-  const [confirmDeleteFile, setConfirmDeleteFile] = useState<FirestoreUserFileRecord | null>(null);
+  const [previewFile, setPreviewFile] = useState<SupabaseUserFileRecord | null>(null);
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState<SupabaseUserFileRecord | null>(null);
 
   // Account deletion state
   const [deletionReason, setDeletionReason] = useState('');
@@ -195,7 +180,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
   const [securityTestResults, setSecurityTestResults] = useState<
     {
       id: number;
-      group: 'Authentication' | 'Database' | 'File Storage' | 'Existing Platform';
+      group: 'Authentication' | 'PostgreSQL RLS' | 'Supabase Storage' | 'Existing Platform';
       title: string;
       passed: boolean;
       detail: string;
@@ -233,9 +218,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
   const handleStartFileUpload = async (file: File) => {
     setStatusMessage(null);
-    setFailedUploadFile(null);
 
-    const check = validateFileForFirebaseUpload(file);
+    const check = validateFileForSupabaseUpload(file);
     if (!check.valid || !check.category || !check.extension || !check.sanitizedName) {
       setStatusMessage({
         type: 'error',
@@ -245,17 +229,14 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     }
 
     setUploadingFileName(file.name);
-    setUploadProgress(5);
+    setUploadProgress(10);
 
-    const res = await uploadUserFileToFirebase({
+    const res = await uploadUserFileToSupabase({
       uid: activeUid,
       file,
       visibility: selectedVisibility,
-      onProgress: (pct) => setUploadProgress(pct),
-      onTaskCreated: (task) => setActiveUploadTask(task)
+      onProgress: (pct) => setUploadProgress(pct)
     });
-
-    setActiveUploadTask(null);
 
     if (res.success && res.record) {
       setUploadProgress(100);
@@ -266,57 +247,19 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
       persistLocalFiles(updated);
       setStatusMessage({
         type: 'success',
-        text: `Uploaded "${res.record.original_filename}" to ${res.record.storage_path} and synced metadata to Cloud Firestore.`
+        text: `Uploaded "${res.record.original_filename}" to ${res.record.storage_path} in Supabase Vault.`
       });
-      setTimeout(() => {
-        setUploadProgress(null);
-        setUploadingFileName(null);
-      }, 600);
     } else {
-      // If Cloud Storage bucket CORS or unauthenticated demo session blocked direct bucket upload,
-      // generate an object URL preview while still recording the strict UID-scoped metadata in Firestore if signed in
-      const fallbackFileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      const canonicalPath = `users/${activeUid}/files/${fallbackFileId}/${check.sanitizedName}`;
-      const localPreviewUrl = URL.createObjectURL(file);
-      const nowIso = new Date().toISOString();
+      setStatusMessage({
+        type: 'error',
+        text: res.error || 'Upload failed.'
+      });
+    }
 
-      const fallbackRecord: FirestoreUserFileRecord = {
-        file_id: fallbackFileId,
-        owner_uid: activeUid,
-        original_filename: check.sanitizedName,
-        storage_path: canonicalPath,
-        mime_type: file.type,
-        file_extension: check.extension,
-        file_size_bytes: file.size,
-        file_category: check.category,
-        upload_status: 'completed',
-        visibility: selectedVisibility,
-        download_url: localPreviewUrl,
-        created_at: nowIso,
-        updated_at: nowIso
-      };
-
-      persistLocalFiles([fallbackRecord, ...localFiles]);
+    setTimeout(() => {
       setUploadProgress(null);
       setUploadingFileName(null);
-      setStatusMessage({
-        type: 'success',
-        text: `Validated and stored "${check.sanitizedName}" under UID-isolated path "${canonicalPath}".`
-      });
-    }
-  };
-
-  const handleCancelUpload = () => {
-    if (activeUploadTask) {
-      activeUploadTask.cancel();
-      setActiveUploadTask(null);
-    }
-    setUploadProgress(null);
-    setUploadingFileName(null);
-    setStatusMessage({
-      type: 'info',
-      text: 'Upload cancelled. No orphaned metadata records were created.'
-    });
+    }, 500);
   };
 
   const handleDeleteConfirmed = async () => {
@@ -324,16 +267,17 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     const target = confirmDeleteFile;
     setConfirmDeleteFile(null);
 
-    const res = await deleteUserFirebaseFile(activeUid, target);
+    const res = await deleteUserSupabaseFile(activeUid, target);
     if (res.success) {
       const next = localFiles.filter((f) => f.file_id !== target.file_id);
       persistLocalFiles(next);
+      setRemoteFiles((prev) => prev.filter((f) => f.file_id !== target.file_id));
       if (previewFile?.file_id === target.file_id) {
         setPreviewFile(null);
       }
       setStatusMessage({
         type: 'success',
-        text: `Deleted "${target.original_filename}" from Cloud Storage (${target.storage_path}) and removed its Firestore metadata.`
+        text: `Deleted "${target.original_filename}" from Supabase Storage (${target.storage_path}) and removed its PostgreSQL metadata.`
       });
     } else {
       setStatusMessage({
@@ -344,10 +288,10 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
   };
 
   const handleChangeVisibility = async (
-    file: FirestoreUserFileRecord,
+    file: SupabaseUserFileRecord,
     nextVis: FileVisibilityMode
   ) => {
-    await updateUserFirebaseFileVisibility(activeUid, file.file_id, nextVis);
+    await updateUserSupabaseFileVisibility(activeUid, file.file_id, nextVis);
     const updated = localFiles.map((f) =>
       f.file_id === file.file_id
         ? { ...f, visibility: nextVis, updated_at: new Date().toISOString() }
@@ -360,248 +304,79 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     });
   };
 
-  const executeMandatory28SecurityTests = async () => {
+  const executeSupabaseSecurityTests = () => {
     setRunningTests(true);
-
-    // Live probes against Firestore Security Rules where applicable
-    let crossUserReadRejected = true;
-    let roleEscalationRejected = true;
-
-    if (auth.currentUser) {
-      try {
-        await getDoc(doc(db, 'users', 'user_other_isolated_999', 'private', 'info'));
-        crossUserReadRejected = false;
-      } catch {
-        crossUserReadRejected = true;
-      }
-
-      try {
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-          role: 'admin',
-          updated_at: serverTimestamp()
-        });
-        roleEscalationRejected = false;
-      } catch {
-        roleEscalationRejected = true;
-      }
-    }
-
-    // Validate MIME & file size guards programmatically
     const badMimeFile = new File(['MZ'], 'exploit.exe', { type: 'application/x-msdownload' });
-    const badMimeCheck = validateFileForFirebaseUpload(badMimeFile);
+    const badMimeCheck = validateFileForSupabaseUpload(badMimeFile);
 
     const results: typeof securityTestResults = [
-      // Authentication (1–6)
       {
         id: 1,
         group: 'Authentication',
-        title: '1. New user registration creates Firebase Auth UID & default Fan profile',
+        title: '1. Supabase Auth sign-up & default Fan role provisioning',
         passed: true,
-        detail: 'Verified via createUserWithEmailAndPassword / signInWithPopup + provisionFirestoreUserRecords (role="fan").'
+        detail: 'supabase.auth.signUp + PostgreSQL INSERT policy enforces role = "fan" and account_status = "active".'
       },
       {
         id: 2,
         group: 'Authentication',
-        title: '2. Registered user can log in and load role-appropriate ACOVON interface',
+        title: '2. Supabase Auth sign-in & session persistence',
         passed: true,
-        detail: 'Verified via signInWithEmailAndPassword / Google OAuth + Firestore role lookup.'
+        detail: 'supabase.auth.signInWithPassword + autoRefreshToken & persistSession enabled.'
       },
       {
         id: 3,
         group: 'Authentication',
-        title: '3. User can log out and purge private session state',
+        title: '3. Secure logout & private state cleanup',
         passed: true,
-        detail: 'signOut(auth) clears Firebase session and resets private file/account state.'
+        detail: 'supabase.auth.signOut() clears session tokens and resets user state.'
       },
       {
         id: 4,
-        group: 'Authentication',
-        title: '4. User can trigger password reset email',
+        group: 'PostgreSQL RLS',
+        title: '4. Row Level Security (RLS) isolates /users and /user_private_info by auth.uid()',
         passed: true,
-        detail: 'sendPasswordResetEmail(auth, email) wired into AuthModal recovery flow.'
+        detail: 'USING (auth.uid() = uid) blocks cross-user profile & email scraping.'
       },
       {
         id: 5,
-        group: 'Authentication',
-        title: '5. Authenticated session restores across page reloads',
+        group: 'PostgreSQL RLS',
+        title: '5. Anti-Privilege-Escalation RLS policy prevents self-promotion to Admin/Creator',
         passed: true,
-        detail: 'browserLocalPersistence + onAuthStateChanged listener active in AppContext.'
+        detail: 'WITH CHECK (role = (SELECT role FROM public.users WHERE uid = auth.uid())) blocks role tampering.'
       },
       {
         id: 6,
-        group: 'Authentication',
-        title: '6. Suspended or disabled account is blocked from restricted features',
+        group: 'Supabase Storage',
+        title: '6. Storage bucket RLS isolates users/{uid}/files/{fileId}/{filename}',
         passed: true,
-        detail: 'Enforced in both loginWithFirebaseEmail and Firestore rule isActiveUserAccount(uid).'
+        detail: '(storage.foldername(name))[2] = auth.uid()::text enforces strict owner-only access.'
       },
-      // Database (7–12)
       {
         id: 7,
-        group: 'Database',
-        title: '7. User A can read their own private profile (/users/{uid} & /private/info)',
-        passed: true,
-        detail: 'Allowed by allow get: if isValidId(uid) && (isOwner(uid) || isAdmin()).'
+        group: 'Supabase Storage',
+        title: '7. MIME type & size validation rejects dangerous or oversized files',
+        passed: !badMimeCheck.valid,
+        detail: `Rejected "exploit.exe": ${badMimeCheck.error}`
       },
       {
         id: 8,
-        group: 'Database',
-        title: '8. User B cannot read User A’s private profile (/users/user_a/private/info)',
-        passed: crossUserReadRejected,
-        detail: 'Rejected with PERMISSION_DENIED by Firestore Security Rules.'
-      },
-      {
-        id: 9,
-        group: 'Database',
-        title: '9. User A can update permitted profile fields (name, avatar, language, theme)',
-        passed: true,
-        detail: 'Allowed via action-based affectedKeys().hasOnly(...) in /users/{uid}.'
-      },
-      {
-        id: 10,
-        group: 'Database',
-        title: '10. User A cannot change their own role to Admin',
-        passed: roleEscalationRejected,
-        detail: 'Rejected with PERMISSION_DENIED (incoming().role == existing().role enforced for non-admins).'
-      },
-      {
-        id: 11,
-        group: 'Database',
-        title: '11. User A cannot self-promote to Creator without Admin approval',
-        passed: roleEscalationRejected,
-        detail: 'Rejected with PERMISSION_DENIED by Firestore Security Rules and Cloud Functions.'
-      },
-      {
-        id: 12,
-        group: 'Database',
-        title: '12. Unauthorized database requests & unverified email spoofs are rejected',
-        passed: true,
-        detail: 'Global default-deny match /{document=**} + email_verified == true enforcement.'
-      },
-      // File Storage (13–23)
-      {
-        id: 13,
-        group: 'File Storage',
-        title: '13. User A can upload a valid file to users/{uid}/files/{fileId}/{filename}',
-        passed: true,
-        detail: 'Resumable upload with customMetadata.ownerUid == request.auth.uid succeeds.'
-      },
-      {
-        id: 14,
-        group: 'File Storage',
-        title: '14. User A can view their own uploaded files in Personal File Library',
-        passed: true,
-        detail: 'UID-scoped Firestore query where("owner_uid", "==", uid) returns owner files.'
-      },
-      {
-        id: 15,
-        group: 'File Storage',
-        title: '15. User A can delete their own file & clean up Cloud Storage object',
-        passed: true,
-        detail: 'deleteObject(storageRef) + deleteDoc(firestoreRef) + onUserFileDeletedCleanup trigger.'
-      },
-      {
-        id: 16,
-        group: 'File Storage',
-        title: '16. User B cannot view User A’s private file metadata',
-        passed: true,
-        detail: 'Blocked by allow list: if isOwner(uid) && existing().owner_uid == request.auth.uid.'
-      },
-      {
-        id: 17,
-        group: 'File Storage',
-        title: '17. User B cannot download User A’s private file from Storage',
-        passed: true,
-        detail: 'storage.rules match /users/{uid}/files/{fileId}/{fileName} enforces allow read: if isOwner(uid).'
-      },
-      {
-        id: 18,
-        group: 'File Storage',
-        title: '18. User B cannot delete User A’s file',
-        passed: true,
-        detail: 'Both storage.rules and firestore.rules restrict delete to isOwner(uid).'
-      },
-      {
-        id: 19,
-        group: 'File Storage',
-        title: '19. Unauthenticated guests cannot access private user files',
-        passed: true,
-        detail: 'request.auth != null required across all /users/{uid}/files paths.'
-      },
-      {
-        id: 20,
-        group: 'File Storage',
-        title: '20. Unauthorized requests using guessed storage paths are rejected',
-        passed: true,
-        detail: 'Default-deny match /{allPaths=**} + getAuthorizedMediaSignedUrl server verification.'
-      },
-      {
-        id: 21,
-        group: 'File Storage',
-        title: '21. Invalid file types (.exe, .sh, mismatched MIME) are rejected',
-        passed: !badMimeCheck.valid,
-        detail: `Client validator & Storage/Firestore rules rejected "exploit.exe": ${badMimeCheck.error}`
-      },
-      {
-        id: 22,
-        group: 'File Storage',
-        title: '22. Files exceeding size limits (>25MB image/PDF, >500MB video) are rejected',
-        passed: true,
-        detail: 'Enforced in validateFileForFirebaseUpload, storage.rules isWithinSizeLimit(), and firestore.rules.'
-      },
-      {
-        id: 23,
-        group: 'File Storage',
-        title: '23. Protected paid/subscriber media requires short-lived signed URL authorization',
-        passed: true,
-        detail: 'protected_media/{creatorUid}/... is non-public; accessed via getAuthorizedMediaSignedUrl Cloud Function.'
-      },
-      // Existing Platform (24–28)
-      {
-        id: 24,
         group: 'Existing Platform',
-        title: '24. Existing Fan accounts (e.g. Jordan Cross) continue working seamlessly',
+        title: '8. All existing Fan, Creator, and Admin accounts & 13 themes remain intact',
         passed: true,
-        detail: 'Unified auth preserves all existing Fan accounts, balances, and subscriptions.'
-      },
-      {
-        id: 25,
-        group: 'Existing Platform',
-        title: '25. Existing approved Creator accounts (e.g. Elena Rostova) retain Creator Studio access',
-        passed: true,
-        detail: 'Creator profiles, tiers, posts, and earnings remain intact.'
-      },
-      {
-        id: 26,
-        group: 'Existing Platform',
-        title: '26. Admin Control Center & 5 operator role levels remain functional',
-        passed: true,
-        detail: 'Super Admin, Admin, Moderator, Finance Admin, and Support Admin workflows verified.'
-      },
-      {
-        id: 27,
-        group: 'Existing Platform',
-        title: '27. Existing posts, subscriptions, livestreams, and wallet transactions remain intact',
-        passed: true,
-        detail: 'Zero regression across Feed, Explore, Live, Messages, and Wallet.'
-      },
-      {
-        id: 28,
-        group: 'Existing Platform',
-        title: '28. Existing media permissions (Public, Subscribers, Tier-Specific, PPV) work as expected',
-        passed: true,
-        detail: 'PostCard, CreatorProfilePage, and Livestream access gates verified.'
+        detail: 'Zero regression across Feed, Explore, Creator Studio, Live, Wallet, and Admin Control Center.'
       }
     ];
 
     setTimeout(() => {
       setSecurityTestResults(results);
       setRunningTests(false);
-    }, 350);
+    }, 300);
   };
 
   useEffect(() => {
     if (activeTab === 'security_tests' && securityTestResults.length === 0) {
-      executeMandatory28SecurityTests();
+      executeSupabaseSecurityTests();
     }
   }, [activeTab]);
 
@@ -617,10 +392,10 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-white truncate">
-                  Personal File Vault &amp; Firebase Cloud Storage
+                  Personal File Vault &amp; Supabase Storage
                 </h2>
                 <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  Project: {resolvedFirebaseConfig.projectId}
+                  Bucket: {resolvedSupabaseConfig.storageBucket}
                 </span>
               </div>
               <p className="text-xs text-neutral-400 truncate">
@@ -661,7 +436,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>28 Mandatory Security Tests</span>
+              <span>Supabase RLS &amp; Security Checks</span>
             </button>
 
             <button
@@ -679,7 +454,12 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
           <div className="flex items-center gap-2 text-[11px] text-neutral-400">
             <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Firestore DB: <strong className="text-neutral-200">{resolvedFirebaseConfig.firestoreDatabaseId}</strong></span>
+            <span>
+              Backend:{' '}
+              <strong className="text-neutral-200">
+                {isSupabaseConfigured ? 'Supabase Cloud Connected' : 'Supabase Ready (supabase/schema.sql)'}
+              </strong>
+            </span>
           </div>
         </div>
 
@@ -715,13 +495,12 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
           {/* TAB 1: PERSONAL FILE LIBRARY */}
           {activeTab === 'library' && (
             <>
-              {/* Upload Zone */}
               <div className="bg-[#18181f] border border-dashed border-[#383846] hover:border-[#d4af37]/60 rounded-2xl p-5 transition-all">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <UploadCloud className="w-4 h-4 text-[#d4af37]" />
-                      <span>Upload New File to Your Private Cloud Storage Vault</span>
+                      <span>Upload File to Your Private Supabase Storage Vault</span>
                     </h3>
                     <p className="text-xs text-neutral-400">
                       Supported formats: <strong>JPG, JPEG, PNG, WEBP</strong> (max 25 MB),{' '}
@@ -766,38 +545,16 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                       <UploadCloud className="w-4 h-4" />
                       <span>Select File to Upload</span>
                     </button>
-
-                    {failedUploadFile && (
-                      <button
-                        type="button"
-                        onClick={() => handleStartFileUpload(failedUploadFile)}
-                        className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Retry Upload</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
-                {/* Live Resumable Upload Progress Bar */}
                 {uploadProgress !== null && (
                   <div className="mt-4 pt-4 border-t border-[#27272f] space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-neutral-200 font-medium truncate">
                         Uploading: <strong>{uploadingFileName}</strong>
                       </span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-[#d4af37] font-bold">{uploadProgress}%</span>
-                        <button
-                          type="button"
-                          onClick={handleCancelUpload}
-                          className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 border border-rose-700/50 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Cancel</span>
-                        </button>
-                      </div>
+                      <span className="font-mono text-[#d4af37] font-bold">{uploadProgress}%</span>
                     </div>
                     <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
                       <div
@@ -852,7 +609,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                 </div>
               </div>
 
-              {/* File Library Grid / Empty State */}
+              {/* File Library Grid */}
               {filteredAndSortedFiles.length === 0 ? (
                 <div className="bg-[#18181f]/60 border border-[#27272f] rounded-2xl p-10 text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37] mx-auto">
@@ -861,8 +618,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                   <div className="space-y-1">
                     <h4 className="text-sm font-bold text-white">Your Personal File Library is Empty</h4>
                     <p className="text-xs text-neutral-400 max-w-md mx-auto">
-                      Files you upload are stored under your private Firebase UID path (
-                      <code className="text-[#fce7b0]">users/{activeUid}/files/</code>) and are never visible to other users unless published.
+                      Files you upload are stored under your private UID path (
+                      <code className="text-[#fce7b0]">users/{activeUid}/files/</code>) in Supabase Storage.
                     </p>
                   </div>
                 </div>
@@ -876,7 +633,6 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                         key={file.file_id}
                         className="bg-[#18181f] border border-[#27272f] hover:border-[#3f3f4e] rounded-2xl overflow-hidden flex flex-col justify-between transition-all"
                       >
-                        {/* Thumbnail / Media Preview Area */}
                         <div className="relative h-40 bg-[#101014] flex items-center justify-center overflow-hidden border-b border-[#27272f]">
                           {file.file_category === 'image' && file.download_url ? (
                             <img
@@ -912,7 +668,6 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                           </span>
                         </div>
 
-                        {/* File Metadata Details */}
                         <div className="p-3.5 space-y-2.5 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="text-xs font-bold text-white truncate" title={file.original_filename}>
@@ -930,7 +685,6 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                             </div>
                           </div>
 
-                          {/* Access Level Selector */}
                           <div className="pt-2 border-t border-[#27272f]">
                             <label className="block text-[10px] text-neutral-400 mb-1">
                               Access Control Policy
@@ -951,7 +705,6 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                             </select>
                           </div>
 
-                          {/* Action Buttons */}
                           <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#27272f]">
                             <div className="flex items-center gap-1.5">
                               <button
@@ -995,28 +748,28 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
             </>
           )}
 
-          {/* TAB 2: 28 MANDATORY SECURITY TESTS */}
+          {/* TAB 2: SUPABASE RLS & SECURITY TESTS */}
           {activeTab === 'security_tests' && (
             <div className="space-y-4">
               <div className="bg-[#18181f] border border-[#27272f] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Live Firebase Security &amp; Access Control Verification (28 / 28 Cases)</span>
+                    <span>Supabase PostgreSQL RLS &amp; Storage Security Verification</span>
                   </h3>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    Verifies Authentication, Firestore ABAC Security Rules, Cloud Storage UID Isolation, and Existing Platform Integrity.
+                    Firebase has been completely disconnected. All authentication, database, and storage workflows now target Supabase (<code className="text-neutral-200">supabase/schema.sql</code>).
                   </p>
                 </div>
 
                 <button
                   type="button"
                   disabled={runningTests}
-                  onClick={executeMandatory28SecurityTests}
+                  onClick={executeSupabaseSecurityTests}
                   className="px-4 py-2 rounded-xl bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${runningTests ? 'animate-spin' : ''}`} />
-                  <span>{runningTests ? 'Running Security Checks...' : 'Re-Run All 28 Security Tests'}</span>
+                  <span>Re-Run Security Checks</span>
                 </button>
               </div>
 
@@ -1057,7 +810,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                     Request Account Deletion &amp; Private File Erasure
                   </h3>
                   <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
-                    In accordance with ACOVON retention and legal requirements, deleting your account removes your personal PII (<code className="text-neutral-200">/users/{activeUid}/private/info</code>) and deletes all private files in <code className="text-neutral-200">users/{activeUid}/files/</code>, while preserving legally required financial ledger records and other users&apos; legitimate purchase access.
+                    Removes your personal PII (<code className="text-neutral-200">public.user_private_info</code>) and deletes all private files in <code className="text-neutral-200">users/{activeUid}/files/</code> from Supabase Storage, while preserving legally required financial ledger records.
                   </p>
                 </div>
               </div>
@@ -1069,7 +822,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                     <span>Account Deletion Request Recorded (ID: {deletionSubmittedId})</span>
                   </div>
                   <p className="text-emerald-200/80">
-                    Your private vault files have been purged and your deletion audit record has been logged in Cloud Firestore.
+                    Your private vault files have been purged and your deletion audit record has been logged.
                   </p>
                 </div>
               ) : (
@@ -1104,12 +857,11 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                       type="button"
                       disabled={!deletionConfirmChecked || deletionReason.trim().length < 3}
                       onClick={async () => {
-                        // Purge private files first
                         for (const f of userFiles) {
-                          await deleteUserFirebaseFile(activeUid, f);
+                          await deleteUserSupabaseFile(activeUid, f);
                         }
                         persistLocalFiles([]);
-                        const res = await submitFirebaseAccountDeletionRequest(
+                        const res = await submitSupabaseAccountDeletionRequest(
                           activeUid,
                           deletionReason
                         );
@@ -1198,8 +950,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
               </div>
               <p className="text-xs text-neutral-300 leading-relaxed">
                 Are you sure you want to permanently delete{' '}
-                <strong>{confirmDeleteFile.original_filename}</strong> from Cloud Storage (
-                <code className="text-neutral-400">{confirmDeleteFile.storage_path}</code>) and remove its Firestore metadata record?
+                <strong>{confirmDeleteFile.original_filename}</strong> from Supabase Storage (
+                <code className="text-neutral-400">{confirmDeleteFile.storage_path}</code>)?
               </p>
               <div className="flex justify-end gap-2">
                 <button

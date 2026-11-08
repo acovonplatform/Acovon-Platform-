@@ -7,16 +7,15 @@ import {
   KeyRound,
   ChevronDown,
   ChevronUp,
-  ShieldCheck,
+  Database,
   Loader2
 } from 'lucide-react';
 import {
-  registerWithFirebaseEmail,
-  loginWithFirebaseEmail,
-  signInWithFirebaseGoogle,
-  sendFirebasePasswordReset,
-  resolvedFirebaseConfig
-} from '../../services/firebase';
+  registerWithSupabaseEmail,
+  loginWithSupabaseEmail,
+  sendSupabasePasswordReset,
+  isSupabaseConfigured
+} from '../../services/supabase';
 
 interface AuthModalProps {
   initialMode?: 'register' | 'login';
@@ -44,7 +43,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [is18PlusAgreed, setIs18PlusAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [consoleHint, setConsoleHint] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSampleCredentials, setShowSampleCredentials] = useState(false);
@@ -52,54 +50,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const switchMode = (nextMode: 'register' | 'login' | 'forgot_password') => {
     setMode(nextMode);
     setError(null);
-    setConsoleHint(null);
     setResetSent(false);
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setConsoleHint(null);
-    setIsSubmitting(true);
-
-    try {
-      const fbRes = await signInWithFirebaseGoogle({
-        preferredLanguage: activeLanguageCode,
-        appearancePreference: appearanceMode
-      });
-
-      if (!fbRes.success || !fbRes.profile) {
-        setError(fbRes.error || 'Google Sign-In could not be completed.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const targetEmail = fbRes.email || `${fbRes.profile.username}@acovon.user`;
-      // Synchronize with ACOVON application state
-      const loginRes = authenticateAccount(targetEmail, 'firebase_oauth_session');
-      if (!loginRes.success) {
-        registerAccount({
-          fullName: fbRes.profile.full_legal_name,
-          username: fbRes.profile.username,
-          email: targetEmail,
-          password: 'FirebaseOAuth!2026',
-          confirmPassword: 'FirebaseOAuth!2026',
-          is18PlusConfirmed: true
-        });
-      }
-
-      setIsSubmitting(false);
-      onSuccess();
-      onClose();
-    } catch (err) {
-      setIsSubmitting(false);
-      setError(err instanceof Error ? err.message : 'Google Sign-In failed.');
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setConsoleHint(null);
 
     if (mode === 'forgot_password') {
       if (!email.trim()) {
@@ -107,7 +63,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
       setIsSubmitting(true);
-      await sendFirebasePasswordReset(email.trim());
+      await sendSupabasePasswordReset(email.trim());
       setIsSubmitting(false);
       setResetSent(true);
       return;
@@ -125,8 +81,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       setIsSubmitting(true);
 
-      // 1. Attempt Firebase Authentication + Cloud Firestore registration
-      const fbReg = await registerWithFirebaseEmail({
+      // 1. Register in Supabase Auth & PostgreSQL (or local fallback if env vars not yet set)
+      const sbReg = await registerWithSupabaseEmail({
         fullName,
         username,
         email,
@@ -135,14 +91,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         appearancePreference: appearanceMode
       });
 
-      if (!fbReg.success && !fbReg.providerNotEnabledInConsole) {
+      if (!sbReg.success) {
         setIsSubmitting(false);
-        setError(fbReg.error || 'Could not create your Firebase account.');
+        setError(sbReg.error || 'Could not create your Supabase account.');
         return;
-      }
-
-      if (fbReg.providerNotEnabledInConsole && fbReg.error) {
-        setConsoleHint(fbReg.error);
       }
 
       // 2. Register in ACOVON unified state (always assigns default 'fan' role)
@@ -167,26 +119,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Standard Unified Login — checks Firebase Auth + existing ACOVON accounts (Fan, Creator, Admin)
+    // Standard Unified Login — checks Supabase Auth + existing ACOVON accounts (Fan, Creator, Admin)
     setIsSubmitting(true);
-    const fbLogin = await loginWithFirebaseEmail(email, password);
+    const sbLogin = await loginWithSupabaseEmail(email, password);
 
     if (
-      !fbLogin.success &&
-      fbLogin.error &&
-      fbLogin.error.includes('Account is currently')
+      !sbLogin.success &&
+      sbLogin.error &&
+      sbLogin.error.includes('Account is currently')
     ) {
-      // Suspended or disabled in Firestore
       setIsSubmitting(false);
-      setError(fbLogin.error);
+      setError(sbLogin.error);
       return;
     }
 
     const authResult = authenticateAccount(email, password);
     setIsSubmitting(false);
 
-    if (!authResult.success && !fbLogin.success) {
-      setError(authResult.error || fbLogin.error || 'Invalid login credentials.');
+    if (!authResult.success && !sbLogin.success) {
+      setError(authResult.error || sbLogin.error || 'Invalid login credentials.');
       return;
     }
 
@@ -219,16 +170,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span className="font-brand font-bold text-white text-lg tracking-wider">ACOVON</span>
           </div>
           <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-            <ShieldCheck className="w-3 h-3" />
-            Firebase Auth
+            <Database className="w-3 h-3" />
+            {isSupabaseConfigured ? 'Supabase Connected' : 'Supabase Ready'}
           </span>
         </div>
 
         {mode === 'register' && (
           <>
             <h3 className="text-xl font-bold text-white mb-1">Create Your Account</h3>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Join ACOVON to discover creators, enjoy exclusive content, and manage your private Cloud Storage vault.
+            <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
+              Join ACOVON to discover creators, enjoy exclusive content, and manage your personal Supabase file vault.
             </p>
           </>
         )}
@@ -236,7 +187,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {mode === 'login' && (
           <>
             <h3 className="text-xl font-bold text-white mb-1">Welcome Back</h3>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+            <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
               Log in to your ACOVON account and continue where you left off.
             </p>
           </>
@@ -245,50 +196,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {mode === 'forgot_password' && (
           <>
             <h3 className="text-xl font-bold text-white mb-1">Reset Your Password</h3>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Enter your ACOVON account email address and Firebase Authentication will send password recovery instructions.
+            <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
+              Enter your ACOVON account email address and we will send password recovery instructions.
             </p>
           </>
-        )}
-
-        {/* 1-Click Google Sign-In via Firebase Popup */}
-        {mode !== 'forgot_password' && (
-          <div className="mb-4">
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleGoogleSignIn}
-              className="w-full py-2.5 px-4 bg-white hover:bg-neutral-100 text-black font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"
-                />
-              </svg>
-              <span>Continue with Google (Firebase Auth)</span>
-            </button>
-
-            <div className="flex items-center gap-3 my-3.5">
-              <div className="h-px bg-[#27272a] flex-1" />
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">
-                or with Email &amp; Password
-              </span>
-              <div className="h-px bg-[#27272a] flex-1" />
-            </div>
-          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
@@ -398,20 +309,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {consoleHint && (
-            <div className="p-2.5 bg-amber-950/40 border border-amber-700/60 text-amber-200 rounded-xl text-[11px] leading-relaxed">
-              <strong>Firebase Console Note:</strong> {consoleHint} (Project:{' '}
-              <code>{resolvedFirebaseConfig.projectId}</code>)
-            </div>
-          )}
-
           {mode === 'forgot_password' && resetSent && (
             <div className="p-3 bg-emerald-950/40 border border-emerald-800/70 text-emerald-300 rounded-xl text-xs flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Password Reset Link Dispatched</p>
+                <p className="font-semibold">Password Reset Link Sent</p>
                 <p className="text-[11px] text-emerald-200/80 mt-0.5">
-                  If an account exists for <strong>{email}</strong>, Firebase password recovery instructions have been sent.
+                  If an account exists for <strong>{email}</strong>, recovery instructions have been sent.
                 </p>
               </div>
             </div>
