@@ -1,0 +1,11 @@
+{
+  "name": "ACOVON – Creator Subscription & Monetization Platform",
+  "description": "Global premium creator subscription, exclusive content, pay-per-view video previews, real-time paid private video calls, and custom video requests.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

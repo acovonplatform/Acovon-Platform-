@@ -1,0 +1,935 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Core Surface & Background Tokens (Default Dark Mode — ACOVON Signature) */
+  --bg-page: #0B0B0D;
+  --bg-canvas: #0B0B0D;
+  --bg-main-content: #0B0B0D;
+  --bg-surface: #151518;
+  --bg-card: #1C1C20;
+  --bg-card-secondary: #151518;
+  --bg-elevated: #242429;
+  --bg-subtle: #151518;
+  --bg-nav: rgba(11, 11, 13, 0.94);
+  --bg-sidebar: #151518;
+  --bg-header: rgba(11, 11, 13, 0.94);
+  --bg-modal: #1C1C20;
+  --bg-popup: #1C1C20;
+  --bg-input: #151518;
+  --bg-accent-tint: rgba(198, 166, 107, 0.14);
+
+  /* Interactive Surface States */
+  --bg-hover: #242429;
+  --bg-active: #2C2C34;
+  --bg-selected: rgba(198, 166, 107, 0.16);
+  --bg-disabled: #18181C;
+
+  /* Typography & Text Hierarchy Tokens */
+  --text-primary: #F5F3EF;
+  --text-heading: #F5F3EF;
+  --text-secondary: #C4C4CC;
+  --text-muted: #92929C;
+  --text-placeholder: #787884;
+  --text-disabled: #5E5E68;
+  --text-link: #C6A66B;
+  --text-input: #F5F3EF;
+
+  /* Icon Tokens */
+  --icon-primary: #F5F3EF;
+  --icon-secondary: #C4C4CC;
+  --icon-muted: #92929C;
+
+  /* Brand Accent & Button Tokens */
+  --accent-primary: #C6A66B;
+  --accent-secondary: #E7D1A7;
+  --accent-contrast: #0B0B0D;
+  --gold-accent: #E7D1A7;
+  --gold-bright: #C6A66B;
+  --btn-primary-bg: #C6A66B;
+  --btn-primary-text: #0B0B0D;
+  --btn-secondary-bg: #242429;
+  --btn-secondary-text: #F5F3EF;
+  --btn-secondary-border: #34343A;
+
+  /* Border & Divider Tokens */
+  --border-primary: #34343A;
+  --border-Subtle: #242429;
+  --border-subtle: #242429;
+  --border-divider: #242429;
+  --border-input: #34343A;
+  --border-focus: #C6A66B;
+
+  /* Semantic Status Message Tokens */
+  --color-destructive: #EF4444;
+  --color-destructive-bg: rgba(239, 68, 68, 0.14);
+  --color-destructive-text: #FCA5A5;
+  --color-destructive-border: rgba(239, 68, 68, 0.35);
+
+  --color-success: #10B981;
+  --color-success-bg: rgba(16, 185, 129, 0.14);
+  --color-success-text: #6EE7B7;
+  --color-success-border: rgba(16, 185, 129, 0.35);
+
+  --color-warning: #F59E0B;
+  --color-warning-bg: rgba(245, 158, 11, 0.14);
+  --color-warning-text: #FCD34D;
+  --color-warning-border: rgba(245, 158, 11, 0.35);
+
+  --color-info: #3B82F6;
+  --color-info-bg: rgba(59, 130, 246, 0.14);
+  --color-info-text: #93C5FD;
+  --color-info-border: rgba(59, 130, 246, 0.35);
+
+  /* Typography & Geometry Tokens */
+  --font-heading: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --heading-weight: 700;
+  --body-size: 15px;
+  --radius-btn: 0.75rem;
+  --radius-card: 1rem;
+  --shadow-card: 0 14px 34px -10px rgba(0, 0, 0, 0.55);
+}
+
+@layer base {
+  * {
+    border-color: var(--border-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+  }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--text-primary);
+    background-color: var(--bg-canvas);
+    overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    color: var(--text-heading);
+  }
+
+  /* Global Form Input, Select, Textarea & Placeholder Standardization */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    background-color: var(--bg-input);
+    color: var(--text-input);
+    border-color: var(--border-input);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-placeholder) !important;
+    opacity: 1;
+  }
+
+  select option {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+  }
+}
+
+.font-brand {
+  font-family: var(--font-heading);
+}
+
+.font-heading-theme {
+  font-family: var(--font-heading);
+}
+
+.font-body-theme {
+  font-family: var(--font-body);
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Hide scrollbars on horizontal touch carousels and filter rails */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area utilities for mobile devices with home indicators and notches */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   CENTRALIZED BRAND ACCENT & SURFACE TOKEN BINDINGS ACROSS ALL 20+ SCOPES
+============================================================================ */
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 65%, var(--accent-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html.light-theme .gold-gradient-text {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-border {
+  border-color: var(--border-primary);
+}
+
+.gold-border-glow:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 20px -5px var(--bg-accent-tint);
+}
+
+/* 1. Page & Main Canvas Backgrounds */
+.bg-\[\#000000\],
+.bg-\[\#050507\],
+.bg-\[\#070709\],
+.bg-\[\#08080a\],
+.bg-\[\#09090b\],
+.bg-\[\#0a0a0c\],
+.bg-\[\#0a0a0d\],
+.bg-\[\#0a0a0e\],
+.bg-\[\#0b0b0e\],
+.bg-\[\#0B0B0D\],
+.bg-\[\#0c0c0f\],
+.bg-\[\#0c0c10\],
+.bg-\[\#0d0d11\],
+.bg-\[\#0d0d12\],
+.bg-\[\#0e0e12\],
+.bg-\[\#0e0e13\],
+.bg-\[\#0f0f12\],
+.bg-\[\#0f0f13\],
+.bg-\[\#0f0f14\],
+.bg-\[\#faf8f5\],
+.bg-zinc-950,
+.bg-neutral-950 {
+  background-color: var(--bg-canvas);
+}
+
+/* 2. Navigation, Header & Sticky Bar Backgrounds */
+.bg-\[\#09090b\]\/95,
+.bg-\[\#09090b\]\/90,
+.bg-\[\#09090b\]\/85,
+.bg-\[\#09090b\]\/80,
+.bg-\[\#0c0c10\]\/95,
+.bg-\[\#0d0d11\]\/95,
+.bg-\[\#0e0e12\]\/95,
+.bg-\[\#111115\]\/95,
+.bg-\[\#121215\]\/95,
+.bg-\[\#121216\]\/95,
+.bg-zinc-950\/95,
+.bg-zinc-950\/90,
+.bg-neutral-950\/95,
+.bg-neutral-950\/90 {
+  background-color: var(--bg-nav);
+}
+
+/* 3. Primary Card, Modal & Container Surfaces */
+.bg-\[\#101014\],
+.bg-\[\#101015\],
+.bg-\[\#111114\],
+.bg-\[\#111115\],
+.bg-\[\#111116\],
+.bg-\[\#121215\],
+.bg-\[\#121216\],
+.bg-\[\#121217\],
+.bg-\[\#121218\],
+.bg-\[\#131317\],
+.bg-\[\#131318\],
+.bg-\[\#131319\],
+.bg-\[\#111115\]\/90,
+.bg-\[\#121215\]\/90,
+.bg-\[\#121216\]\/90,
+.bg-\[\#121218\]\/90,
+.bg-zinc-900,
+.bg-zinc-900\/95,
+.bg-zinc-900\/90,
+.bg-zinc-900\/80,
+.bg-neutral-900,
+.bg-neutral-900\/95,
+.bg-neutral-900\/90,
+.bg-neutral-900\/80 {
+  background-color: var(--bg-card);
+}
+
+/* 4. Secondary Card & Subtle Container Surfaces */
+.bg-\[\#141418\],
+.bg-\[\#141419\],
+.bg-\[\#14141a\],
+.bg-\[\#151518\],
+.bg-\[\#151519\],
+.bg-\[\#15151a\],
+.bg-\[\#15151b\],
+.bg-\[\#15151c\],
+.bg-\[\#16161a\],
+.bg-\[\#16161b\],
+.bg-\[\#16161c\],
+.bg-\[\#16161d\],
+.bg-\[\#17171c\],
+.bg-\[\#17171d\],
+.bg-\[\#17171e\],
+.bg-\[\#17171f\],
+.bg-\[\#141418\]\/90,
+.bg-\[\#141418\]\/80,
+.bg-\[\#15151a\]\/80,
+.bg-\[\#16161b\]\/80,
+.bg-zinc-900\/70,
+.bg-zinc-900\/60,
+.bg-zinc-900\/50,
+.bg-zinc-900\/40,
+.bg-neutral-900\/70,
+.bg-neutral-900\/60,
+.bg-neutral-900\/50,
+.bg-neutral-900\/40 {
+  background-color: var(--bg-subtle);
+}
+
+/* 5. Elevated Surfaces, Chips, Inputs, Dropdowns & Secondary Controls */
+.bg-\[\#18181c\],
+.bg-\[\#18181d\],
+.bg-\[\#18181e\],
+.bg-\[\#18181f\],
+.bg-\[\#191920\],
+.bg-\[\#191921\],
+.bg-\[\#1a1a20\],
+.bg-\[\#1a1a21\],
+.bg-\[\#1a1a22\],
+.bg-\[\#1b1b22\],
+.bg-\[\#1c1c20\],
+.bg-\[\#1c1c22\],
+.bg-\[\#1c1c23\],
+.bg-\[\#1c1c24\],
+.bg-\[\#1d1d24\],
+.bg-\[\#1d1d26\],
+.bg-\[\#1e1e24\],
+.bg-\[\#1e1e26\],
+.bg-\[\#1e1e27\],
+.bg-\[\#1e1e28\],
+.bg-\[\#1f1f26\],
+.bg-\[\#1f1f27\],
+.bg-\[\#1f1f28\],
+.bg-\[\#1f1f29\],
+.bg-\[\#202024\],
+.bg-\[\#202026\],
+.bg-\[\#202028\],
+.bg-\[\#20202a\],
+.bg-\[\#222\],
+.bg-\[\#222228\],
+.bg-\[\#22222a\],
+.bg-\[\#22222c\],
+.bg-\[\#232329\],
+.bg-\[\#23232a\],
+.bg-\[\#23232c\],
+.bg-\[\#242429\],
+.bg-\[\#24242c\],
+.bg-\[\#24242e\],
+.bg-\[\#25252d\],
+.bg-\[\#25252e\],
+.bg-\[\#252530\],
+.bg-\[\#26262b\],
+.bg-\[\#26262e\],
+.bg-\[\#262630\],
+.bg-\[\#27272a\],
+.bg-\[\#27272f\],
+.bg-\[\#272730\],
+.bg-\[\#272732\],
+.bg-\[\#282832\],
+.bg-\[\#2a2a32\],
+.bg-\[\#2a2a35\],
+.bg-\[\#2b2b35\],
+.bg-\[\#2c2c36\],
+.bg-\[\#2c2c38\],
+.bg-\[\#2e2e38\],
+.bg-\[\#2e2e3a\],
+.bg-\[\#18181c\]\/90,
+.bg-\[\#18181c\]\/80,
+.bg-\[\#18181c\]\/60,
+.bg-\[\#18181f\]\/80,
+.bg-\[\#1a1a20\]\/80,
+.bg-\[\#1c1c22\]\/80,
+.bg-\[\#22222a\]\/80,
+.bg-zinc-800,
+.bg-zinc-800\/90,
+.bg-zinc-800\/80,
+.bg-zinc-800\/70,
+.bg-zinc-800\/60,
+.bg-zinc-800\/50,
+.bg-zinc-800\/40,
+.bg-zinc-700,
+.bg-neutral-800,
+.bg-neutral-800\/90,
+.bg-neutral-800\/80,
+.bg-neutral-800\/70,
+.bg-neutral-800\/60,
+.bg-neutral-800\/50,
+.bg-neutral-800\/40,
+.bg-neutral-700,
+.bg-neutral-700\/60 {
+  background-color: var(--bg-elevated);
+}
+
+/* Hover Surface States */
+.hover\:bg-\[\#16161b\]:hover,
+.hover\:bg-\[\#18181c\]:hover,
+.hover\:bg-\[\#18181f\]:hover,
+.hover\:bg-\[\#1a1a20\]:hover,
+.hover\:bg-\[\#1a1a22\]:hover,
+.hover\:bg-\[\#1c1c22\]:hover,
+.hover\:bg-\[\#1c1c24\]:hover,
+.hover\:bg-\[\#1e1e24\]:hover,
+.hover\:bg-\[\#1e1e26\]:hover,
+.hover\:bg-\[\#1f1f26\]:hover,
+.hover\:bg-\[\#1f1f28\]:hover,
+.hover\:bg-\[\#202028\]:hover,
+.hover\:bg-\[\#222\]:hover,
+.hover\:bg-\[\#222228\]:hover,
+.hover\:bg-\[\#22222a\]:hover,
+.hover\:bg-\[\#22222c\]:hover,
+.hover\:bg-\[\#23232c\]:hover,
+.hover\:bg-\[\#24242c\]:hover,
+.hover\:bg-\[\#25252e\]:hover,
+.hover\:bg-\[\#252530\]:hover,
+.hover\:bg-\[\#26262b\]:hover,
+.hover\:bg-\[\#262630\]:hover,
+.hover\:bg-\[\#27272a\]:hover,
+.hover\:bg-\[\#272730\]:hover,
+.hover\:bg-\[\#282832\]:hover,
+.hover\:bg-\[\#2a2a32\]:hover,
+.hover\:bg-\[\#2a2a35\]:hover,
+.hover\:bg-\[\#2b2b35\]:hover,
+.hover\:bg-\[\#2c2c38\]:hover,
+.hover\:bg-\[\#2e2e38\]:hover,
+.hover\:bg-zinc-800:hover,
+.hover\:bg-zinc-700:hover,
+.hover\:bg-neutral-800:hover,
+.hover\:bg-neutral-700:hover {
+  background-color: var(--bg-hover);
+}
+
+/* 6. Brand Accent Tint Surfaces */
+.bg-\[\#1a1810\],
+.bg-\[\#1c1810\],
+.bg-\[\#1c1a12\],
+.bg-\[\#1f1b12\],
+.bg-\[\#211d14\],
+.bg-\[\#242116\],
+.bg-\[\#d4af37\]\/10,
+.bg-\[\#d4af37\]\/15,
+.bg-\[\#d4af37\]\/20 {
+  background-color: var(--bg-accent-tint);
+}
+
+.hover\:bg-\[\#242116\]:hover,
+.hover\:bg-\[\#d4af37\]\/20:hover,
+.hover\:bg-\[\#d4af37\]\/25:hover {
+  background-color: var(--bg-selected);
+}
+
+/* 7. Borders & Dividers */
+.border-\[\#1a1a20\],
+.border-\[\#1c1c22\],
+.border-\[\#1e1e24\],
+.border-\[\#1e1e26\],
+.border-\[\#1f1f23\],
+.border-\[\#1f1f26\],
+.border-\[\#1f1f28\],
+.border-\[\#202026\],
+.border-\[\#222228\],
+.border-\[\#22222a\],
+.border-\[\#232329\],
+.border-\[\#23232a\],
+.border-\[\#242429\],
+.border-\[\#24242c\],
+.border-\[\#25252d\],
+.border-\[\#25252e\],
+.border-\[\#252530\],
+.border-\[\#26262b\],
+.border-\[\#26262c\],
+.border-\[\#26262e\],
+.border-\[\#262630\],
+.border-\[\#27272a\],
+.border-\[\#27272f\],
+.border-\[\#272730\],
+.border-\[\#272732\],
+.border-\[\#282832\],
+.border-\[\#2a2a32\],
+.border-\[\#2a2a34\],
+.border-\[\#2a2a35\],
+.border-\[\#2b2b35\],
+.border-\[\#2c2c36\],
+.border-\[\#2c2c38\],
+.border-\[\#2e2e34\],
+.border-\[\#2e2e38\],
+.border-\[\#2e2e3a\],
+.border-\[\#32323e\],
+.border-\[\#34343a\],
+.border-\[\#383842\],
+.border-zinc-800,
+.border-zinc-800\/80,
+.border-zinc-800\/60,
+.border-zinc-700,
+.border-zinc-700\/60,
+.border-neutral-800,
+.border-neutral-800\/80,
+.border-neutral-800\/60,
+.border-neutral-700,
+.border-neutral-700\/60 {
+  border-color: var(--border-primary);
+}
+
+.divide-\[\#232329\] > :not([hidden]) ~ :not([hidden]),
+.divide-\[\#26262b\] > :not([hidden]) ~ :not([hidden]),
+.divide-\[\#27272a\] > :not([hidden]) ~ :not([hidden]),
+.divide-zinc-800 > :not([hidden]) ~ :not([hidden]),
+.divide-neutral-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-primary);
+}
+
+/* 8. Text & Icon Color Bindings */
+.text-\[\#f4f4f5\],
+.text-\[\#F5F3EF\],
+.text-stone-900 {
+  color: var(--text-primary);
+}
+
+.text-neutral-100,
+.text-neutral-200,
+.text-zinc-100,
+.text-zinc-200 {
+  color: var(--text-primary);
+}
+
+.text-neutral-300,
+.text-zinc-300 {
+  color: var(--text-secondary);
+}
+
+.text-neutral-400,
+.text-neutral-500,
+.text-zinc-400,
+.text-zinc-500 {
+  color: var(--text-muted);
+}
+
+.hover\:text-white:hover,
+.hover\:text-neutral-200:hover,
+.hover\:text-zinc-200:hover {
+  color: var(--text-primary);
+}
+
+/* 9. Accent Color & Primary Action Button Bindings */
+.text-\[\#d4af37\] {
+  color: var(--accent-primary);
+}
+
+.text-\[\#fce7b0\],
+.text-\[\#fef08a\] {
+  color: var(--accent-secondary);
+}
+
+.bg-\[\#d4af37\],
+.hover\:bg-\[\#e5c07b\]:hover,
+.hover\:bg-\[\#c5a028\]:hover {
+  background-color: var(--accent-primary);
+  color: var(--accent-contrast);
+}
+
+.border-\[\#d4af37\],
+.border-\[\#d4af37\]\/30,
+.border-\[\#d4af37\]\/40,
+.border-\[\#d4af37\]\/50,
+.border-\[\#d4af37\]\/60 {
+  border-color: var(--accent-primary);
+}
+
+/* ============================================================================
+   LIGHT MODE COMPREHENSIVE ADAPTATION & CONTRAST PROTECTION
+============================================================================ */
+
+/* In Light Mode, standard .text-white adapts to dark primary text (#171719) */
+html.light-theme .text-white {
+  color: var(--text-primary);
+}
+
+/* Preserve crisp white text on solid colored buttons & badges in Light Mode */
+html.light-theme .bg-emerald-600.text-white,
+html.light-theme .bg-emerald-500.text-white,
+html.light-theme .bg-emerald-600 .text-white,
+html.light-theme .bg-rose-600.text-white,
+html.light-theme .bg-rose-500.text-white,
+html.light-theme .bg-rose-600 .text-white,
+html.light-theme .bg-red-600.text-white,
+html.light-theme .bg-red-500.text-white,
+html.light-theme .bg-red-600 .text-white,
+html.light-theme .bg-blue-600.text-white,
+html.light-theme .bg-blue-500.text-white,
+html.light-theme .bg-blue-600 .text-white,
+html.light-theme .bg-indigo-600.text-white,
+html.light-theme .bg-purple-600.text-white,
+html.light-theme .bg-amber-600.text-white,
+html.light-theme .bg-\[\#1D9BF0\].text-white,
+html.light-theme .bg-\[\#1D9BF0\] .text-white,
+html.light-theme .bg-\[\#FE2C55\].text-white,
+html.light-theme .bg-\[\#FF0000\].text-white {
+  color: #FFFFFF !important;
+}
+
+/* Preserve white text on intentional dark video/photo/livestream media overlays in Light Mode */
+html.light-theme .bg-black\/40.text-white,
+html.light-theme .bg-black\/50.text-white,
+html.light-theme .bg-black\/60.text-white,
+html.light-theme .bg-black\/70.text-white,
+html.light-theme .bg-black\/75.text-white,
+html.light-theme .bg-black\/80.text-white,
+html.light-theme .bg-black\/85.text-white,
+html.light-theme .bg-black\/90.text-white,
+html.light-theme .bg-black\/40 .text-white,
+html.light-theme .bg-black\/50 .text-white,
+html.light-theme .bg-black\/60 .text-white,
+html.light-theme .bg-black\/70 .text-white,
+html.light-theme .bg-black\/75 .text-white,
+html.light-theme .bg-black\/80 .text-white,
+html.light-theme .bg-black\/85 .text-white,
+html.light-theme .bg-black\/90 .text-white {
+  color: #FFFFFF;
+}
+
+/* Ensure modal backdrops that use bg-black/80 do not force white text inside light modal cards */
+html.light-theme .bg-black\/80 .bg-\[\#121215\] .text-white,
+html.light-theme .bg-black\/80 .bg-\[\#121216\] .text-white,
+html.light-theme .bg-black\/80 .bg-\[\#141418\] .text-white,
+html.light-theme .bg-black\/80 .bg-\[\#18181c\] .text-white,
+html.light-theme .bg-black\/80 .bg-zinc-900 .text-white,
+html.light-theme .bg-black\/80 .bg-neutral-900 .text-white,
+html.light-theme .bg-black\/85 .bg-\[\#121215\] .text-white,
+html.light-theme .bg-black\/85 .bg-\[\#121216\] .text-white,
+html.light-theme .bg-black\/85 .bg-zinc-900 .text-white,
+html.light-theme .bg-black\/90 .bg-\[\#121215\] .text-white,
+html.light-theme .bg-black\/90 .bg-\[\#121216\] .text-white,
+html.light-theme .bg-black\/90 .bg-zinc-900 .text-white {
+  color: var(--text-primary);
+}
+
+/* Primary button text contrast in Light Mode */
+html.light-theme .bg-\[\#d4af37\],
+html.light-theme .bg-\[\#d4af37\] .text-black,
+html.light-theme .bg-\[\#d4af37\] .text-white {
+  color: var(--accent-contrast);
+}
+
+/* Gradient banner adaptation in Light Mode (e.g., RBAC notice, VIP cards, Creator Studio banners) */
+html.light-theme .from-\[\#211d14\],
+html.light-theme .from-\[\#1a1810\],
+html.light-theme .from-\[\#18181c\],
+html.light-theme .from-\[\#141418\],
+html.light-theme .from-\[\#121215\],
+html.light-theme .from-\[\#121216\] {
+  --tw-gradient-from: var(--bg-subtle) var(--tw-gradient-from-position);
+  --tw-gradient-to: var(--bg-card) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+html.light-theme .via-\[\#1c1810\],
+html.light-theme .via-\[\#15151a\],
+html.light-theme .via-\[\#141418\] {
+  --tw-gradient-via: var(--bg-elevated) var(--tw-gradient-via-position);
+}
+
+html.light-theme .to-\[\#141418\],
+html.light-theme .to-\[\#121215\],
+html.light-theme .to-\[\#121216\],
+html.light-theme .to-\[\#09090b\] {
+  --tw-gradient-to: var(--bg-card) var(--tw-gradient-to-position);
+}
+
+/* Semantic Status Badges & Alerts in Light Mode (Ensure crisp dark text on soft tinted pills) */
+html.light-theme .bg-emerald-950,
+html.light-theme .bg-emerald-950\/80,
+html.light-theme .bg-emerald-950\/70,
+html.light-theme .bg-emerald-950\/60,
+html.light-theme .bg-emerald-950\/50,
+html.light-theme .bg-emerald-950\/40,
+html.light-theme .bg-emerald-950\/30,
+html.light-theme .bg-emerald-900\/40,
+html.light-theme .bg-emerald-900\/30,
+html.light-theme .bg-emerald-500\/10,
+html.light-theme .bg-emerald-500\/15,
+html.light-theme .bg-emerald-500\/20 {
+  background-color: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+html.light-theme .text-emerald-200,
+html.light-theme .text-emerald-300,
+html.light-theme .text-emerald-400 {
+  color: var(--color-success-text);
+}
+
+html.light-theme .bg-rose-950,
+html.light-theme .bg-rose-950\/80,
+html.light-theme .bg-rose-950\/70,
+html.light-theme .bg-rose-950\/60,
+html.light-theme .bg-rose-950\/50,
+html.light-theme .bg-rose-950\/40,
+html.light-theme .bg-rose-950\/30,
+html.light-theme .bg-rose-900\/40,
+html.light-theme .bg-rose-500\/10,
+html.light-theme .bg-rose-500\/15,
+html.light-theme .bg-rose-500\/20,
+html.light-theme .bg-red-950,
+html.light-theme .bg-red-950\/80,
+html.light-theme .bg-red-950\/70,
+html.light-theme .bg-red-950\/60,
+html.light-theme .bg-red-950\/50,
+html.light-theme .bg-red-950\/40,
+html.light-theme .bg-red-950\/30,
+html.light-theme .bg-red-950\/20,
+html.light-theme .bg-red-500\/10,
+html.light-theme .bg-red-500\/15,
+html.light-theme .bg-red-500\/20 {
+  background-color: var(--color-destructive-bg);
+  border-color: var(--color-destructive-border);
+}
+
+html.light-theme .text-rose-200,
+html.light-theme .text-rose-300,
+html.light-theme .text-rose-400,
+html.light-theme .text-red-200,
+html.light-theme .text-red-300,
+html.light-theme .text-red-400 {
+  color: var(--color-destructive-text);
+}
+
+html.light-theme .bg-amber-950,
+html.light-theme .bg-amber-950\/80,
+html.light-theme .bg-amber-950\/70,
+html.light-theme .bg-amber-950\/60,
+html.light-theme .bg-amber-950\/50,
+html.light-theme .bg-amber-950\/40,
+html.light-theme .bg-amber-950\/30,
+html.light-theme .bg-amber-900\/40,
+html.light-theme .bg-amber-500\/10,
+html.light-theme .bg-amber-500\/15,
+html.light-theme .bg-amber-500\/20 {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+html.light-theme .text-amber-200,
+html.light-theme .text-amber-300,
+html.light-theme .text-amber-400,
+html.light-theme .text-yellow-200,
+html.light-theme .text-yellow-300,
+html.light-theme .text-yellow-400 {
+  color: var(--color-warning-text);
+}
+
+html.light-theme .bg-sky-950,
+html.light-theme .bg-sky-950\/80,
+html.light-theme .bg-sky-950\/70,
+html.light-theme .bg-sky-950\/60,
+html.light-theme .bg-sky-950\/50,
+html.light-theme .bg-sky-950\/40,
+html.light-theme .bg-sky-500\/10,
+html.light-theme .bg-sky-500\/15,
+html.light-theme .bg-blue-950,
+html.light-theme .bg-blue-950\/80,
+html.light-theme .bg-blue-950\/70,
+html.light-theme .bg-blue-950\/60,
+html.light-theme .bg-blue-950\/50,
+html.light-theme .bg-blue-950\/40,
+html.light-theme .bg-blue-500\/10,
+html.light-theme .bg-blue-500\/15,
+html.light-theme .bg-indigo-950\/60,
+html.light-theme .bg-indigo-500\/10 {
+  background-color: var(--color-info-bg);
+  border-color: var(--color-info-border);
+}
+
+html.light-theme .text-sky-200,
+html.light-theme .text-sky-300,
+html.light-theme .text-sky-400,
+html.light-theme .text-blue-200,
+html.light-theme .text-blue-300,
+html.light-theme .text-blue-400,
+html.light-theme .text-indigo-200,
+html.light-theme .text-indigo-300,
+html.light-theme .text-indigo-400 {
+  color: var(--color-info-text);
+}
+
+html.light-theme .bg-purple-950,
+html.light-theme .bg-purple-950\/80,
+html.light-theme .bg-purple-950\/70,
+html.light-theme .bg-purple-950\/60,
+html.light-theme .bg-purple-950\/50,
+html.light-theme .bg-purple-950\/40,
+html.light-theme .bg-purple-500\/10,
+html.light-theme .bg-purple-500\/15,
+html.light-theme .bg-purple-500\/20 {
+  background-color: rgba(126, 34, 206, 0.10);
+  border-color: rgba(126, 34, 206, 0.28);
+}
+
+html.light-theme .text-purple-200,
+html.light-theme .text-purple-300,
+html.light-theme .text-purple-400 {
+  color: #6B21A8;
+}
+
+/* Subtle white/5, white/10, white/15 surface chips in Light Mode */
+html.light-theme .bg-white\/5,
+html.light-theme .bg-white\/10 {
+  background-color: rgba(23, 23, 25, 0.06);
+}
+
+html.light-theme .border-white\/10,
+html.light-theme .border-white\/15,
+html.light-theme .border-white\/20 {
+  border-color: var(--border-primary);
+}
+
+/* ============================================================================
+   PLATFORM-INSPIRED GLOBAL DESIGN SYSTEMS (THEMES 11, 12, 13)
+   Works in both Dark Mode and Light Mode
+============================================================================ */
+
+/* THEME 11 — TIKTOK-INSPIRED DESIGN:
+   High-contrast canvas, dual Cyan (#25F4EE) & Crimson (#FE2C55) accents */
+html[data-branding-theme="tiktok-inspired"] .bg-\[\#d4af37\] {
+  background-color: #FE2C55;
+  color: #FFFFFF;
+  box-shadow: -1.5px 0 0 rgba(37, 244, 238, 0.85), 1.5px 0 0 rgba(254, 44, 85, 0.85);
+}
+
+html[data-branding-theme="tiktok-inspired"]:not(.light-theme) .gold-gradient-text {
+  background: linear-gradient(90deg, #25F4EE 0%, #FFFFFF 50%, #FE2C55 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-branding-theme="tiktok-inspired"].light-theme .gold-gradient-text {
+  background: linear-gradient(90deg, #00A29D 0%, #171719 50%, #FE2C55 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* THEME 12 — INSTAGRAM-INSPIRED DESIGN:
+   Clean minimalist surfaces, hairline dividers, warm Sunset Story gradient accents */
+html[data-branding-theme="instagram-inspired"] .gold-gradient-text {
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-branding-theme="instagram-inspired"] img.rounded-full {
+  border-color: #E1306C;
+}
+
+/* THEME 13 — YOUTUBE-INSPIRED DESIGN:
+   Broadcast red #FF0000 accents */
+html[data-branding-theme="youtube-inspired"] .bg-\[\#d4af37\] {
+  background-color: #FF0000;
+  color: #FFFFFF;
+}
+
+html[data-branding-theme="youtube-inspired"]:not(.light-theme) .gold-gradient-text {
+  background: linear-gradient(90deg, #FF0000 0%, #FF4E45 60%, #FFFFFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-branding-theme="youtube-inspired"].light-theme .gold-gradient-text {
+  background: linear-gradient(90deg, #CC0000 0%, #FF0000 60%, #171719 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================================
+   RIGHT-TO-LEFT (RTL) LANGUAGE SUPPORT (ARABIC & URDU)
+============================================================================ */
+
+html[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Adapt explicit left/right text alignment utilities naturally in RTL */
+html[dir="rtl"] .text-left {
+  text-align: right;
+}
+
+html[dir="rtl"] .text-right {
+  text-align: left;
+}
+
+/* Mirror directional navigation chevrons and arrows in RTL */
+html[dir="rtl"] .lucide-chevron-right,
+html[dir="rtl"] .lucide-chevron-left,
+html[dir="rtl"] .lucide-arrow-right,
+html[dir="rtl"] .lucide-arrow-left,
+html[dir="rtl"] .lucide-send {
+  transform: scaleX(-1);
+}
+
+/* Adapt desktop dropdown positioning in RTL so menus open inside the viewport */
+@media (min-width: 640px) {
+  html[dir="rtl"] .sm\:right-0.sm\:left-auto {
+    right: auto !important;
+    left: 0 !important;
+  }
+}
+
+/* Keep numbers, prices, wallet balances, timestamps, and code blocks properly formatted */
+html[dir="rtl"] .font-mono,
+html[dir="rtl"] .tabular-nums,
+html[dir="rtl"] input[type="email"],
+html[dir="rtl"] input[type="url"],
+html[dir="rtl"] input[type="number"],
+html[dir="rtl"] [data-ltr="true"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+

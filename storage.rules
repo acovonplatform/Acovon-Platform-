@@ -1,0 +1,70 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default deny across entire bucket
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAllowedMimeType() {
+      return request.resource != null &&
+        request.resource.contentType.matches('^(image/(jpeg|png|webp)|video/(mp4|quicktime|webm)|application/pdf)$');
+    }
+
+    function isWithinSizeLimit() {
+      return request.resource != null && (
+        (request.resource.contentType.matches('^image/.*') && request.resource.size <= 25 * 1024 * 1024) ||
+        (request.resource.contentType == 'application/pdf' && request.resource.size <= 25 * 1024 * 1024) ||
+        (request.resource.contentType.matches('^video/.*') && request.resource.size <= 500 * 1024 * 1024)
+      );
+    }
+
+    // 1. Private User File Vault: users/{uid}/files/{fileId}/{fileName}
+    // Strictly isolated to the authenticated owner UID.
+    match /users/{uid}/files/{fileId}/{fileName} {
+      allow read: if isOwner(uid) && isValidId(fileId);
+      allow create, update: if isOwner(uid) &&
+        isValidId(fileId) &&
+        fileName.size() >= 1 &&
+        fileName.size() <= 255 &&
+        isAllowedMimeType() &&
+        isWithinSizeLimit() &&
+        request.resource.metadata['ownerUid'] == request.auth.uid;
+      allow delete: if isOwner(uid) && isValidId(fileId);
+    }
+
+    // 2. Publicly Published Creator Media: public_media/{creatorUid}/{mediaId}/{fileName}
+    // Intentionally published public avatars, covers, and public feed previews.
+    match /public_media/{creatorUid}/{mediaId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isOwner(creatorUid) &&
+        isValidId(mediaId) &&
+        isAllowedMimeType() &&
+        isWithinSizeLimit();
+      allow delete: if isOwner(creatorUid) && isValidId(mediaId);
+    }
+
+    // 3. Protected Paid / Subscriber / Custom Delivery Media: protected_media/{creatorUid}/{mediaId}/{fileName}
+    // Never publicly readable; only owner or short-lived server-signed URLs from Cloud Functions may read.
+    match /protected_media/{creatorUid}/{mediaId}/{fileName} {
+      allow read: if isOwner(creatorUid);
+      allow create, update: if isOwner(creatorUid) &&
+        isValidId(mediaId) &&
+        isAllowedMimeType() &&
+        isWithinSizeLimit();
+      allow delete: if isOwner(creatorUid) && isValidId(mediaId);
+    }
+  }
+}

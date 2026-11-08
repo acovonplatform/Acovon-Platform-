@@ -1,0 +1,1012 @@
+# ACOVON — COMPLETE AI-POWERED PERSONALIZED CONTENT RECOMMENDATION, DISCOVERY & SMART FEED ENGINE
+
+## PROJECT OBJECTIVE
+
+Build a sophisticated, continuously learning recommendation algorithm for ACOVON.
+
+The system should provide a personalized content experience inspired by the recommendation systems used by TikTok, Instagram, Facebook and YouTube.
+
+The goal is to understand each fan's interests and automatically recommend videos, photos, creators, posts, livestreams and other eligible content they are most likely to enjoy.
+
+Every fan must have an individual recommendation profile.
+
+The platform must continuously learn from fan engagement and improve recommendations over time.
+
+**The more a fan uses ACOVON, the better the platform should understand their interests and personalize their content experience.**
+
+Do not create a static feed that displays the same content to everyone.
+
+Do not rebuild the existing Feed, Explore, search, creator discovery or video playback systems. Extend the existing application and reuse its current infrastructure.
+
+---
+
+# 1. STRICT NAVIGATION AND EXISTING FEED STRUCTURE
+
+This section is mandatory. Follow it before implementing any other part of the system.
+
+## 1.1 Existing navigation
+
+Keep the existing ACOVON navigation exactly as it currently exists.
+
+Make only one navigation-label change:
+
+- Rename the displayed **Home** label to **Feed**.
+
+Keep the underlying route, page, functionality and architecture unchanged.
+
+Do not:
+- Add new navigation items.
+- Add a new sidebar destination.
+- Add a new For You navigation item.
+- Add a new Free Posts navigation item.
+- Create separate pages for For You or Free Posts.
+- Change existing navigation icons.
+- Change existing navigation destinations or routes.
+- Rearrange the navigation.
+- Remove any existing navigation item.
+
+All recommendation features must be integrated into the existing pages and components.
+
+## 1.2 Existing Feed activity-filter area
+
+The existing Feed page already contains an activity-filter area with these four filters:
+
+1. All Activity
+2. Following
+3. Subscribed
+4. Pay-To-View Vault
+
+Preserve all four filters and their existing functionality.
+
+Add exactly two new filters in the same activity-filter area:
+
+5. For You
+6. Free Posts
+
+The final activity-filter area must contain:
+
+- All Activity
+- For You
+- Following
+- Subscribed
+- Free Posts
+- Pay-To-View Vault
+
+These six options must remain inside the existing Feed page.
+
+They must use the existing activity-filter component and must not become new navigation destinations or separate pages.
+
+Use the existing responsive design. On mobile, preserve usability through the existing horizontal scrolling or responsive filter behavior.
+
+## 1.3 Filter functionality
+
+### All Activity
+
+Preserve the existing general activity-feed behavior.
+
+Do not break its current queries, interactions, content visibility or sorting behavior.
+
+### For You
+
+Display a continuously personalized feed.
+
+Rank eligible content using the fan's individual interests, engagement history, viewing behavior, creator preferences, recent activity and discovery preferences.
+
+This is the primary personalized recommendation experience.
+
+### Following
+
+Preserve the existing Following feed.
+
+Display content from creators the fan follows, using the existing access permissions and feed behavior.
+
+### Subscribed
+
+Preserve the existing Subscribed feed.
+
+Display content from creators the fan actively subscribes to, respecting their subscription plan and content-access rights.
+
+### Free Posts
+
+Create a personalized feed containing content the fan can access without purchasing, paying to unlock or maintaining a paid subscription.
+
+Eligible content may include:
+- Public free posts.
+- Free videos.
+- Free photos.
+- Free photo galleries.
+- Content explicitly configured as free by creators.
+- Free follower-only posts when the fan follows the creator.
+- Other content the fan is authorized to access without payment.
+
+Exclude:
+- Locked PPV content.
+- Paid private attachments.
+- Subscriber-only content when the fan is not subscribed.
+- Paid livestream recordings.
+- Content with an unpaid purchase requirement.
+- Content restricted to another audience.
+
+Free Posts must still be personalized according to the fan's interests.
+
+Do not automatically make a creator's paid content free.
+
+### Pay-To-View Vault
+
+Preserve the existing Pay-To-View Vault functionality and access rules.
+
+Display eligible paid content and purchased or available-to-purchase content according to the existing implementation.
+
+Never expose protected media before authorization or confirmed payment.
+
+---
+
+# 2. PERSONALIZED FOR YOU RECOMMENDATION ENGINE
+
+Build an intelligent recommendation engine that learns what each fan enjoys.
+
+The For You filter must produce an individual feed for every fan.
+
+Examples:
+
+- If a fan frequently watches fitness videos, recommend more relevant fitness content.
+- If a fan repeatedly watches content from particular creators, recommend more content from those creators.
+- If a fan frequently watches cooking videos, recommend relevant cooking content and creators.
+- If a fan enjoys photography, recommend photography content and similar creators.
+- If a fan frequently saves particular content, learn from those saves.
+- If a fan repeatedly skips a category, gradually reduce its recommendation priority.
+- If a fan develops a new interest, adapt the feed accordingly.
+
+The algorithm must recognize changing interests instead of permanently assuming that a fan likes the same content.
+
+Do not show identical recommendations to all fans.
+
+---
+
+# 3. FAN BEHAVIOR TRACKING AND LEARNING
+
+Create an engagement-learning system that records relevant fan interactions.
+
+Use the existing engagement tracking infrastructure wherever possible.
+
+### Video engagement
+
+Track:
+- Video impression.
+- Video started.
+- Video watched.
+- Watch duration.
+- Percentage watched.
+- Video completed.
+- Video replayed.
+- Video skipped.
+- Time before skipping.
+- Video liked or unliked.
+- Video saved.
+- Video shared.
+- Video commented on.
+- Creator profile opened.
+- Creator followed.
+- Creator subscribed to.
+
+### Photo engagement
+
+Track:
+- Photo displayed.
+- Photo opened.
+- Time spent viewing.
+- Gallery opened.
+- Images browsed.
+- Photo liked.
+- Photo saved.
+- Photo shared.
+- Creator profile visited.
+
+### Creator engagement
+
+Track:
+- Creator profile viewed.
+- Creator followed.
+- Creator unfollowed.
+- Creator subscribed to.
+- Subscription cancelled.
+- Creator content watched repeatedly.
+- Creator content saved.
+- Creator content shared.
+
+### Other engagement
+
+Track:
+- Category searches.
+- Hashtag searches.
+- Explore interactions.
+- Livestream attendance.
+- Livestream watch duration.
+- Livestream likes and reactions.
+- Paid content purchases.
+- Status views and replies.
+- Search result clicks.
+- Relevant interactions with existing ACOVON features.
+
+Track events with timestamps and relevant content metadata.
+
+Do not collect unnecessary personal information.
+
+An impression alone must not be treated as proof that a fan likes content.
+
+---
+
+# 4. INTELLIGENT INTEREST SCORING
+
+Create an individual interest profile for each fan.
+
+Calculate interest scores using engagement signals.
+
+Use a weighted ranking system that can evolve into machine-learning-based ranking.
+
+### Suggested initial engagement weights
+
+| Fan action | Signal weight |
+|---|---:|
+| Video watched for a long time | +5 |
+| Video completed | +6 |
+| Video replayed | +8 |
+| Video liked | +4 |
+| Video saved | +7 |
+| Video shared | +7 |
+| Comment posted | +5 |
+| Creator profile opened | +3 |
+| Creator followed | +8 |
+| Creator subscribed to | +10 |
+| Paid content purchased | +10 |
+| Video skipped immediately | -4 |
+| Explicitly selected Not Interested | -10 |
+| Creator unfollowed | Negative creator preference |
+
+These are initial values, not permanent rules.
+
+The system must consider watch duration and completion rate rather than relying only on clicks.
+
+For example, a fan who watches an entire video should generally generate a stronger positive signal than someone who only sees the thumbnail.
+
+### Interest categories
+
+Use the existing ACOVON categories and hashtags.
+
+Build interest profiles such as:
+- Favorite categories.
+- Favorite hashtags.
+- Favorite creators.
+- Favorite content formats.
+- Preferred video duration.
+- Preferred viewing patterns.
+- Preferred languages, when reliably available.
+- Recently emerging interests.
+- Categories with declining engagement.
+
+Allow the recommendation engine to learn additional interests from content metadata and fan behavior.
+
+---
+
+# 5. RECENT ACTIVITY AND TIME-DECAY SCORING
+
+Recent engagement must matter significantly.
+
+A fan's interests can change.
+
+For example, if a fan has watched fitness content for months but recently starts engaging heavily with travel videos, ACOVON should gradually increase travel recommendations.
+
+Implement configurable time-decay scoring.
+
+Suggested approach:
+- Recent engagement: strongest influence.
+- Engagement from the last several days: high influence.
+- Older engagement: gradually reduced influence.
+- Very old engagement: lower influence unless repeated.
+
+Combine recent interests with longer-term interests to avoid unstable recommendations.
+
+Do not allow one old interaction to permanently determine a fan's feed.
+
+---
+
+# 6. PERSONALIZED CONTENT RANKING
+
+Before displaying a post in For You, calculate its relevance to the individual fan.
+
+Consider:
+
+1. Fan interest in the content category.
+2. Fan interest in the creator.
+3. Similarity to previously watched content.
+4. Recent watch behavior.
+5. Completion rate for similar content.
+6. Saves, likes, comments and shares.
+7. Creator engagement history.
+8. Content quality and integrity signals.
+9. Content freshness.
+10. Content popularity, without allowing popularity to dominate personalization.
+11. Whether the fan has already seen the content.
+12. Whether the content is eligible for the fan.
+13. Negative feedback and hidden content.
+14. Creator and category diversity.
+15. Relevant exploration opportunities.
+
+Use a hybrid recommendation approach:
+
+- Content-based recommendations.
+- Similar creator recommendations.
+- Similar category recommendations.
+- Collaborative filtering based on aggregated behavior of users with similar interests.
+- Trending content within relevant interests.
+- Exploration recommendations for discovering new interests.
+
+Start with a reliable weighted ranking system and build toward machine-learning-based ranking as sufficient data becomes available.
+
+Do not claim a machine-learning model exists if the system only uses fixed database rules.
+
+---
+
+# 7. FOR YOU RANKING MODEL
+
+Create a configurable initial ranking model.
+
+Suggested starting weights:
+
+| Ranking signal | Weight |
+|---|---:|
+| Interest and category relevance | 25% |
+| Creator affinity | 20% |
+| Watch time and completion | 20% |
+| Engagement signals | 15% |
+| Content freshness | 10% |
+| Quality and popularity | 5% |
+| Discovery and diversity adjustment | 5% |
+
+These weights must be configurable through authorized administrator settings.
+
+Negative feedback, blocked creators, reports, policy restrictions and content-access rules must override ordinary ranking signals.
+
+The ranking system must:
+- Produce different feeds for different fans.
+- Refresh recommendations as new activity is collected.
+- Avoid repeatedly showing the same content.
+- Avoid excessive repetition from one creator.
+- Mix familiar creators with new discoveries.
+- Include fresh content when relevant.
+- Avoid allowing popularity alone to dominate.
+- Recognize content already viewed, liked, saved or purchased.
+- Respect creator posting frequency and content availability.
+
+---
+
+# 8. FREE POSTS PERSONALIZATION ENGINE
+
+Free Posts must be both access-filtered and personalized.
+
+It is not simply a chronological list of all free content.
+
+First, identify content the fan can access without payment.
+
+Then rank that eligible content using:
+- Category interests.
+- Creator affinity.
+- Viewing history.
+- Engagement.
+- Content freshness.
+- Quality.
+- Diversity.
+- Not Interested feedback.
+- Previously viewed content.
+
+A fan should receive relevant free content from creators and categories they enjoy.
+
+Clearly distinguish free content from paid or locked content where useful.
+
+Never change creator pricing or content-access settings automatically.
+
+---
+
+# 9. DISCOVER NEW CONTENT AND CREATORS
+
+The platform must not show only content the fan already knows.
+
+Introduce controlled discovery.
+
+For example, if a fan likes fitness content, ACOVON may recommend:
+- New fitness creators.
+- Related wellness videos.
+- Workout demonstrations.
+- Nutrition content.
+- Similar creator communities.
+
+Discover adjacent interests without suddenly filling the feed with unrelated content.
+
+Balance:
+- Familiar content.
+- Similar content.
+- New creators.
+- New categories.
+- Trending content.
+
+Allow authorized administrators to configure the exploration balance.
+
+Do not repeatedly show the same creator simply because the fan watched one successful video.
+
+---
+
+# 10. PERSONALIZED CONTENT DIVERSITY
+
+Avoid creating a feed where every post looks exactly the same.
+
+Even if a fan strongly prefers one category, introduce some variety.
+
+Implement:
+- Creator repetition limits.
+- Category diversity.
+- Video and photo variety based on engagement.
+- New creator discovery.
+- Relevant trending content.
+- Duplicate-content suppression.
+- Reduction of stale or repeatedly ignored content.
+
+Create configurable creator frequency limits.
+
+Balance personalization with discovery.
+
+---
+
+# 11. EXPLORE INTEGRATION
+
+Integrate recommendation intelligence into the existing Explore page.
+
+Do not change its navigation destination or rebuild its structure.
+
+Improve existing Explore components using:
+- Recommended creators.
+- Recommended videos.
+- Recommended photos.
+- Popular categories.
+- Relevant hashtags.
+- Trending content.
+- New creators.
+- Personalized collections.
+- Relevant search suggestions.
+
+Explore must continue supporting broader discovery, search and category browsing.
+
+Explore should not become identical to For You.
+
+For You is primarily personalized feed ranking.
+
+Explore is broader discovery enhanced by personalization.
+
+Preserve all existing Explore functionality.
+
+---
+
+# 12. NOT INTERESTED AND PERSONALIZATION CONTROLS
+
+Give fans meaningful control over recommendations.
+
+Add a menu to eligible feed posts with:
+- Not Interested.
+- Show Less Like This.
+- Show More Like This, if appropriate.
+- Hide This Creator.
+- Report Content.
+
+When Not Interested is selected:
+- Record the feedback.
+- Reduce recommendations with similar content signals.
+- Adjust relevant category or creator interest scores.
+- Avoid repeatedly recommending identical content.
+
+Allow fans to manage their interests through existing Settings functionality where appropriate.
+
+Support:
+- Viewing inferred interest categories.
+- Removing an interest.
+- Reducing recommendations from a category.
+- Resetting personalized recommendations.
+- Managing hidden creators.
+
+Blocking must prevent recommendations and interactions according to platform blocking rules.
+
+Reports must enter the existing moderation workflow.
+
+Do not treat reports as ordinary preference feedback alone.
+
+---
+
+# 13. PERSONALIZED VIDEO RECOMMENDATIONS
+
+For each video, consider:
+- Topic.
+- Category.
+- Hashtags.
+- Creator.
+- Video duration.
+- Video quality.
+- Language where known.
+- Watch completion.
+- Replay behavior.
+- Similar videos.
+- Recent performance.
+- Viewer feedback.
+
+When a fan finishes a video, recommend the next most relevant video.
+
+Do not simply select the most popular video on ACOVON.
+
+Select according to the fan's interests and current viewing session.
+
+Ensure autoplay follows the fan's existing autoplay settings.
+
+Preserve the existing full-screen video viewer, playback controls, feed position and navigation behavior.
+
+---
+
+# 14. PERSONALIZED CREATOR RECOMMENDATIONS
+
+Build a creator recommendation engine.
+
+Recommend creators based on:
+- Categories the fan enjoys.
+- Creators the fan watches.
+- Creators the fan follows.
+- Similar content.
+- Subscription interests.
+- Recent engagement.
+- Creator publishing activity.
+- Genuine content quality signals.
+
+Display recommendations inside existing:
+- Explore.
+- For You feed.
+- Creator discovery.
+- Relevant category pages.
+
+Do not create new navigation destinations.
+
+Do not use payment or subscription spending as the sole indicator of creator relevance.
+
+Do not guarantee creators placement because they pay for promotions.
+
+If promoted content is introduced, clearly label it as promoted and keep it distinct from organic relevance scoring.
+
+---
+
+# 15. PERSONALIZATION AND PAID CONTENT ACCESS
+
+The recommendation engine must understand the difference between recommending content and granting permission to access it.
+
+It may recommend:
+- Public content.
+- Followers-only content.
+- Subscriber-only content.
+- PPV content.
+- Private content when the fan is authorized.
+
+However, recommendations must never bypass access restrictions.
+
+Before showing full media, previews, playback URLs or purchase options, enforce the relevant access policy.
+
+For paid content:
+- Show only previews permitted by creator settings.
+- Clearly display purchase prices.
+- Do not expose protected full-resolution media.
+- Do not automatically purchase content.
+- Never charge fans without confirmation.
+
+Apply the same rules to photos, videos, private messages and livestream recordings.
+
+A high recommendation score must never grant access to locked content.
+
+---
+
+# 16. NEW FAN EXPERIENCE — COLD START
+
+When a new fan joins ACOVON, there may be insufficient engagement history.
+
+Create a useful new-user recommendation experience.
+
+Use:
+- Optional interests collected during existing onboarding.
+- Publicly available trending content.
+- Popular content categories.
+- Diverse creators.
+- New creator recommendations.
+- Fresh content.
+- General platform quality signals.
+
+Allow new fans to skip interest selection.
+
+Do not require a lengthy questionnaire.
+
+As soon as a fan watches or interacts with content, begin personalizing the feed.
+
+Do not treat a single click as a permanent preference.
+
+---
+
+# 17. CREATOR BENEFITS AND CONTENT DISTRIBUTION
+
+The recommendation engine should create opportunities for creators to reach interested fans.
+
+Give eligible posts a fair opportunity to be discovered.
+
+Consider:
+- Content relevance.
+- Quality and playback reliability.
+- Freshness.
+- Viewer engagement.
+- Audience interests.
+- Creator diversity.
+- Content eligibility.
+
+Do not permanently disadvantage new creators because they have fewer followers.
+
+Use controlled exploration so new creators can receive exposure when their content is relevant.
+
+Do not guarantee specific views or followers.
+
+Do not let paid verification automatically manipulate organic recommendation rankings.
+
+---
+
+# 18. ADMIN RECOMMENDATION CONTROL CENTER
+
+Add a section inside the existing Admin Control Center called:
+
+**Recommendation Engine Management**
+
+This is an administrative feature within the existing admin system, not a new fan navigation item.
+
+### Configuration
+
+Allow authorized administrators to configure:
+- Recommendation ranking weights.
+- Recent activity weighting.
+- Engagement signal weighting.
+- Content diversity.
+- Creator repetition limits.
+- New creator discovery.
+- Trending content influence.
+- Exploration percentage.
+- Content freshness.
+- Repeated-content suppression.
+- Recommendation refresh frequency.
+- Eligible content types.
+
+Use sensible defaults.
+
+### Recommendation analytics
+
+Display actual statistics:
+- For You impressions.
+- Free Posts impressions.
+- Video starts from recommendations.
+- Average watch duration.
+- Video completion rate.
+- Likes from recommended content.
+- Saves from recommended content.
+- Shares from recommended content.
+- Follows generated by recommendations.
+- Subscriptions generated by recommendations.
+- Content discovery rate.
+- Creator discovery rate.
+- Not Interested feedback.
+- Recommendation engagement by category.
+- Recommendation conversion rates.
+
+Allow date and category filters.
+
+Use real data, not fabricated statistics.
+
+### System health
+
+Display:
+- Recommendation jobs processed.
+- Ranking failures.
+- Event processing delays.
+- Missing content metadata.
+- Model or ranking version.
+- Last successful update.
+
+Allow authorized administrators to pause problematic recommendation experiments and restore a previous stable configuration.
+
+All configuration changes must be audited.
+
+Respect existing admin subroles and permissions.
+
+---
+
+# 19. DATABASE AND LEARNING ARCHITECTURE
+
+Inspect the existing database before creating tables or fields.
+
+Reuse existing users, creators, posts, media, categories, hashtags, likes, comments, follows, subscriptions, purchases, saved posts and activity records wherever possible.
+
+Create or extend the necessary structures.
+
+### A. Fan Engagement Events
+
+Suggested fields:
+- ID.
+- Fan ID.
+- Content ID.
+- Creator ID.
+- Event type.
+- Content type.
+- Category.
+- Hashtags.
+- Watch duration.
+- Video duration.
+- Completion percentage.
+- Event timestamp.
+- Session ID.
+- Relevant context.
+
+### B. Fan Interest Profiles
+
+Suggested fields:
+- ID.
+- Fan ID.
+- Category interest scores.
+- Hashtag interest scores.
+- Creator interest scores.
+- Content format preferences.
+- Recent interest profile.
+- Long-term interest profile.
+- Last updated timestamp.
+
+### C. Recommendation Records
+
+Suggested fields:
+- ID.
+- Fan ID.
+- Content ID.
+- Creator ID.
+- Recommendation score.
+- Recommendation reason or signal summary.
+- Ranking version.
+- Impression timestamp.
+- Engagement result.
+
+### D. Recommendation Feedback
+
+Suggested fields:
+- ID.
+- Fan ID.
+- Content ID.
+- Creator ID.
+- Feedback type.
+- Related category.
+- Timestamp.
+
+### E. Recommendation Configuration
+
+Suggested fields:
+- ID.
+- Configuration version.
+- Ranking weights.
+- Exploration settings.
+- Diversity settings.
+- Freshness settings.
+- Active status.
+- Updated by.
+- Updated timestamp.
+
+Create appropriate indexes for fan ID, content ID, creator ID, category and event timestamps.
+
+These are logical structures, not instructions to duplicate existing tables.
+
+Use asynchronous event processing so that tracking fan activity does not slow scrolling or video playback.
+
+---
+
+# 20. MACHINE LEARNING DEVELOPMENT
+
+Build an architecture that can evolve.
+
+### Initial implementation
+
+Start with:
+- Weighted engagement scoring.
+- Category interest profiles.
+- Creator affinity scoring.
+- Time-decay scoring.
+- Content similarity.
+- Trending signals.
+- Diversity rules.
+- Collaborative filtering when sufficient aggregated data exists.
+
+### Future advanced capabilities
+
+Design the architecture to support:
+- Machine-learning ranking models.
+- Personalized embeddings.
+- Similarity search.
+- Session-based recommendations.
+- Predictive watch-time ranking.
+- Contextual recommendations.
+- Automated model evaluation.
+- A/B testing.
+
+Do not block the first implementation while waiting for a large dataset.
+
+Start with a functional, measurable recommendation engine and improve it as ACOVON gathers sufficient legitimate engagement data.
+
+Do not send identifiable private messages, private content or sensitive user information to an external AI model to calculate recommendations.
+
+Use data minimization, access controls and aggregated signals wherever possible.
+
+---
+
+# 21. PRIVACY, SECURITY AND USER CONTROL
+
+Implement:
+- Fans can access only their own personalization settings.
+- Creators cannot access individual fans' private recommendation profiles.
+- Admin access to personal behavioral records must be permission-controlled.
+- Private messages must not be exposed to the recommendation engine.
+- Private message contents must not be used as ranking signals.
+- Sensitive personal characteristics must not be used to infer content preferences.
+- Content must comply with age eligibility and access restrictions.
+- Blocked creators and hidden content must be excluded.
+- Account suspensions and content removals must be respected.
+- Fans must be able to reset personalization.
+- Behavioral data must follow platform privacy and retention policies.
+
+Enforce permissions on the backend, not just the frontend.
+
+---
+
+# 22. PERFORMANCE AND SCALABILITY
+
+The recommendation engine must not slow down ACOVON.
+
+Implement:
+- Asynchronous engagement tracking.
+- Background interest-profile updates.
+- Cached recommendation results with appropriate invalidation.
+- Efficient database queries.
+- Paginated or infinite feed loading using the existing architecture.
+- Precomputed recommendation candidates.
+- Ranking of a manageable candidate set instead of every post on every request.
+- Fast feed refresh.
+- Duplicate recommendation suppression.
+- Background job retry and failure handling.
+
+Do not perform expensive model calculations on every scroll event.
+
+Preserve smooth media playback and existing feed performance.
+
+As the platform grows, the architecture must support increasing numbers of fans, creators and posts.
+
+---
+
+# 23. TESTING AND ACCEPTANCE REQUIREMENTS
+
+Test the system using multiple fan accounts with different engagement patterns.
+
+### Fan A
+
+Frequently watches fitness videos.
+
+Expected result: ACOVON progressively recommends more relevant fitness content.
+
+### Fan B
+
+Frequently watches travel and photography content.
+
+Expected result: ACOVON recommends travel, photography and related creators.
+
+### Fan C
+
+Frequently watches videos from particular creators.
+
+Expected result: ACOVON learns creator affinity while introducing relevant new creators.
+
+### Fan D
+
+Recently changes interests from cooking to technology.
+
+Expected result: Recent technology engagement gradually changes recommendations.
+
+### Fan E
+
+Frequently skips a particular category.
+
+Expected result: ACOVON gradually reduces recommendations from that category.
+
+### Fan F
+
+New account with no history.
+
+Expected result: ACOVON provides a diverse starter feed and learns as the fan engages.
+
+### Additional tests
+
+Test:
+1. Watch duration tracking.
+2. Completion tracking.
+3. Replay tracking.
+4. Likes and saves.
+5. Shares and comments.
+6. Following and subscription signals.
+7. Not Interested feedback.
+8. Interest reset.
+9. Creator discovery.
+10. Trending recommendations.
+11. Feed diversity.
+12. Paid content permissions.
+13. Blocked creator suppression.
+14. Mobile performance.
+15. Recommendation analytics.
+16. Recommendation failure and fallback.
+17. For You filter functionality.
+18. Free Posts eligibility and personalization.
+19. All Activity compatibility.
+20. Following compatibility.
+21. Subscribed compatibility.
+22. Pay-To-View Vault compatibility.
+
+Verify that different fan accounts receive genuinely different For You recommendations when their interests differ.
+
+---
+
+# 24. FINAL IMPLEMENTATION INSTRUCTIONS
+
+Before implementation:
+
+1. Inspect the complete existing ACOVON application.
+2. Locate the current Home page and change only its displayed navigation label to Feed.
+3. Preserve the underlying route and functionality.
+4. Locate the existing activity-filter area containing All Activity, Following, Subscribed and Pay-To-View Vault.
+5. Add For You and Free Posts directly into that same activity-filter area.
+6. Map existing database tables, content types, permissions and feed queries.
+7. Identify reusable components and services.
+8. Implement the recommendation engine using the existing architecture.
+9. Implement activity tracking, interest profiles, ranking, personalization and feedback.
+10. Integrate Explore and existing creator discovery components.
+11. Add recommendation management inside the existing Admin Control Center.
+12. Test every filter and feature using real database records and test accounts.
+
+## ABSOLUTE RESTRICTIONS
+
+- Do not rebuild ACOVON.
+- Do not replace the existing Feed.
+- Do not create separate For You or Free Posts pages.
+- Do not add new navigation items.
+- Do not change existing routes, icons or navigation destinations.
+- Do not remove or rename All Activity, Following, Subscribed or Pay-To-View Vault.
+- Do not break existing subscriptions, purchases, creator permissions, paid content or media playback.
+- Do not create duplicate database tables or duplicate features where equivalent functionality already exists.
+- Do not use fake activity, fake users, fake analytics or hardcoded recommendation results in production.
+- Do not expose protected content.
+- Do not automatically change creator pricing or content visibility.
+- Do not let recommendations override access permissions.
+
+## FINAL EXPECTED RESULT
+
+ACOVON must have a fully functioning, intelligent recommendation system that learns from every fan's legitimate activity and continuously improves the relevance of their content experience.
+
+The existing Feed page must retain its current architecture and existing activity filters, with exactly two additions in the same filter area:
+
+**For You** and **Free Posts**.
+
+The existing Home navigation label must become **Feed**.
+
+All other navigation must remain exactly as it is.
+
+For You must provide an individually personalized recommendation experience.
+
+Free Posts must provide individually personalized recommendations from content the fan is authorized to access without payment.
+
+All six filters must work with the existing platform, database, creator permissions, subscriptions, purchases and media-access systems.
+
+The result must be a real, database-connected, backend-enforced recommendation engine—not a visual mockup, static feed or disconnected demonstration.
+
+**ACOVON SHOULD NOT JUST SHOW CONTENT. IT SHOULD LEARN WHAT EACH FAN WANTS TO SEE NEXT.**
