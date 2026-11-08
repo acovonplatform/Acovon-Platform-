@@ -10,6 +10,10 @@ import {
   PlatformAnnouncement
 } from '../../types';
 import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
+import {
   Megaphone,
   Plus,
   Search,
@@ -108,7 +112,8 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
     adminDeleteAnnouncement,
     adminRetryFailedAnnouncementNotifications,
     adminSimulateScheduledAndExpirySweep,
-    auditLogs
+    auditLogs,
+    currentUser
   } = useApp();
 
   // Feedback banner state
@@ -148,6 +153,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
   const [formIsMandatory, setFormIsMandatory] = useState(false);
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formImageFileName, setFormImageFileName] = useState('');
+  const [formImageStoragePath, setFormImageStoragePath] = useState<string | null>(null);
   const [formImageSizeKb, setFormImageSizeKb] = useState<number | undefined>(undefined);
   const [imageUploadProgress, setImageUploadProgress] = useState<number | null>(null);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
@@ -355,8 +361,8 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
     }, 10);
   };
 
-  // Image Upload Handler with Format & Size Validation + Progress Simulation
-  const handleImageFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Image Upload Handler connected to Supabase Storage ("app-files")
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -380,23 +386,32 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
       return;
     }
 
+    if (formImageStoragePath) {
+      await deleteSupabaseFileByPath({ storagePath: formImageStoragePath, uid: currentUser.id });
+      setFormImageStoragePath(null);
+    }
+
     setImageUploadProgress(25);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageUploadProgress(75);
-      setTimeout(() => {
-        setFormImageUrl(String(reader.result));
-        setFormImageFileName(file.name);
-        setFormImageSizeKb(Math.max(1, Math.round(file.size / 1024)));
-        setImageUploadProgress(100);
-        setTimeout(() => setImageUploadProgress(null), 600);
-      }, 250);
-    };
-    reader.onerror = () => {
+    const uploadRes = await uploadUserFileToSupabase({
+      uid: currentUser.id,
+      file,
+      featureName: 'announcements',
+      itemId: editingAnnouncement?.id || `ann_${Date.now()}`,
+      visibility: 'public',
+      onProgress: (pct) => setImageUploadProgress(pct)
+    });
+
+    if (uploadRes.success && uploadRes.signedUrl) {
+      setFormImageUrl(uploadRes.signedUrl);
+      setFormImageFileName(file.name);
+      setFormImageSizeKb(Math.max(1, Math.round(file.size / 1024)));
+      setFormImageStoragePath(uploadRes.storagePath || null);
+      setImageUploadProgress(100);
+      setTimeout(() => setImageUploadProgress(null), 600);
+    } else {
       setImageUploadProgress(null);
-      setImageUploadError('Failed to read image file. Please try another JPG, PNG, or WEBP image.');
-    };
-    reader.readAsDataURL(file);
+      setImageUploadError(uploadRes.error || 'Failed to upload image file.');
+    }
   };
 
   const toggleDisplayFormat = (fmt: AnnouncementDisplayFormat) => {
@@ -1378,7 +1393,14 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                     {formImageUrl && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
+                          if (formImageStoragePath) {
+                            await deleteSupabaseFileByPath({
+                              storagePath: formImageStoragePath,
+                              uid: currentUser.id
+                            });
+                            setFormImageStoragePath(null);
+                          }
                           setFormImageUrl('');
                           setFormImageFileName('');
                           setFormImageSizeKb(undefined);

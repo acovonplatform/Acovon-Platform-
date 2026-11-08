@@ -9,7 +9,7 @@ import { ExplorePage } from './components/explore/ExplorePage';
 import { CreatorProfilePage } from './components/creator/CreatorProfilePage';
 import { CustomRequestsManager } from './components/requests/CustomRequestsManager';
 import { ChatView } from './components/messages/ChatView';
-import { CreatorDashboard } from './components/creator/CreatorDashboard';
+import { CreatorDashboard, StudioCategory } from './components/creator/CreatorDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { WalletModal } from './components/wallet/WalletModal';
 import { CreatePostModal } from './components/feed/CreatePostModal';
@@ -39,7 +39,7 @@ import { FanProfileModal } from './components/profile/FanProfileModal';
 import { StatusViewerModal } from './components/status/StatusViewerModal';
 import { ImportantAnnouncementPopupModal } from './components/common/AnnouncementExperience';
 import { GlobalDomTranslator } from './components/common/GlobalDomTranslator';
-import { PersonalFileLibraryModal } from './components/files/PersonalFileLibraryModal';
+import { supabase } from './supabaseClient.js';
 import { Post } from './types';
 import { X, Shield, Lock, FileText, Coins } from 'lucide-react';
 
@@ -65,19 +65,63 @@ function AppContent() {
   const [showHelpCenter, setShowHelpCenter] = useState<boolean>(false);
   const [showBecomeCreator, setShowBecomeCreator] = useState<boolean>(false);
   const [showFanProfile, setShowFanProfile] = useState<boolean>(false);
-  const [showFileLibrary, setShowFileLibrary] = useState<boolean>(false);
+  const [studioTargetSection, setStudioTargetSection] = useState<{
+    category: StudioCategory;
+    subItem: string;
+    key: number;
+  } | null>(null);
   const [accessDeniedNotice, setAccessDeniedNotice] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [infoModalTitle, setInfoModalTitle] = useState<string | null>(null);
 
-  // Enforce: Once logged in/signed up, never show the landing page again — Home is now the Feed.
-  // When logged out (guest), show the landing page.
+  // Handle Supabase email verification / OAuth callback tokens and protect private pages with supabase.auth.getSession()
   useEffect(() => {
-    if (isAuthenticated && currentTab === 'landing') {
-      setCurrentTab('feed');
-    } else if (!isAuthenticated && currentTab !== 'landing') {
-      setCurrentTab('landing');
-    }
+    let active = true;
+
+    const verifySession = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tokenHash = searchParams.get('token_hash');
+      const otpType = searchParams.get('type') as
+        | 'signup'
+        | 'email'
+        | 'recovery'
+        | 'invite'
+        | 'magiclink'
+        | null;
+      const authCode = searchParams.get('code');
+
+      if (tokenHash && otpType) {
+        await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
+      } else if (authCode) {
+        await supabase.auth.exchangeCodeForSession(authCode);
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+
+      if (data.session) {
+        if (currentTab === 'landing' || window.location.pathname === '/login') {
+          window.history.pushState({}, '', '/');
+          setCurrentTab('feed');
+        }
+      } else {
+        if (currentTab !== 'landing') {
+          window.history.pushState({}, '', '/login');
+          setCurrentTab('landing');
+          setAuthMode('login');
+          setShowAuth(true);
+        } else if (window.location.pathname === '/login') {
+          setAuthMode('login');
+          setShowAuth(true);
+        }
+      }
+    };
+
+    verifySession();
+
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated, currentTab]);
 
   // Media Viewers & Social Interaction States
@@ -94,14 +138,16 @@ function AppContent() {
   const [tipAmount, setTipAmount] = useState<number>(20);
   const [tipNote, setTipNote] = useState<string>('');
 
-  const handleNavigate = (tab: string, creatorId?: string) => {
+  const handleNavigate = async (tab: string, creatorId?: string) => {
     // Clear access notice when navigating
     setAccessDeniedNotice(null);
 
     if (['terms', 'privacy', 'community-guidelines', 'verification-rules', 'pricing', 'become-creator', 'earnings-calculator', 'payout-terms'].includes(tab)) {
       if (tab === 'become-creator') {
-        if (!isAuthenticated) {
-          setAuthMode('register');
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          window.history.pushState({}, '', '/login');
+          setAuthMode('login');
           setShowAuth(true);
           return;
         }
@@ -112,11 +158,16 @@ function AppContent() {
       return;
     }
 
-    // If user is a guest and tries to navigate inside the app, prompt login/signup
-    if (!isAuthenticated && tab !== 'landing') {
-      setAuthMode('login');
-      setShowAuth(true);
-      return;
+    // Protect private pages with supabase.auth.getSession() — if no session, redirect to /login
+    if (tab !== 'landing') {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        window.history.pushState({}, '', '/login');
+        setCurrentTab('landing');
+        setAuthMode('login');
+        setShowAuth(true);
+        return;
+      }
     }
 
     // Once authenticated, never show the landing page again — Home is the Feed
@@ -178,7 +229,19 @@ function AppContent() {
         }}
         onOpenAdFree={() => setShowAdFree(true)}
         onOpenCreatorAd={() => setShowCreatorAd(true)}
-        onOpenEditProfile={() => setShowEditProfile(true)}
+        onOpenEditProfile={() => {
+          if (isCreator) {
+            setStudioTargetSection({
+              category: 'PROFILE',
+              subItem: 'edit_profile',
+              key: Date.now()
+            });
+            setCurrentTab('creator-studio');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            setShowEditProfile(true);
+          }
+        }}
         onOpenPaymentMethods={() => setShowPaymentMethods(true)}
         onOpenSubscriptions={() => {
           if (isCreator) {
@@ -193,7 +256,6 @@ function AppContent() {
         onOpenHelpCenter={() => setShowHelpCenter(true)}
         onOpenBecomeCreator={() => setShowBecomeCreator(true)}
         onOpenFanProfile={() => setShowFanProfile(true)}
-        onOpenFileLibrary={() => setShowFileLibrary(true)}
       />
 
       {/* RBAC Access Denied Notification Banner */}
@@ -372,6 +434,7 @@ function AppContent() {
               onNavigateToProfile={(id) => handleNavigate('creator-profile', id)}
               onOpenSubscribeModal={(creatorId) => setSubscribeTargetCreatorId(creatorId)}
               onOpenStatusViewer={(creatorId) => setActiveStatusCreatorId(creatorId)}
+              initialSection={studioTargetSection}
             />
           ) : (
             <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
@@ -685,11 +748,6 @@ function AppContent() {
           onOpenPrivacy={() => setShowPrivacy(true)}
           onOpenHelpCenter={() => setShowHelpCenter(true)}
         />
-      )}
-
-      {/* Personal File Library & Firebase Cloud Storage Modal */}
-      {showFileLibrary && (
-        <PersonalFileLibraryModal onClose={() => setShowFileLibrary(false)} />
       )}
 
     </div>

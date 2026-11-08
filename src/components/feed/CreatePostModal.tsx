@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PostVisibility, MediaAsset, VideoResolution, VideoCodec } from '../../types';
 import { CATEGORIES } from '../../data/mockData';
+import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
 import { 
   X, 
   UploadCloud, 
@@ -52,6 +56,9 @@ interface SelectedFileItem {
   jobId?: string;
   videoMediaId?: string;
   deduplicated?: boolean;
+  storagePath?: string;
+  supabaseFileId?: string;
+  thumbnailStoragePath?: string;
 }
 
 const STAGE_LABELS: Record<string, { label: string; step: number }> = {
@@ -238,7 +245,23 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         return;
       }
 
-      const previewUrl = URL.createObjectURL(file);
+      const itemId = `post_${Date.now()}_${i}`;
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'posts',
+        itemId,
+        visibility:
+          visibility === 'pay_per_view'
+            ? 'ppv'
+            : visibility === 'subscribers'
+            ? 'subscribers'
+            : visibility === 'followers'
+            ? 'followers'
+            : 'public'
+      });
+
+      const previewUrl = uploadRes.signedUrl || URL.createObjectURL(file);
       let thumbnailUrl = previewUrl;
       let previewFrames: string[] | undefined;
       let durationSeconds: number | undefined;
@@ -278,7 +301,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
       }
 
       newItems.push({
-        id: `file_${Date.now()}_${i}`,
+        id: itemId,
         file,
         fileName: file.name,
         fileSizeBytes: file.size,
@@ -293,7 +316,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         frameRate: 60,
         jobId,
         videoMediaId,
-        deduplicated
+        deduplicated,
+        storagePath: uploadRes.storagePath,
+        supabaseFileId: uploadRes.record?.file_id
       });
     }
 
@@ -358,16 +383,26 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     setUploadStatus('ready');
   };
 
-  const handleCustomThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeThumbTargetId) return;
-    const url = URL.createObjectURL(file);
+
+    const uploadRes = await uploadUserFileToSupabase({
+      uid: currentUser.id,
+      file,
+      featureName: 'post-thumbnails',
+      itemId: activeThumbTargetId,
+      visibility: 'public'
+    });
+    const url = uploadRes.signedUrl || URL.createObjectURL(file);
+
     setSelectedFiles(prev =>
       prev.map(item =>
         item.id === activeThumbTargetId
           ? {
               ...item,
               thumbnailUrl: url,
+              thumbnailStoragePath: uploadRes.storagePath,
               previewFrames: [url, ...(item.previewFrames || [])]
             }
           : item
@@ -402,7 +437,22 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const handleRemoveFile = (id: string) => {
     setSelectedFiles(prev => {
       const removed = prev.find(f => f.id === id);
-      if (removed && removed.previewUrl.startsWith('blob:')) URL.revokeObjectURL(removed.previewUrl);
+      if (removed) {
+        if (removed.previewUrl.startsWith('blob:')) URL.revokeObjectURL(removed.previewUrl);
+        if (removed.storagePath) {
+          deleteSupabaseFileByPath({
+            storagePath: removed.storagePath,
+            fileId: removed.supabaseFileId,
+            uid: currentUser.id
+          });
+        }
+        if (removed.thumbnailStoragePath) {
+          deleteSupabaseFileByPath({
+            storagePath: removed.thumbnailStoragePath,
+            uid: currentUser.id
+          });
+        }
+      }
       const remaining = prev.filter(f => f.id !== id);
       if (remaining.length === 0) {
         setUploadStatus('idle');

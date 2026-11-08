@@ -39,7 +39,6 @@ interface ProfileMenuProps {
   onOpenAuth: () => void;
   onOpenBecomeCreator?: () => void;
   onOpenFanProfile?: () => void;
-  onOpenFileLibrary?: () => void;
 }
 
 export const ProfileMenu: React.FC<ProfileMenuProps> = ({
@@ -54,8 +53,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
   onOpenHelpCenter,
   onOpenAuth,
   onOpenBecomeCreator,
-  onOpenFanProfile,
-  onOpenFileLibrary
+  onOpenFanProfile
 }) => {
   const {
     currentUser,
@@ -235,24 +233,6 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 <span>Edit Profile</span>
               </div>
             </button>
-
-            {onOpenFileLibrary && (
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  onOpenFileLibrary();
-                }}
-                className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:text-white hover:bg-[#1a1a20] rounded-lg transition-colors flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <FolderLock className="w-4 h-4 text-[#d4af37]" />
-                  <span>Personal File Library</span>
-                </div>
-                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  Cloud Vault
-                </span>
-              </button>
-            )}
           </div>
 
           {/* Divider */}

@@ -32,7 +32,6 @@ interface HeaderProps {
   onOpenHelpCenter: () => void;
   onOpenBecomeCreator?: () => void;
   onOpenFanProfile?: () => void;
-  onOpenFileLibrary?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,8 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPrivacy,
   onOpenHelpCenter,
   onOpenBecomeCreator,
-  onOpenFanProfile,
-  onOpenFileLibrary
+  onOpenFanProfile
 }) => {
   const {
     currentUser,
@@ -213,17 +211,6 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenHelpCenter={onOpenHelpCenter}
               />
 
-              {onOpenFileLibrary && (
-                <button
-                  onClick={onOpenFileLibrary}
-                  title="Open Personal File Library (Firebase Cloud Storage)"
-                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-white dark:bg-[#141418] hover:bg-stone-100 dark:hover:bg-[#1c1c22] border border-stone-300 dark:border-[#27272a] hover:border-[#d4af37]/50 rounded-xl transition-colors cursor-pointer focus:outline-none text-xs font-medium text-stone-800 dark:text-neutral-200"
-                >
-                  <FolderLock className="w-3.5 h-3.5 text-[#b38f28] dark:text-[#d4af37]" />
-                  <span>My Files</span>
-                </button>
-              )}
-
               {/* Clean Profile Menu Dropdown */}
               <ProfileMenu 
                 onNavigate={onNavigate}
@@ -238,7 +225,6 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenAuth={() => onOpenAuth('login')}
                 onOpenBecomeCreator={onOpenBecomeCreator}
                 onOpenFanProfile={onOpenFanProfile}
-                onOpenFileLibrary={onOpenFileLibrary}
               />
             </>
           ) : (

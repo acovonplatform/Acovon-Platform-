@@ -138,35 +138,33 @@ CREATE POLICY "Users can create and view own deletion requests"
   WITH CHECK (auth.uid() = uid);
 
 -- ============================================================================
--- SUPABASE STORAGE BUCKET & RLS POLICIES
+-- SUPABASE STORAGE BUCKET ("app-files") & RLS POLICIES
+-- Path format: ${auth.uid()}/${featureName}/${itemId}/${uuid}.${extension}
 -- ============================================================================
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('acovon-vault', 'acovon-vault', false)
+VALUES ('app-files', 'app-files', false)
 ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "Owner can upload to own folder users/{uid}/..."
+CREATE POLICY "Owner can upload to own folder {uid}/..."
   ON storage.objects FOR INSERT
   TO authenticated
   WITH CHECK (
-    bucket_id = 'acovon-vault' AND
-    (storage.foldername(name))[1] = 'users' AND
-    (storage.foldername(name))[2] = auth.uid()::text
+    bucket_id = 'app-files' AND
+    (storage.foldername(name))[1] = auth.uid()::text
   );
 
-CREATE POLICY "Owner can read own files in users/{uid}/..."
+CREATE POLICY "Owner can read own files in {uid}/..."
   ON storage.objects FOR SELECT
   TO authenticated
   USING (
-    bucket_id = 'acovon-vault' AND
-    (storage.foldername(name))[1] = 'users' AND
-    (storage.foldername(name))[2] = auth.uid()::text
+    bucket_id = 'app-files' AND
+    (storage.foldername(name))[1] = auth.uid()::text
   );
 
-CREATE POLICY "Owner can delete own files in users/{uid}/..."
+CREATE POLICY "Owner can delete own files in {uid}/..."
   ON storage.objects FOR DELETE
   TO authenticated
   USING (
-    bucket_id = 'acovon-vault' AND
-    (storage.foldername(name))[1] = 'users' AND
-    (storage.foldername(name))[2] = auth.uid()::text
+    bucket_id = 'app-files' AND
+    (storage.foldername(name))[1] = auth.uid()::text
   );

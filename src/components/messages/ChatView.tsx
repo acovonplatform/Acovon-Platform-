@@ -4,6 +4,10 @@ import { ChatAttachmentItem, CustomVideoRequest, ChatMessage } from '../../types
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import { TranslateContentButton } from '../common/TranslateContentButton';
 import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
+import {
   Send,
   Coins,
   Lock,
@@ -64,6 +68,8 @@ interface StagedAttachment {
   price: string;
   uploadProgress: number;
   uploadError?: string;
+  storagePath?: string;
+  supabaseFileId?: string;
 }
 
 const DEMO_QUICK_MEDIA = [
@@ -272,17 +278,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
     });
   }, [creators, searchQuery, archivedIds, activeTab, messages, customRequests, currentUser.id]);
 
-  // Handle selecting files from device
-  const handleFilesSelected = (
+  // Handle selecting files from device and uploading to Supabase Storage ("app-files")
+  const handleFilesSelected = async (
     e: React.ChangeEvent<HTMLInputElement>,
     forcedType?: 'image' | 'video' | 'document'
   ) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
-    const newStaged: StagedAttachment[] = [];
+    const files = Array.from(fileList);
+    e.target.value = '';
+    setShowMediaPanel(true);
 
-    Array.from(fileList).forEach((file) => {
+    for (const file of files) {
       // Validate file size (max 250MB for video, 25MB for image/doc)
       const maxMB = file.type.startsWith('video/') ? 250 : 25;
       const sizeMB = file.size / (1024 * 1024);
@@ -293,37 +301,55 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       else if (file.type.startsWith('image/')) detectedType = 'image';
       else detectedType = 'document';
 
+      const itemId = `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
       if (sizeMB > maxMB) {
-        newStaged.push({
-          id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          fileName: file.name,
-          fileType: detectedType,
-          fileSizeFormatted: formattedSize,
-          url: '',
-          description: '',
-          isPaid: isCreatorRole,
-          price: '15.00',
-          uploadProgress: 0,
-          uploadError: `File exceeds ${maxMB}MB maximum size limit.`
-        });
-        return;
+        setStagedAttachments(prev => [
+          ...prev,
+          {
+            id: itemId,
+            fileName: file.name,
+            fileType: detectedType,
+            fileSizeFormatted: formattedSize,
+            url: '',
+            description: '',
+            isPaid: isCreatorRole,
+            price: '15.00',
+            uploadProgress: 0,
+            uploadError: `File exceeds ${maxMB}MB maximum size limit.`
+          }
+        ]);
+        continue;
       }
 
       const objectUrl = URL.createObjectURL(file);
-      const itemId = `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-      newStaged.push({
-        id: itemId,
-        fileName: file.name,
-        fileType: detectedType,
-        fileSizeFormatted: formattedSize,
-        url: objectUrl,
-        thumbnailUrl: detectedType === 'image' ? objectUrl : undefined,
-        description: '',
-        isPaid: isCreatorRole,
-        price: '15.00',
-        uploadProgress: 100
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'messages',
+        itemId,
+        visibility: 'message_attachment'
       });
+
+      const resolvedUrl = uploadRes.signedUrl || objectUrl;
+
+      setStagedAttachments(prev => [
+        ...prev,
+        {
+          id: itemId,
+          fileName: file.name,
+          fileType: detectedType,
+          fileSizeFormatted: formattedSize,
+          url: resolvedUrl,
+          thumbnailUrl: detectedType === 'image' ? resolvedUrl : undefined,
+          description: '',
+          isPaid: isCreatorRole,
+          price: '15.00',
+          uploadProgress: 100,
+          storagePath: uploadRes.storagePath,
+          supabaseFileId: uploadRes.record?.file_id
+        }
+      ]);
 
       // If video, generate a canvas thumbnail frame
       if (detectedType === 'video') {
@@ -349,11 +375,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           }
         };
       }
-    });
-
-    setStagedAttachments(prev => [...prev, ...newStaged]);
-    setShowMediaPanel(true);
-    e.target.value = '';
+    }
   };
 
   const handleAddDemoAsset = (demo: typeof DEMO_QUICK_MEDIA[0]) => {
@@ -1721,9 +1743,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
                       <button
                         type="button"
-                        onClick={() =>
-                          setStagedAttachments(prev => prev.filter((_, i) => i !== idx))
-                        }
+                        onClick={() => {
+                          if (att.storagePath) {
+                            deleteSupabaseFileByPath({
+                              storagePath: att.storagePath,
+                              fileId: att.supabaseFileId,
+                              uid: currentUser.id
+                            });
+                          }
+                          setStagedAttachments(prev => prev.filter((_, i) => i !== idx));
+                        }}
                         className="p-1.5 text-neutral-400 hover:text-rose-400 rounded-lg"
                         title="Remove file"
                       >

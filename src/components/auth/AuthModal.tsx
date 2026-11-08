@@ -1,21 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import {
-  X,
-  AlertCircle,
-  CheckCircle2,
-  KeyRound,
-  ChevronDown,
-  ChevronUp,
-  Database,
-  Loader2
-} from 'lucide-react';
-import {
-  registerWithSupabaseEmail,
-  loginWithSupabaseEmail,
-  sendSupabasePasswordReset,
-  isSupabaseConfigured
-} from '../../services/supabase';
+import { supabase } from '../../supabaseClient.js';
+import { X, AlertCircle, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AuthModalProps {
   initialMode?: 'register' | 'login';
@@ -28,119 +14,187 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const {
-    registerAccount,
-    authenticateAccount,
-    activeLanguageCode,
-    appearanceMode
-  } = useApp();
+  const { registerAccount, authenticateAccount } = useApp();
 
-  const [mode, setMode] = useState<'register' | 'login' | 'forgot_password'>(initialMode);
+  const [mode, setMode] = useState<'register' | 'login' | 'forgot_password'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === 'success' || window.history.state?.signupSuccess) {
+      return 'login';
+    }
+    return initialMode;
+  });
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('email') || window.history.state?.email || '';
+  });
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [is18PlusAgreed, setIs18PlusAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === 'success' || window.history.state?.signupSuccess) {
+      return 'Your account has been created successfully! You can now log in below.';
+    }
+    return null;
+  });
+  const [requiresEmailVerification, setRequiresEmailVerification] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
   const [showSampleCredentials, setShowSampleCredentials] = useState(false);
 
   const switchMode = (nextMode: 'register' | 'login' | 'forgot_password') => {
     setMode(nextMode);
     setError(null);
+    setConfirmationMessage(null);
+    setRequiresEmailVerification(false);
     setResetSent(false);
+  };
+
+  const handleResendConfirmation = async () => {
+    const targetEmail = email.trim();
+    if (!targetEmail) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setResendingEmail(true);
+    setError(null);
+
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: targetEmail,
+      options: {
+        emailRedirectTo: window.location.origin
+      }
+    });
+
+    setResendingEmail(false);
+    if (resendError) {
+      setError(resendError.message);
+      return;
+    }
+
+    setConfirmationMessage(
+      `A new confirmation email has been sent to ${targetEmail}. Please check your inbox and spam folder.`
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setConfirmationMessage(null);
 
     if (mode === 'forgot_password') {
       if (!email.trim()) {
         setError('Please enter the email address associated with your ACOVON account.');
         return;
       }
-      setIsSubmitting(true);
-      await sendSupabasePasswordReset(email.trim());
-      setIsSubmitting(false);
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin
+      });
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
       setResetSent(true);
       return;
     }
 
     if (mode === 'register') {
       if (password !== confirmPassword) {
-        setError('Passwords do not match.');
+        setError('Passwords do not match. Please verify your password confirmation.');
         return;
       }
       if (!is18PlusAgreed) {
-        setError('You must confirm that you are 18+ and accept the Terms & Privacy Policy.');
+        setError('You must certify that you are at least 18 years of age and agree to the ACOVON Terms of Service.');
         return;
       }
 
-      setIsSubmitting(true);
+      const signedUpEmail = email.trim();
 
-      // 1. Register in Supabase Auth & PostgreSQL (or local fallback if env vars not yet set)
-      const sbReg = await registerWithSupabaseEmail({
-        fullName,
-        username,
-        email,
+      // 1) Sign Up with Supabase Auth
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: signedUpEmail,
         password,
-        preferredLanguage: activeLanguageCode,
-        appearancePreference: appearanceMode
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_legal_name: fullName.trim(),
+            username: username.trim()
+          }
+        }
       });
 
-      if (!sbReg.success) {
-        setIsSubmitting(false);
-        setError(sbReg.error || 'Could not create your Supabase account.');
+      if (signUpError) {
+        setError(signUpError.message);
         return;
       }
 
-      // 2. Register in ACOVON unified state (always assigns default 'fan' role)
-      const result = registerAccount({
-        fullName,
-        username,
-        email,
+      const emailVerificationNeeded = !signUpData.session;
+
+      // Do NOT auto-login after signup — sign out temporary session and take user to Sign In with pre-filled email
+      if (signUpData.session) {
+        await supabase.auth.signOut();
+      }
+
+      window.history.pushState(
+        { signupSuccess: true, email: signedUpEmail },
+        '',
+        `/login?signup=success&email=${encodeURIComponent(signedUpEmail)}`
+      );
+      setEmail(signedUpEmail);
+      setPassword('');
+      setConfirmPassword('');
+      setMode('login');
+      setRequiresEmailVerification(emailVerificationNeeded);
+      setConfirmationMessage(
+        emailVerificationNeeded
+          ? 'Your account has been created. Please check your email and verify your address before logging in.'
+          : 'Your account has been created successfully! You can now log in below.'
+      );
+      return;
+    }
+
+    // 2) Sign In with Supabase Auth
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+
+    // Only redirect when a real session exists after login
+    if (!signInData.session) {
+      setError('Could not establish an active login session. Please try again.');
+      return;
+    }
+
+    // Ensure authenticated Supabase user is loaded into app session
+    const localAuth = authenticateAccount(email, password);
+    if (!localAuth.success && signInData.user) {
+      const fallbackUsername = (signInData.user.email?.split('@')[0] || 'member')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]/g, '');
+      registerAccount({
+        fullName: signInData.user.user_metadata?.full_legal_name || fullName.trim() || fallbackUsername,
+        username:
+          signInData.user.user_metadata?.username ||
+          username.trim() ||
+          `${fallbackUsername}_${signInData.user.id.slice(0, 4)}`,
+        email: signInData.user.email || email.trim(),
         password,
-        confirmPassword,
-        is18PlusConfirmed: is18PlusAgreed
+        confirmPassword: password,
+        is18PlusConfirmed: true
       });
-
-      setIsSubmitting(false);
-
-      if (!result.success) {
-        setError(result.error || 'Could not create your account. Please check your information.');
-        return;
-      }
-
-      onSuccess();
-      onClose();
-      return;
     }
 
-    // Standard Unified Login — checks Supabase Auth + existing ACOVON accounts (Fan, Creator, Admin)
-    setIsSubmitting(true);
-    const sbLogin = await loginWithSupabaseEmail(email, password);
-
-    if (
-      !sbLogin.success &&
-      sbLogin.error &&
-      sbLogin.error.includes('Account is currently')
-    ) {
-      setIsSubmitting(false);
-      setError(sbLogin.error);
-      return;
-    }
-
-    const authResult = authenticateAccount(email, password);
-    setIsSubmitting(false);
-
-    if (!authResult.success && !sbLogin.success) {
-      setError(authResult.error || sbLogin.error || 'Invalid login credentials.');
-      return;
-    }
-
+    // 3) Redirect user to the Home page ("/")
+    window.history.pushState({}, '', '/');
     onSuccess();
     onClose();
   };
@@ -149,6 +203,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setEmail(sampleEmail);
     setPassword('acovon2025');
     setError(null);
+    setConfirmationMessage(null);
   };
 
   return (
@@ -162,24 +217,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center justify-between gap-2.5 mb-2 pr-7">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-[#d4af37] text-black font-bold font-brand flex items-center justify-center text-sm">
-              A
-            </div>
-            <span className="font-brand font-bold text-white text-lg tracking-wider">ACOVON</span>
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="w-7 h-7 rounded bg-[#d4af37] text-black font-bold font-brand flex items-center justify-center text-sm">
+            A
           </div>
-          <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-            <Database className="w-3 h-3" />
-            {isSupabaseConfigured ? 'Supabase Connected' : 'Supabase Ready'}
-          </span>
+          <span className="font-brand font-bold text-white text-lg tracking-wider">ACOVON</span>
         </div>
 
         {mode === 'register' && (
           <>
             <h3 className="text-xl font-bold text-white mb-1">Create Your Account</h3>
             <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
-              Join ACOVON to discover creators, enjoy exclusive content, and manage your personal Supabase file vault.
+              Join ACOVON to discover creators, enjoy exclusive content, and connect with your favorite creators.
             </p>
           </>
         )}
@@ -197,9 +246,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <>
             <h3 className="text-xl font-bold text-white mb-1">Reset Your Password</h3>
             <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
-              Enter your ACOVON account email address and we will send password recovery instructions.
+              Enter your ACOVON account email address and we will send you password recovery instructions.
             </p>
           </>
+        )}
+
+        {mode === 'login' && confirmationMessage && (
+          <div className="mb-4 p-3 bg-emerald-950/40 border border-emerald-800/70 text-emerald-300 rounded-xl text-xs space-y-2">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{confirmationMessage}</span>
+            </div>
+            {requiresEmailVerification && (
+              <div className="pl-6">
+                <button
+                  type="button"
+                  disabled={resendingEmail}
+                  onClick={handleResendConfirmation}
+                  className="text-[11px] font-semibold text-[#d4af37] hover:underline cursor-pointer disabled:opacity-50"
+                >
+                  {resendingEmail ? 'Sending verification email...' : "Didn't receive it? Resend verification email"}
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
@@ -210,8 +280,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  minLength={2}
-                  maxLength={120}
                   placeholder="e.g. Jordan Cross"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -224,8 +292,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  minLength={3}
-                  maxLength={40}
                   placeholder="e.g. jordancross"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -303,9 +369,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {error && (
-            <div className="p-2.5 bg-rose-950/50 border border-rose-800 text-rose-300 rounded-xl text-xs flex items-center gap-1.5">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+            <div className="p-2.5 bg-rose-950/50 border border-rose-800 text-rose-300 rounded-xl text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+              {error.toLowerCase().includes('confirm') && email.trim() && (
+                <div className="pl-5">
+                  <button
+                    type="button"
+                    disabled={resendingEmail}
+                    onClick={handleResendConfirmation}
+                    className="text-[11px] font-semibold text-[#d4af37] hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    {resendingEmail ? 'Sending verification email...' : 'Resend verification email'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -323,17 +403,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] disabled:opacity-50 text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer mt-2 flex items-center justify-center gap-2"
+            className="w-full py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer mt-2"
           >
-            {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            <span>
-              {mode === 'register'
-                ? 'Create Account'
-                : mode === 'login'
-                ? 'Log In'
-                : 'Send Recovery Link'}
-            </span>
+            {mode === 'register'
+              ? 'Create Account'
+              : mode === 'login'
+              ? 'Log In'
+              : 'Send Recovery Link'}
           </button>
         </form>
 
@@ -349,11 +425,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <KeyRound className="w-3.5 h-3.5 text-[#d4af37]" />
                 <span>Fill existing account email to test automatic role detection</span>
               </span>
-              {showSampleCredentials ? (
-                <ChevronUp className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
-              )}
+              {showSampleCredentials ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
 
             {showSampleCredentials && (
@@ -372,9 +444,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
                 >
                   <span className="text-white font-medium">chloe@atelier.paris</span>
-                  <span className="text-[10px] text-amber-400">
-                    Pending Creator App (Logs in as Fan)
-                  </span>
+                  <span className="text-[10px] text-amber-400">Pending Creator App (Logs in as Fan)</span>
                 </button>
                 <button
                   type="button"

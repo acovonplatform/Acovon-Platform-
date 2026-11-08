@@ -6,6 +6,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CreatorStatus, StatusAudience } from '../../types';
+import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
 
 interface MyStatusSectionProps {
   onOpenViewer?: (creatorId: string) => void;
@@ -63,6 +67,15 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [publishSuccessMsg, setPublishSuccessMsg] = useState<string>('');
   const [selectedViewerStatusId, setSelectedViewerStatusId] = useState<string | null>(null);
+  const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(null);
+  const [statusStorageMap, setStatusStorageMap] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem(`acovon_status_storage_map_${currentUser.id}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -70,24 +83,37 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
   const activeStatuses = getActiveCreatorStatuses(currentUser.id);
   const archivedStatuses = statuses.filter(s => s.creatorId === currentUser.id && (s.isArchived || new Date(s.expiresAt).getTime() <= Date.now()));
 
-  // Handle local file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file upload to Supabase Storage ("app-files")
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Remove previous staged upload if user picks another file before publishing
+    if (pendingStoragePath) {
+      await deleteSupabaseFileByPath({ storagePath: pendingStoragePath, uid: currentUser.id });
+      setPendingStoragePath(null);
+    }
+
+    const tempStatusId = `status_${Date.now()}`;
+
     if (file.type.startsWith('image/')) {
       setContentType('photo');
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setMediaUrl(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'statuses',
+        itemId: tempStatusId,
+        visibility: audience === 'public' ? 'public' : audience === 'followers' ? 'followers' : 'subscribers'
+      });
+      if (uploadRes.signedUrl) {
+        setMediaUrl(uploadRes.signedUrl);
+      }
+      if (uploadRes.storagePath) {
+        setPendingStoragePath(uploadRes.storagePath);
+      }
     } else if (file.type.startsWith('video/')) {
       setContentType('video');
       const videoObjectUrl = URL.createObjectURL(file);
-      setMediaUrl(videoObjectUrl);
       // Generate initial thumbnail from canvas
       const vid = document.createElement('video');
       vid.src = videoObjectUrl;
@@ -104,10 +130,21 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
             setThumbnailUrl(canvas.toDataURL('image/jpeg', 0.8));
           }
         } catch {
-          // fallback
           setThumbnailUrl('https://images.unsplash.com/photo-1509631179647-0177331693ae?w=900');
         }
       };
+
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'statuses',
+        itemId: tempStatusId,
+        visibility: audience === 'public' ? 'public' : audience === 'followers' ? 'followers' : 'subscribers'
+      });
+      setMediaUrl(uploadRes.signedUrl || videoObjectUrl);
+      if (uploadRes.storagePath) {
+        setPendingStoragePath(uploadRes.storagePath);
+      }
     }
   };
 
@@ -144,6 +181,16 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
 
     setIsPublishing(false);
     if (res.success) {
+      if (pendingStoragePath && res.status?.id) {
+        const nextMap = { ...statusStorageMap, [res.status.id]: pendingStoragePath };
+        setStatusStorageMap(nextMap);
+        try {
+          localStorage.setItem(`acovon_status_storage_map_${currentUser.id}`, JSON.stringify(nextMap));
+        } catch {
+          // ignore
+        }
+        setPendingStoragePath(null);
+      }
       setPublishSuccessMsg('Status published! It is now live for 24 hours on the home stories feed.');
       // Reset form
       setTextOverlay('');
@@ -361,8 +408,20 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
                       )}
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm('Delete this status update from your public stories?')) {
+                            const storagePath = statusStorageMap[st.id];
+                            if (storagePath) {
+                              await deleteSupabaseFileByPath({ storagePath, uid: currentUser.id });
+                              const nextMap = { ...statusStorageMap };
+                              delete nextMap[st.id];
+                              setStatusStorageMap(nextMap);
+                              try {
+                                localStorage.setItem(`acovon_status_storage_map_${currentUser.id}`, JSON.stringify(nextMap));
+                              } catch {
+                                // ignore
+                              }
+                            }
                             deleteStatus(st.id);
                           }
                         }}

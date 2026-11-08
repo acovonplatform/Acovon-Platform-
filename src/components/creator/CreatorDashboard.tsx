@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile, Post, RecordingMode, ReplayPermission } from '../../types';
 import { 
@@ -48,6 +48,8 @@ import { GetVerifiedSection } from './GetVerifiedSection';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import { RoleTargetedAnnouncementBanners } from '../common/AnnouncementExperience';
 
+export type StudioCategory = 'PROFILE' | 'VERIFICATION' | 'CONTENT' | 'MONETIZATION' | 'AUDIENCE' | 'LIVE' | 'PROMOTION' | 'ANALYTICS';
+
 interface CreatorDashboardProps {
   onOpenCreatePost: () => void;
   onNavigateToRequests: () => void;
@@ -55,9 +57,12 @@ interface CreatorDashboardProps {
   onNavigateToProfile?: (creatorId: string) => void;
   onOpenSubscribeModal?: (creatorId: string) => void;
   onOpenStatusViewer?: (creatorId: string) => void;
+  initialSection?: {
+    category: StudioCategory;
+    subItem: string;
+    key: number;
+  } | null;
 }
-
-type StudioCategory = 'PROFILE' | 'VERIFICATION' | 'CONTENT' | 'MONETIZATION' | 'AUDIENCE' | 'LIVE' | 'PROMOTION' | 'ANALYTICS';
 
 export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   onOpenCreatePost,
@@ -65,7 +70,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   onOpenWallet,
   onNavigateToProfile,
   onOpenSubscribeModal,
-  onOpenStatusViewer
+  onOpenStatusViewer,
+  initialSection
 }) => {
   const { 
     currentUser, 
@@ -91,9 +97,20 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   } = useApp();
 
   // Navigation state within Creator Studio
-  const [activeCategory, setActiveCategory] = useState<StudioCategory>('CONTENT');
-  const [activeSubItem, setActiveSubItem] = useState<string>('my_posts');
+  const [activeCategory, setActiveCategory] = useState<StudioCategory>(
+    initialSection?.category || 'CONTENT'
+  );
+  const [activeSubItem, setActiveSubItem] = useState<string>(
+    initialSection?.subItem || 'my_posts'
+  );
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | '90d'>('30d');
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveCategory(initialSection.category);
+      setActiveSubItem(initialSection.subItem);
+    }
+  }, [initialSection?.key]);
 
   // Promotion campaign form
   const [promoType, setPromoType] = useState<'boost_profile' | 'promote_post' | 'featured_creator'>('boost_profile');

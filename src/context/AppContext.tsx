@@ -103,6 +103,7 @@ import {
   logoutFromSupabase,
   syncUserPreferencesToSupabase
 } from '../services/supabase';
+import { supabase } from '../supabaseClient.js';
 import { INITIAL_STATUSES } from '../data/mockStatuses';
 import {
   MOCK_USERS,
@@ -737,22 +738,38 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication State (false = guest sees Landing Page; true = logged-in user never sees Landing Page, Home is Feed)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('acovon_is_authenticated') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Authentication State verified against real Supabase session
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('acovon_is_authenticated', isAuthenticated ? 'true' : 'false');
-    } catch {
-      // ignore
-    }
-  }, [isAuthenticated]);
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const hasSession = Boolean(data.session);
+      setIsAuthenticated(hasSession);
+      try {
+        localStorage.setItem('acovon_is_authenticated', hasSession ? 'true' : 'false');
+      } catch {
+        // ignore
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      const hasSession = Boolean(session);
+      setIsAuthenticated(hasSession);
+      try {
+        localStorage.setItem('acovon_is_authenticated', hasSession ? 'true' : 'false');
+      } catch {
+        // ignore
+      }
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
   // User Appearance Preference ('dark' | 'light' | 'system') persisted across sessions
   const [appearanceMode, setAppearanceModeState] = useState<'dark' | 'light' | 'system'>(() => {
     try {
@@ -4583,6 +4600,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return c;
     }));
+
+    setUsers(prev => {
+      if (!prev[creatorId]) return prev;
+      return {
+        ...prev,
+        [creatorId]: {
+          ...prev[creatorId],
+          ...(updates.name ? { name: updates.name } : {}),
+          ...(updates.username ? { username: updates.username } : {}),
+          ...(updates.avatar ? { avatar: updates.avatar } : {})
+        }
+      };
+    });
 
     if (currentUser.id === creatorId) {
       setCurrentUser(prev => {

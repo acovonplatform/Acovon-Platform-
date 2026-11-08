@@ -1,35 +1,29 @@
-import { createClient, SupabaseClient, User as SupabaseAuthUser } from '@supabase/supabase-js';
+import { SupabaseClient, User as SupabaseAuthUser } from '@supabase/supabase-js';
+import {
+  supabase as sharedSupabaseClient,
+  SUPABASE_URL,
+  SUPABASE_PUBLIC_KEY
+} from '../supabaseClient.js';
 
 // ============================================================================
 // 1. CENTRALIZED SUPABASE CONFIGURATION & INITIALIZATION
 // ============================================================================
-const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const rawSupabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
-const rawStorageBucket = (import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'acovon-vault').trim();
+export const SUPABASE_STORAGE_BUCKET = 'app-files';
+const rawStorageBucket = (import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || SUPABASE_STORAGE_BUCKET).trim();
 
 export const isSupabaseConfigured = Boolean(
-  rawSupabaseUrl &&
-    rawSupabaseAnonKey &&
-    rawSupabaseUrl.startsWith('http') &&
-    !rawSupabaseUrl.includes('your-project-ref.supabase.co') &&
-    rawSupabaseAnonKey !== 'your-supabase-anon-public-key'
+  SUPABASE_URL &&
+    SUPABASE_PUBLIC_KEY &&
+    SUPABASE_URL.startsWith('http')
 );
 
 export const resolvedSupabaseConfig = {
-  url: isSupabaseConfigured ? rawSupabaseUrl : 'https://acovon-supabase.supabase.co',
+  url: SUPABASE_URL.replace(/\/rest\/v1\/?$/, ''),
   anonKeyConfigured: isSupabaseConfigured,
-  storageBucket: rawStorageBucket || 'acovon-vault'
+  storageBucket: rawStorageBucket || SUPABASE_STORAGE_BUCKET
 };
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(rawSupabaseUrl, rawSupabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true
-      }
-    })
-  : null;
+export const supabase: SupabaseClient | null = sharedSupabaseClient;
 
 // ============================================================================
 // 2. DATA INTERFACES (Aligned with supabase/schema.sql)
@@ -461,30 +455,159 @@ export async function syncUserPreferencesToSupabase(params: {
 }
 
 // ============================================================================
-// 5. SUPABASE STORAGE & FILE LIBRARY OPERATIONS
+// 5. SUPABASE STORAGE ("app-files") & FILE LIBRARY OPERATIONS
 // ============================================================================
+export type StorageFeatureName =
+  | 'library'
+  | 'avatars'
+  | 'covers'
+  | 'statuses'
+  | 'posts'
+  | 'post-thumbnails'
+  | 'messages'
+  | 'announcements';
+
+function generateStorageUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export async function resolveStorageOwnerUid(fallbackUid: string): Promise<string> {
+  if (supabase) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user?.id) {
+        return sessionData.session.user.id;
+      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.id) {
+        return userData.user.id;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return fallbackUid;
+}
+
+export function buildAppFilesStoragePath(params: {
+  uid: string;
+  featureName: StorageFeatureName | string;
+  itemId: string;
+  extension: string;
+}): { storagePath: string; uuid: string } {
+  const uuid = generateStorageUuid();
+  const cleanFeature = params.featureName.replace(/[^a-zA-Z0-9_-]/g, '') || 'files';
+  const cleanItemId = params.itemId.replace(/[^a-zA-Z0-9_-]/g, '') || uuid;
+  const cleanExt = params.extension.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'bin';
+  // Required structure: ${auth.uid()}/${featureName}/${itemId}/${uuid}.${extension}
+  const storagePath = `${params.uid}/${cleanFeature}/${cleanItemId}/${uuid}.${cleanExt}`;
+  return { storagePath, uuid };
+}
+
+export async function createSignedAppFileUrl(
+  storagePath: string,
+  expiresInSeconds = 3600
+): Promise<string | null> {
+  if (!supabase || !storagePath) return null;
+  try {
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .createSignedUrl(storagePath, expiresInSeconds);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+}
+
+export function dataUrlToFile(dataUrl: string, defaultFileName = 'upload.jpg'): File {
+  const parts = dataUrl.split(',');
+  const mimeMatch = parts[0]?.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+  const baseName = defaultFileName.replace(/\.[^/.]+$/, '');
+  const finalName = `${baseName}.${ext}`;
+
+  const byteString = atob(parts[1] || '');
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new File([ab], finalName, { type: mime });
+}
+
 export async function uploadUserFileToSupabase(params: {
   uid: string;
   file: File;
+  featureName?: StorageFeatureName | string;
+  itemId?: string;
   visibility?: FileVisibilityMode;
   onProgress?: (percent: number) => void;
 }): Promise<{
   success: boolean;
   record?: SupabaseUserFileRecord;
+  storagePath?: string;
+  signedUrl?: string;
   error?: string;
 }> {
-  const { uid, file, visibility = 'private', onProgress } = params;
+  const {
+    uid,
+    file,
+    featureName = 'library',
+    itemId,
+    visibility = 'private',
+    onProgress
+  } = params;
 
+  const ownerUid = await resolveStorageOwnerUid(uid);
+  const rawExt = (file.name.split('.').pop() || '').toLowerCase().trim();
   const validation = validateFileForSupabaseUpload(file);
-  if (!validation.valid || !validation.category || !validation.extension || !validation.sanitizedName) {
-    return {
-      success: false,
-      error: validation.error || 'File failed security validation.'
-    };
-  }
 
-  const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const storagePath = `users/${uid}/files/${fileId}/${validation.sanitizedName}`;
+  const resolvedCategory: FileUploadCategory =
+    validation.category ||
+    (file.type.startsWith('video/')
+      ? 'video'
+      : file.type.startsWith('image/')
+      ? 'image'
+      : 'document');
+  const resolvedExtension =
+    validation.extension ||
+    (['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov', 'webm', 'pdf'].includes(rawExt)
+      ? rawExt
+      : resolvedCategory === 'video'
+      ? 'mp4'
+      : resolvedCategory === 'image'
+      ? 'jpg'
+      : 'pdf');
+  const resolvedMime =
+    ALLOWED_FILE_SPECS[file.type]
+      ? file.type
+      : resolvedCategory === 'video'
+      ? 'video/mp4'
+      : resolvedCategory === 'image'
+      ? 'image/jpeg'
+      : 'application/pdf';
+  const sanitizedName =
+    validation.sanitizedName ||
+    file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200) ||
+    `file.${resolvedExtension}`;
+
+  const resolvedItemId = itemId || `item_${Date.now()}`;
+  const { storagePath, uuid } = buildAppFilesStoragePath({
+    uid: ownerUid,
+    featureName,
+    itemId: resolvedItemId,
+    extension: resolvedExtension
+  });
+  const fileId = `file_${uuid}`;
   const nowIso = new Date().toISOString();
 
   if (onProgress) onProgress(25);
@@ -492,50 +615,55 @@ export async function uploadUserFileToSupabase(params: {
   if (supabase) {
     try {
       const { error: uploadErr } = await supabase.storage
-        .from(resolvedSupabaseConfig.storageBucket)
+        .from(SUPABASE_STORAGE_BUCKET)
         .upload(storagePath, file, {
-          contentType: file.type,
+          contentType: file.type || resolvedMime,
           upsert: false
         });
 
       if (!uploadErr) {
-        if (onProgress) onProgress(80);
-        const { data: signedData } = await supabase.storage
-          .from(resolvedSupabaseConfig.storageBucket)
-          .createSignedUrl(storagePath, 3600);
-
-        const downloadUrl = signedData?.signedUrl || URL.createObjectURL(file);
+        if (onProgress) onProgress(75);
+        const signedUrl =
+          (await createSignedAppFileUrl(storagePath, 3600)) || URL.createObjectURL(file);
 
         const record: SupabaseUserFileRecord = {
           file_id: fileId,
-          owner_uid: uid,
-          original_filename: validation.sanitizedName,
+          owner_uid: ownerUid,
+          original_filename: sanitizedName,
           storage_path: storagePath,
-          mime_type: file.type,
-          file_extension: validation.extension,
+          mime_type: resolvedMime,
+          file_extension: resolvedExtension,
           file_size_bytes: file.size,
-          file_category: validation.category,
+          file_category: resolvedCategory,
           upload_status: 'completed',
           visibility,
-          download_url: downloadUrl,
+          download_url: signedUrl,
           created_at: nowIso,
           updated_at: nowIso
         };
 
-        const { error: dbErr } = await supabase.from('user_files').insert(record);
-        if (dbErr) {
-          // Orphan cleanup if metadata insert fails
-          await supabase.storage
-            .from(resolvedSupabaseConfig.storageBucket)
-            .remove([storagePath]);
-          return { success: false, error: dbErr.message };
+        await supabase.from('user_files').insert(record);
+
+        // If this is a profile avatar upload, also persist storage_path/url in users table
+        if (featureName === 'avatars') {
+          await supabase
+            .from('users')
+            .update({ profile_picture_url: storagePath, updated_at: nowIso })
+            .eq('uid', ownerUid);
         }
 
         if (onProgress) onProgress(100);
-        return { success: true, record };
+        return {
+          success: true,
+          record,
+          storagePath,
+          signedUrl
+        };
+      } else {
+        console.warn('Supabase Storage upload notice:', uploadErr.message);
       }
-    } catch {
-      // Fall through to local preview URL if bucket is not yet created
+    } catch (err) {
+      console.warn('Supabase Storage upload fallback:', err);
     }
   }
 
@@ -543,13 +671,13 @@ export async function uploadUserFileToSupabase(params: {
   const localPreviewUrl = URL.createObjectURL(file);
   const record: SupabaseUserFileRecord = {
     file_id: fileId,
-    owner_uid: uid,
-    original_filename: validation.sanitizedName,
+    owner_uid: ownerUid,
+    original_filename: sanitizedName,
     storage_path: storagePath,
-    mime_type: file.type,
-    file_extension: validation.extension,
+    mime_type: resolvedMime,
+    file_extension: resolvedExtension,
     file_size_bytes: file.size,
-    file_category: validation.category,
+    file_category: resolvedCategory,
     upload_status: 'completed',
     visibility,
     download_url: localPreviewUrl,
@@ -557,53 +685,98 @@ export async function uploadUserFileToSupabase(params: {
     updated_at: nowIso
   };
 
-  return { success: true, record };
+  return {
+    success: true,
+    record,
+    storagePath,
+    signedUrl: localPreviewUrl
+  };
 }
 
 export async function fetchUserSupabaseFiles(uid: string): Promise<SupabaseUserFileRecord[]> {
   if (!supabase) return [];
   try {
+    const ownerUid = await resolveStorageOwnerUid(uid);
     const { data, error } = await supabase
       .from('user_files')
       .select('*')
-      .eq('owner_uid', uid)
+      .eq('owner_uid', ownerUid)
       .neq('upload_status', 'deleted')
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
-    return data as SupabaseUserFileRecord[];
+
+    // Resolve fresh signed URLs from private "app-files" bucket for display
+    const records = await Promise.all(
+      (data as SupabaseUserFileRecord[]).map(async (item) => {
+        if (item.storage_path) {
+          const signedUrl = await createSignedAppFileUrl(item.storage_path, 3600);
+          if (signedUrl) {
+            return { ...item, download_url: signedUrl };
+          }
+        }
+        return item;
+      })
+    );
+
+    return records;
   } catch {
     return [];
   }
+}
+
+export async function deleteSupabaseFileByPath(params: {
+  storagePath?: string;
+  fileId?: string;
+  uid?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { storagePath, fileId, uid } = params;
+  if (!supabase) return { success: true };
+
+  try {
+    const ownerUid = uid ? await resolveStorageOwnerUid(uid) : undefined;
+
+    if (storagePath) {
+      await supabase.storage.from(SUPABASE_STORAGE_BUCKET).remove([storagePath]);
+    }
+
+    if (fileId) {
+      let query = supabase.from('user_files').delete().eq('file_id', fileId);
+      if (ownerUid) {
+        query = query.eq('owner_uid', ownerUid);
+      }
+      await query;
+    } else if (storagePath) {
+      let query = supabase.from('user_files').delete().eq('storage_path', storagePath);
+      if (ownerUid) {
+        query = query.eq('owner_uid', ownerUid);
+      }
+      await query;
+    }
+  } catch (err) {
+    console.warn('Error deleting file from Supabase Storage/DB:', err);
+  }
+
+  return { success: true };
 }
 
 export async function deleteUserSupabaseFile(
   uid: string,
   record: SupabaseUserFileRecord
 ): Promise<{ success: boolean; error?: string }> {
-  if (record.owner_uid !== uid) {
+  const ownerUid = await resolveStorageOwnerUid(uid);
+  if (record.owner_uid !== uid && record.owner_uid !== ownerUid) {
     return {
       success: false,
       error: 'Security Violation: You can only delete files that belong to your own UID.'
     };
   }
 
-  if (supabase) {
-    try {
-      await supabase.storage
-        .from(resolvedSupabaseConfig.storageBucket)
-        .remove([record.storage_path]);
-      await supabase
-        .from('user_files')
-        .delete()
-        .eq('file_id', record.file_id)
-        .eq('owner_uid', uid);
-    } catch {
-      // Ignore if offline
-    }
-  }
-
-  return { success: true };
+  return deleteSupabaseFileByPath({
+    storagePath: record.storage_path,
+    fileId: record.file_id,
+    uid: ownerUid
+  });
 }
 
 export async function updateUserSupabaseFileVisibility(

@@ -2,6 +2,11 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile } from '../../types';
 import { ImageCropModal } from './ImageCropModal';
+import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath,
+  dataUrlToFile
+} from '../../services/supabase';
 import { 
   Camera, 
   Upload, 
@@ -30,12 +35,29 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
+  // Track active Supabase Storage paths for deletion when replaced
+  const [avatarStoragePath, setAvatarStoragePath] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(`acovon_avatar_storage_path_${creator.id}`);
+    } catch {
+      return null;
+    }
+  });
+  const [coverStoragePath, setCoverStoragePath] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(`acovon_cover_storage_path_${creator.id}`);
+    } catch {
+      return null;
+    }
+  });
+
   // Crop modal state
   const [cropModalData, setCropModalData] = useState<{
     imageSrc: string;
     aspectRatio: 'square' | 'cover';
     title: string;
     target: 'avatar' | 'cover';
+    originalFileName?: string;
   } | null>(null);
 
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
@@ -69,7 +91,8 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
           imageSrc: reader.result,
           aspectRatio: target === 'avatar' ? 'square' : 'cover',
           title: target === 'avatar' ? 'Reposition & Crop Profile Picture' : 'Reposition & Crop Cover Photo',
-          target
+          target,
+          originalFileName: file.name
         });
       }
     };
@@ -79,27 +102,65 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
     e.target.value = '';
   };
 
-  // Save cropped result into persistent creator profile
-  const handleSaveCroppedImage = (croppedDataUrl: string) => {
+  // Save cropped result to Supabase Storage ("app-files") and update persistent creator profile
+  const handleSaveCroppedImage = async (croppedDataUrl: string) => {
     if (!cropModalData) return;
 
-    const { target } = cropModalData;
-    const updates: Partial<CreatorProfile> = {};
+    const { target, originalFileName } = cropModalData;
+    setCropModalData(null);
 
+    const fileToUpload = dataUrlToFile(
+      croppedDataUrl,
+      originalFileName || (target === 'avatar' ? 'avatar.jpg' : 'cover.jpg')
+    );
+
+    // Delete previous file from Storage ("app-files") and user_files table if replacing
+    const prevPath = target === 'avatar' ? avatarStoragePath : coverStoragePath;
+    if (prevPath) {
+      await deleteSupabaseFileByPath({ storagePath: prevPath, uid: creator.id });
+    }
+
+    const uploadRes = await uploadUserFileToSupabase({
+      uid: creator.id,
+      file: fileToUpload,
+      featureName: target === 'avatar' ? 'avatars' : 'covers',
+      itemId: creator.id,
+      visibility: 'public'
+    });
+
+    const displayUrl = uploadRes.signedUrl || croppedDataUrl;
+    if (uploadRes.storagePath) {
+      if (target === 'avatar') {
+        setAvatarStoragePath(uploadRes.storagePath);
+        try {
+          localStorage.setItem(`acovon_avatar_storage_path_${creator.id}`, uploadRes.storagePath);
+        } catch {
+          // ignore
+        }
+      } else {
+        setCoverStoragePath(uploadRes.storagePath);
+        try {
+          localStorage.setItem(`acovon_cover_storage_path_${creator.id}`, uploadRes.storagePath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const updates: Partial<CreatorProfile> = {};
     if (target === 'avatar') {
-      updates.avatar = croppedDataUrl;
+      updates.avatar = displayUrl;
     } else {
-      updates.coverImage = croppedDataUrl;
+      updates.coverImage = displayUrl;
     }
 
     const res = updateCreatorProfile(creator.id, updates);
-    setCropModalData(null);
 
     if (res.success) {
       setSuccessToast(
         target === 'avatar' 
-          ? 'Profile picture updated everywhere across ACOVON!' 
-          : 'Cover photo updated on your public profile showcase!'
+          ? 'Profile picture uploaded to app-files and updated everywhere across ACOVON!' 
+          : 'Cover photo uploaded to app-files and updated on your public profile showcase!'
       );
       setTimeout(() => setSuccessToast(null), 3500);
     } else {

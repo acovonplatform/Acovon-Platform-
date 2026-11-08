@@ -234,6 +234,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
     const res = await uploadUserFileToSupabase({
       uid: activeUid,
       file,
+      featureName: 'library',
+      itemId: `lib_${Date.now()}`,
       visibility: selectedVisibility,
       onProgress: (pct) => setUploadProgress(pct)
     });
@@ -247,7 +249,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
       persistLocalFiles(updated);
       setStatusMessage({
         type: 'success',
-        text: `Uploaded "${res.record.original_filename}" to ${res.record.storage_path} in Supabase Vault.`
+        text: `Uploaded "${res.record.original_filename}" to app-files (${res.record.storage_path}).`
       });
     } else {
       setStatusMessage({

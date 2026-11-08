@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   X, 
@@ -27,7 +27,9 @@ import {
   Globe,
   Languages,
   Search,
-  Check
+  Check,
+  Upload,
+  Camera
 } from 'lucide-react';
 import { CreatorProfile } from '../../types';
 import {
@@ -35,6 +37,10 @@ import {
   formatLocalizedNumber,
   formatLocalizedCurrency
 } from '../../data/i18nData';
+import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
 
 interface EditProfileModalProps {
   onClose: () => void;
@@ -45,14 +51,76 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
   const isCreator = 'bio' in currentUser;
   const creator = isCreator ? (currentUser as CreatorProfile) : null;
 
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+
   const [name, setName] = useState(currentUser.name);
   const [username, setUsername] = useState(currentUser.username);
   const [bio, setBio] = useState(creator?.bio || '');
   const [category, setCategory] = useState(creator?.category || 'Fashion & Lifestyle');
   const [country, setCountry] = useState(creator?.country || 'United States');
   const [avatar, setAvatar] = useState(currentUser.avatar);
+  const [avatarStoragePath, setAvatarStoragePath] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(`acovon_avatar_storage_path_${currentUser.id}`);
+    } catch {
+      return null;
+    }
+  });
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [videoCallPrice, setVideoCallPrice] = useState(creator?.callRatePerMinute || 4.5);
   const [saved, setSaved] = useState(false);
+
+  const handleAvatarFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setUploadError(null);
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+      setUploadError('Please select a valid image file (JPG, PNG, or WEBP).');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('Image file size must be less than 15MB.');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+
+    if (avatarStoragePath) {
+      await deleteSupabaseFileByPath({
+        storagePath: avatarStoragePath,
+        uid: currentUser.id
+      });
+    }
+
+    const uploadRes = await uploadUserFileToSupabase({
+      uid: currentUser.id,
+      file,
+      featureName: 'avatars',
+      itemId: currentUser.id,
+      visibility: 'public'
+    });
+
+    setIsUploadingAvatar(false);
+
+    if (uploadRes.success && uploadRes.signedUrl) {
+      setAvatar(uploadRes.signedUrl);
+      if (uploadRes.storagePath) {
+        setAvatarStoragePath(uploadRes.storagePath);
+        try {
+          localStorage.setItem(`acovon_avatar_storage_path_${currentUser.id}`, uploadRes.storagePath);
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      setUploadError(uploadRes.error || 'Failed to upload image.');
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +133,11 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
         country,
         avatar,
         callRatePerMinute: videoCallPrice
+      });
+    } else {
+      updateCreatorProfile(currentUser.id, {
+        name,
+        avatar
       });
     }
     setSaved(true);
@@ -94,24 +167,73 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            <input
+              ref={avatarFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/jpg"
+              className="hidden"
+              onChange={handleAvatarFileSelected}
+            />
+
             <div className="flex items-center gap-4">
-              <img 
-                src={avatar} 
-                alt={name} 
-                className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/50" 
-              />
-              <div className="flex-1 space-y-1">
-                <label className="text-xs text-neutral-400">Avatar Image URL</label>
-                <input 
-                  type="url"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+              <div
+                onClick={() => avatarFileInputRef.current?.click()}
+                className="relative group w-16 h-16 shrink-0 cursor-pointer"
+                title="Upload Profile Image"
+              >
+                <img 
+                  src={avatar} 
+                  alt={name} 
+                  className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/50" 
                 />
+                <div className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera className="w-5 h-5 text-[#d4af37]" />
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1.5">
+                <label className="block text-xs text-neutral-400">Profile Picture</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isUploadingAvatar}
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    className="px-3.5 py-2 bg-[#18181c] hover:bg-[#222228] border border-[#27272a] hover:border-[#d4af37]/50 rounded-xl text-xs font-semibold text-white flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span>{isUploadingAvatar ? 'Uploading...' : 'Upload Image'}</span>
+                  </button>
+                </div>
+                {uploadError && (
+                  <p className="text-[11px] text-rose-400">{uploadError}</p>
+                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {isCreator ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-neutral-400">Display Name</label>
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    required
+                    className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-neutral-400">Username (@handle)</label>
+                  <input 
+                    type="text" 
+                    value={username} 
+                    onChange={(e) => setUsername(e.target.value)} 
+                    required
+                    className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                  />
+                </div>
+              </div>
+            ) : (
               <div className="space-y-1">
                 <label className="text-xs text-neutral-400">Display Name</label>
                 <input 
@@ -122,17 +244,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
                   className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-neutral-400">Username (@handle)</label>
-                <input 
-                  type="text" 
-                  value={username} 
-                  onChange={(e) => setUsername(e.target.value)} 
-                  required
-                  className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
-                />
-              </div>
-            </div>
+            )}
 
             {isCreator && (
               <>
@@ -180,7 +292,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
               </button>
               <button 
                 type="submit"
-                className="px-5 py-2 text-xs font-semibold bg-[#d4af37] hover:bg-[#e5c07b] text-black rounded-xl transition-colors cursor-pointer"
+                disabled={isUploadingAvatar}
+                className="px-5 py-2 text-xs font-semibold bg-[#d4af37] hover:bg-[#e5c07b] text-black rounded-xl transition-colors cursor-pointer disabled:opacity-50"
               >
                 Save Changes
               </button>
