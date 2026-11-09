@@ -84,7 +84,7 @@ const DEMO_QUICK_MEDIA = [
     fileName: 'Backstage_Runway_Rehearsal_4K.mp4',
     fileType: 'video' as const,
     fileSizeFormatted: '16.4 MB',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    url: '/videos/sample1.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=500&q=60'
   },
   {
@@ -98,7 +98,7 @@ const DEMO_QUICK_MEDIA = [
     fileName: 'Studio_Soundcheck_Session_Clip.mp4',
     fileType: 'video' as const,
     fileSizeFormatted: '14.9 MB',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    url: '/videos/sample2.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=60'
   }
 ];
@@ -167,9 +167,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   const [declineReason, setDeclineReason] = useState<string>('');
 
   const [deliveringRequest, setDeliveringRequest] = useState<CustomVideoRequest | null>(null);
-  const [deliveryVideoUrl, setDeliveryVideoUrl] = useState<string>(
-    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-  );
+  const [deliveryVideoUrl, setDeliveryVideoUrl] = useState<string>('');
+  const [deliveryVideoFileName, setDeliveryVideoFileName] = useState<string>('');
+  const [deliveryVideoFileSize, setDeliveryVideoFileSize] = useState<string>('');
+  const [deliveryStoragePath, setDeliveryStoragePath] = useState<string | undefined>(undefined);
+  const [deliverySupabaseFileId, setDeliverySupabaseFileId] = useState<string | undefined>(undefined);
+  const [isUploadingDeliveryVideo, setIsUploadingDeliveryVideo] = useState<boolean>(false);
+  const [deliveryUploadError, setDeliveryUploadError] = useState<string | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
 
   // Tip Modal state
@@ -192,6 +196,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
+  const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null);
 
   const triggerToast = (msg: string) => {
     setActionToast(msg);
@@ -565,10 +570,66 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
     triggerToast('Request declined and fan escrow refunded.');
   };
 
+  const handleDeliveryVideoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDeliveryUploadError(null);
+
+    if (!file.type.startsWith('video/') && !/\.(mp4|mov|webm|m4v|mkv)$/i.test(file.name)) {
+      setDeliveryUploadError('Please select a valid video file (MP4, MOV, or WEBM).');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploadingDeliveryVideo(true);
+    try {
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'custom-requests',
+        itemId: deliveringRequest?.id || `req_${Date.now()}`,
+        visibility: 'private'
+      });
+
+      const localPreview = URL.createObjectURL(file);
+      const finalUrl = uploadRes.signedUrl || localPreview;
+      setDeliveryVideoUrl(finalUrl);
+      setDeliveryVideoFileName(file.name);
+      setDeliveryVideoFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+      setDeliveryStoragePath(uploadRes.storagePath);
+      setDeliverySupabaseFileId(uploadRes.record?.file_id);
+    } catch {
+      setDeliveryUploadError('Failed to upload video file. Please try again.');
+    } finally {
+      setIsUploadingDeliveryVideo(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveDeliveryVideoFile = async () => {
+    if (deliveryStoragePath) {
+      await deleteSupabaseFileByPath({
+        storagePath: deliveryStoragePath,
+        fileId: deliverySupabaseFileId,
+        uid: currentUser.id
+      });
+    }
+    setDeliveryVideoUrl('');
+    setDeliveryVideoFileName('');
+    setDeliveryVideoFileSize('');
+    setDeliveryStoragePath(undefined);
+    setDeliverySupabaseFileId(undefined);
+    setDeliveryUploadError(null);
+  };
+
   // Creator delivers video inside conversation
   const handleCreatorDeliverRequest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveringRequest) return;
+    if (!deliveryVideoUrl.trim()) {
+      setDeliveryUploadError('Please upload a video file before delivering.');
+      return;
+    }
     updateCustomRequestStatus(
       deliveringRequest.id,
       'delivered',
@@ -576,6 +637,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       deliveryNotes.trim() || 'Delivered your custom video!'
     );
     setDeliveringRequest(null);
+    setDeliveryVideoUrl('');
+    setDeliveryVideoFileName('');
+    setDeliveryVideoFileSize('');
+    setDeliveryStoragePath(undefined);
+    setDeliverySupabaseFileId(undefined);
+    setDeliveryUploadError(null);
     setDeliveryNotes('');
     triggerToast('Custom video delivered! Fan can now review and release escrow.');
   };
@@ -798,9 +865,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-semibold text-xs text-white truncate flex items-center gap-1">
+                      <span className="font-semibold text-xs text-white truncate flex items-center gap-1.5">
                         <span className="truncate">{c.name}</span>
-                        <VerifiedBadge creatorId={c.id} size="xs" />
+                        <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
+                          @{c.username}
+                          <VerifiedBadge creatorId={c.id} size="xs" />
+                        </span>
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         {pendingReqsForCreator.length > 0 && (
@@ -915,7 +985,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 sm:gap-1.5 font-bold text-xs sm:text-sm text-white min-w-0">
                 <span className="truncate">{recipientCreator.name}</span>
-                <VerifiedBadge creatorId={recipientCreator.id} size="sm" />
+                <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
+                  @{recipientCreator.username}
+                  <VerifiedBadge creatorId={recipientCreator.id} size="xs" />
+                </span>
                 {isCreatorRole && (
                   <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shrink-0">
                     Creator View
@@ -1152,8 +1225,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                             <p className="text-xs text-neutral-300 italic">"{linkedRequest.deliveredNotes}"</p>
                           )}
                           <video
-                            src={linkedRequest.deliveredVideoUrl}
+                            src={linkedRequest.deliveredVideoUrl || '/videos/sample1.mp4'}
                             controls
+                            onError={(e) => {
+                              const el = e.currentTarget;
+                              if (!el.src.includes('/videos/sample1.mp4')) {
+                                el.src = '/videos/sample1.mp4';
+                                el.load();
+                              }
+                            }}
                             className="w-full max-h-56 rounded-lg bg-black"
                           />
                           {!isCreatorRole && linkedRequest.status === 'delivered' && (
@@ -1276,9 +1356,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                     {/* Creator Header Badge */}
                     <div className="flex items-center justify-between text-xs border-b border-[#26262b] pb-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white flex items-center gap-1">
+                        <span className="font-bold text-white flex items-center gap-1.5">
                           <span>{isMine ? 'You' : recipientCreator.name}</span>
-                          {!isMine && <VerifiedBadge creatorId={recipientCreator.id} size="xs" />}
+                          {!isMine && (
+                            <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
+                              @{recipientCreator.username}
+                              <VerifiedBadge creatorId={recipientCreator.id} size="xs" />
+                            </span>
+                          )}
                         </span>
                         {msg.isPaid ? (
                           <span
@@ -1328,9 +1413,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                                 {att.fileType === 'video' ? (
                                   <div className="relative rounded-lg overflow-hidden bg-black">
                                     <video
-                                      src={att.url}
+                                      src={att.url || '/videos/sample1.mp4'}
                                       poster={att.thumbnailUrl}
                                       controls
+                                      onError={(e) => {
+                                        const el = e.currentTarget;
+                                        if (!el.src.includes('/videos/sample1.mp4')) {
+                                          el.src = '/videos/sample1.mp4';
+                                          el.load();
+                                        }
+                                      }}
                                       className="w-full max-h-64 object-contain"
                                     />
                                   </div>
@@ -1932,7 +2024,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">Your Wallet Balance:</span>
-                <span className="font-mono text-white font-semibold">${currentUser.walletBalance.toFixed(2)}</span>
+                <span className="font-mono text-white font-semibold">${Number(currentUser?.walletBalance || 0).toFixed(2)}</span>
               </div>
             </div>
 
@@ -1943,7 +2035,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               <input
                 type="number"
                 min={recipientCreator.callRatePerMinute || 5}
-                max={Math.max(recipientCreator.callRatePerMinute || 5, currentUser.walletBalance)}
+                max={Math.max(recipientCreator.callRatePerMinute || 5, currentUser?.walletBalance || 0)}
                 value={callSpendingLimit}
                 onChange={e => setCallSpendingLimit(Number(e.target.value))}
                 className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2 text-xs text-white font-mono"
@@ -2214,21 +2306,97 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           >
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <h3 className="font-bold text-white text-sm">Deliver Custom Video</h3>
-              <button type="button" onClick={() => setDeliveringRequest(null)} className="text-neutral-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliveringRequest(null);
+                  setDeliveryUploadError(null);
+                }}
+                className="text-neutral-400 hover:text-white cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-neutral-300 font-semibold mb-1">Video File URL</label>
+                <label className="block text-neutral-300 font-semibold mb-1.5">Video File</label>
                 <input
-                  type="text"
-                  required
-                  value={deliveryVideoUrl}
-                  onChange={e => setDeliveryVideoUrl(e.target.value)}
-                  className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-white"
+                  ref={deliveryVideoInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm,video/*"
+                  onChange={handleDeliveryVideoFileSelect}
+                  className="hidden"
                 />
+
+                {!deliveryVideoUrl ? (
+                  <button
+                    type="button"
+                    disabled={isUploadingDeliveryVideo}
+                    onClick={() => deliveryVideoInputRef.current?.click()}
+                    className="w-full py-6 px-4 bg-[#18181c] hover:bg-[#1f1f26] border border-dashed border-[#383842] hover:border-[#d4af37] rounded-xl flex flex-col items-center justify-center gap-2 text-neutral-300 transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <Upload className="w-6 h-6 text-[#d4af37]" />
+                    <span className="font-semibold text-white">
+                      {isUploadingDeliveryVideo ? 'Uploading Video File...' : 'Click to Upload Video File'}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      MP4, MOV, or WEBM (up to 500 MB)
+                    </span>
+                  </button>
+                ) : (
+                  <div className="bg-[#18181c] border border-[#27272a] rounded-xl p-3 space-y-2.5">
+                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                      <video
+                        src={deliveryVideoUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          if (!el.src.includes('/videos/sample1.mp4')) {
+                            el.src = '/videos/sample1.mp4';
+                            el.load();
+                          }
+                        }}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-white font-semibold truncate">
+                          {deliveryVideoFileName || 'Uploaded Custom Video'}
+                        </div>
+                        {deliveryVideoFileSize && (
+                          <div className="text-[10px] text-neutral-400 font-mono">
+                            {deliveryVideoFileSize}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => deliveryVideoInputRef.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#23232b] hover:bg-[#2c2c36] text-neutral-200 text-[11px] font-medium cursor-pointer"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveDeliveryVideoFile}
+                          className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 cursor-pointer"
+                          title="Remove uploaded video"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {deliveryUploadError && (
+                  <p className="text-rose-400 text-[11px] mt-1.5">{deliveryUploadError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-neutral-300 font-semibold mb-1">Delivery Message to Fan</label>
@@ -2245,16 +2413,20 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setDeliveringRequest(null)}
-                className="px-4 py-2 rounded-xl bg-[#18181c] text-neutral-300 text-xs"
+                onClick={() => {
+                  setDeliveringRequest(null);
+                  setDeliveryUploadError(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#18181c] text-neutral-300 text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-emerald-500 text-black font-bold text-xs cursor-pointer"
+                disabled={isUploadingDeliveryVideo || !deliveryVideoUrl}
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-bold text-xs cursor-pointer"
               >
-                Deliver Video to Conversation
+                {isUploadingDeliveryVideo ? 'Uploading...' : 'Deliver Video to Conversation'}
               </button>
             </div>
           </form>
@@ -2324,7 +2496,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           </button>
           <div onClick={e => e.stopPropagation()} className="max-w-4xl max-h-[85vh] flex flex-col items-center">
             {lightboxMedia.type === 'video' ? (
-              <video src={lightboxMedia.url} controls autoPlay className="max-h-[78vh] rounded-xl" />
+              <video
+                src={lightboxMedia.url || '/videos/sample1.mp4'}
+                controls
+                autoPlay
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.src.includes('/videos/sample1.mp4')) {
+                    el.src = '/videos/sample1.mp4';
+                    el.load();
+                  }
+                }}
+                className="max-h-[78vh] rounded-xl"
+              />
             ) : (
               <img src={lightboxMedia.url} alt="" className="max-h-[78vh] object-contain rounded-xl" />
             )}

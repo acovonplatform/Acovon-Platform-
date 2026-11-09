@@ -201,9 +201,11 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
                             <h3 className="font-bold text-sm text-white group-hover:text-[#fce7b0] transition-colors">
                               {creator.name}
                             </h3>
-                            <VerifiedBadge creatorId={creator.id} size="xs" />
                           </div>
-                          <span className="text-[11px] text-neutral-400">@{creator.username}</span>
+                          <span className="text-[11px] text-neutral-400 inline-flex items-center gap-1">
+                            <span>@{creator.username}</span>
+                            <VerifiedBadge creatorId={creator.id} size="xs" />
+                          </span>
                         </div>
 
                         {/* Subscription Tier Details Pill */}

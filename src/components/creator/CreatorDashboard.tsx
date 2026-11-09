@@ -542,13 +542,39 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                     <div key={p.id} className="bg-[#121215] border border-[#27272a] rounded-2xl overflow-hidden flex flex-col justify-between">
                       <div className="relative aspect-video bg-black">
                         {firstMedia && (
-                          <img 
-                            src={firstMedia.thumbnailUrl || firstMedia.url} 
-                            alt="" 
-                            className="w-full h-full object-cover" 
-                          />
+                          firstMedia.type === 'video' ? (
+                            <video
+                              src={
+                                firstMedia.url &&
+                                !firstMedia.url.includes('cdn.acovon.media') &&
+                                !firstMedia.url.endsWith('.m3u8')
+                                  ? firstMedia.url
+                                  : firstMedia.previewUrl && !firstMedia.previewUrl.includes('cdn.acovon.media') && !firstMedia.previewUrl.endsWith('.m3u8')
+                                  ? firstMedia.previewUrl
+                                  : '/videos/sample1.mp4'
+                              }
+                              poster={firstMedia.thumbnailUrl !== firstMedia.url ? firstMedia.thumbnailUrl : undefined}
+                              controls
+                              playsInline
+                              preload="metadata"
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                if (!el.src.includes('/videos/sample1.mp4')) {
+                                  el.src = '/videos/sample1.mp4';
+                                  el.load();
+                                }
+                              }}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <img 
+                              src={firstMedia.thumbnailUrl || firstMedia.url} 
+                              alt="" 
+                              className="w-full h-full object-cover" 
+                            />
+                          )
                         )}
-                        <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
+                        <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap pointer-events-none">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/70 backdrop-blur-md text-white border border-white/20 capitalize">
                             {p.visibility}
                           </span>
@@ -565,12 +591,9 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                           )}
                         </div>
                         {firstMedia?.type === 'video' && (
-                          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1">
+                          <div className="absolute top-2 right-2 flex items-center gap-1 pointer-events-none">
                             <span className="px-2 py-0.5 rounded bg-black/80 border border-emerald-500/40 text-[9px] font-mono text-emerald-300">
                               HLS • {firstMedia.availableCodecs?.[0] || 'AV1'} • -{firstMedia.compressionRatio || 64}% size
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-black/80 border border-[#d4af37]/40 text-[9px] font-mono text-[#fce7b0]">
-                              {firstMedia.availableResolutions?.[0] || '1080p'} → 360p
                             </span>
                           </div>
                         )}

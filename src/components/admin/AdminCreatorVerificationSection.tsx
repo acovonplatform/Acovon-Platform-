@@ -621,11 +621,13 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                               className="w-9 h-9 rounded-full object-cover"
                             />
                             <div>
-                              <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{creator.name}</span>
+                              <div className="font-bold text-white">
+                                {creator.name}
+                              </div>
+                              <div className="text-[11px] text-neutral-400 flex items-center gap-1">
+                                <span>@{creator.username}</span>
                                 <VerifiedBadge creatorId={creator.id} size="xs" />
                               </div>
-                              <div className="text-[11px] text-neutral-400">@{creator.username}</div>
                             </div>
                           </div>
                         </td>
@@ -1056,11 +1058,13 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                   <tr key={tx.id} className="hover:bg-neutral-900/40">
                     <td className="py-3 px-4 font-mono text-neutral-200">{tx.id}</td>
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-white flex items-center gap-1.5">
-                        <span>{tx.creatorName}</span>
+                      <div className="font-semibold text-white">
+                        {tx.creatorName}
+                      </div>
+                      <div className="text-[11px] text-neutral-400 flex items-center gap-1">
+                        <span>@{tx.creatorUsername}</span>
                         <VerifiedBadge creatorId={tx.creatorId} size="xs" />
                       </div>
-                      <div className="text-[11px] text-neutral-400">@{tx.creatorUsername}</div>
                     </td>
                     <td className="py-3 px-4 capitalize text-neutral-300">{tx.transactionType}</td>
                     <td className="py-3 px-4 text-neutral-400">

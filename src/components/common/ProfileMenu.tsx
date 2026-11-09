@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -87,16 +87,28 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const roleOptions: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = [
-    { label: 'Jordan Cross', role: 'fan', subtitle: 'Subscriber & Content Patron' },
-    { label: 'Elena Vance', role: 'creator', specificId: 'creator_elena', subtitle: 'Fashion Director · $38.4k' },
-    { label: 'Marcus Thorne', role: 'creator', specificId: 'creator_marcus', subtitle: 'Music Producer · Calls Enabled' },
-    { label: 'Julian Sterling', role: 'admin', specificId: 'user_admin_1', subtitle: 'Super Admin · Full Platform Control' },
-    { label: 'Evelyn Cross', role: 'admin', specificId: 'user_admin_2', subtitle: 'Admin · General Operations' },
-    { label: 'Clara Vance', role: 'moderator', specificId: 'user_mod_1', subtitle: 'Moderator · Trust, Safety & Live' },
-    { label: 'Henrik Lindqvist', role: 'admin', specificId: 'user_admin_finance', subtitle: 'Finance Admin · Payouts & Ledger' },
-    { label: 'Sophia Lin', role: 'admin', specificId: 'user_admin_support', subtitle: 'Support Admin · Tickets & Disputes' }
-  ];
+  const isAuthorizedAdmin = currentUser.role === 'admin' || currentUser.adminPermissionLevel !== undefined;
+
+  const roleOptions: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = useMemo(() => {
+    const list: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = [
+      { label: 'Jordan Cross', role: 'fan', subtitle: 'Subscriber & Content Patron' },
+      { label: 'Elena Vance', role: 'creator', specificId: 'creator_elena', subtitle: 'Fashion Director · $38.4k' },
+      { label: 'Marcus Thorne', role: 'creator', specificId: 'creator_marcus', subtitle: 'Music Producer · Calls Enabled' }
+    ];
+
+    // Only authorized administrators can switch between administrative operators
+    if (isAuthorizedAdmin) {
+      list.push(
+        { label: 'Julian Sterling', role: 'admin', specificId: 'user_admin_1', subtitle: 'Super Admin · Full Platform Control' },
+        { label: 'Evelyn Cross', role: 'admin', specificId: 'user_admin_2', subtitle: 'Admin · General Operations' },
+        { label: 'Clara Vance', role: 'moderator', specificId: 'user_mod_1', subtitle: 'Moderator · Trust, Safety & Live' },
+        { label: 'Henrik Lindqvist', role: 'admin', specificId: 'user_admin_finance', subtitle: 'Finance Admin · Payouts & Ledger' },
+        { label: 'Sophia Lin', role: 'admin', specificId: 'user_admin_support', subtitle: 'Support Admin · Tickets & Disputes' }
+      );
+    }
+
+    return list;
+  }, [isAuthorizedAdmin]);
 
   const handleSelectRole = (opt: typeof roleOptions[0]) => {
     switchUserRole(opt.role, opt.specificId);
@@ -129,12 +141,12 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
         </div>
         
         <div className="hidden sm:flex flex-col text-left leading-none">
-          <span className="text-xs font-semibold text-neutral-200 truncate max-w-[115px] flex items-center gap-1">
-            <span className="truncate">{currentUser.name}</span>
-            {isCreator && <VerifiedBadge creatorId={currentUser.id} size="xs" />}
+          <span className="text-xs font-semibold text-neutral-200 truncate max-w-[115px]">
+            {currentUser.name}
           </span>
-          <span className="text-[10px] text-neutral-400 capitalize mt-0.5">
-            {activeRole}
+          <span className="text-[10px] text-neutral-400 truncate max-w-[115px] flex items-center gap-1 mt-0.5">
+            <span>@{currentUser.username}</span>
+            {isCreator && <VerifiedBadge creatorId={currentUser.id} size="xs" />}
           </span>
         </div>
         
@@ -154,13 +166,15 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/50"
               />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                  <span className="truncate">{currentUser.name}</span>
+                <div className="text-xs font-bold text-white truncate">
+                  {currentUser.name}
+                </div>
+                <div className="text-[11px] text-neutral-400 truncate flex items-center gap-1">
+                  <span>@{currentUser.username}</span>
                   {isCreator && <VerifiedBadge creatorId={currentUser.id} size="xs" />}
                 </div>
-                <div className="text-[11px] text-neutral-400 truncate">@{currentUser.username}</div>
                 <div className="text-[10px] font-mono text-[#fce7b0] mt-0.5">
-                  Balance: ${currentUser.walletBalance.toFixed(2)}
+                  Balance: ${Number(currentUser?.walletBalance || 0).toFixed(2)}
                 </div>
               </div>
             </div>
@@ -251,7 +265,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 <Wallet className="w-4 h-4 text-[#d4af37]" />
                 <span>{isCreator ? 'Wallet & Earnings' : 'Wallet / Purchases'}</span>
               </div>
-              <span className="text-[10px] font-mono text-[#fce7b0]">${currentUser.walletBalance.toFixed(2)}</span>
+              <span className="text-[10px] font-mono text-[#fce7b0]">${Number(currentUser?.walletBalance || 0).toFixed(2)}</span>
             </button>
 
             <button

@@ -143,7 +143,6 @@ export const VideoCallModal: React.FC = () => {
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-white text-sm sm:text-base flex items-center gap-1.5">
                 <span>Private Video Call with {videoCallSession.creatorName}</span>
-                <VerifiedBadge creatorId={videoCallSession.creatorId} size="sm" />
               </h3>
               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-400">
                 Encrypted WebRTC
@@ -187,7 +186,6 @@ export const VideoCallModal: React.FC = () => {
             <div className="space-y-1">
               <h4 className="text-lg font-bold text-white flex items-center justify-center gap-1.5">
                 <span>Ringing {videoCallSession.creatorName}...</span>
-                <VerifiedBadge creatorId={videoCallSession.creatorId} size="sm" />
               </h4>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-600/40 text-[11px] text-amber-300 font-medium">
                 <Clock className="w-3.5 h-3.5" />
@@ -223,11 +221,18 @@ export const VideoCallModal: React.FC = () => {
             {/* Remote Creator Stream Simulation */}
             <div className="absolute inset-0 w-full h-full bg-black">
               <video
-                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+                src="/videos/sample1.mp4"
                 autoPlay
                 loop
                 muted
                 playsInline
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.src.includes('/videos/sample1.mp4')) {
+                    el.src = '/videos/sample1.mp4';
+                    el.load();
+                  }
+                }}
                 className="w-full h-full object-cover"
               />
               
@@ -235,7 +240,10 @@ export const VideoCallModal: React.FC = () => {
               <div className="absolute top-4 left-4 bg-black/75 backdrop-blur-md border border-[#27272a] px-3 py-1.5 rounded-xl text-xs font-medium text-neutral-200 flex items-center gap-1.5 z-10">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>{videoCallSession.creatorName}</span>
-                <VerifiedBadge creatorId={videoCallSession.creatorId} size="xs" />
+                <span className="text-neutral-400 text-[11px] inline-flex items-center gap-0.5">
+                  @{videoCallSession.creatorUsername || videoCallSession.creatorName.toLowerCase().replace(/\s+/g, '')}
+                  <VerifiedBadge creatorId={videoCallSession.creatorId} size="xs" />
+                </span>
                 <span className="text-neutral-400">(Live 1080p WebRTC)</span>
               </div>
             </div>

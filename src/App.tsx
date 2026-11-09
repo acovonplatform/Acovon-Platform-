@@ -11,6 +11,9 @@ import { CustomRequestsManager } from './components/requests/CustomRequestsManag
 import { ChatView } from './components/messages/ChatView';
 import { CreatorDashboard, StudioCategory } from './components/creator/CreatorDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { AdminLoginPage } from './components/admin/AdminLoginPage';
+import { AdminSetupPage } from './components/admin/AdminSetupPage';
+import { AdminAccessDenied } from './components/admin/AdminAccessDenied';
 import { WalletModal } from './components/wallet/WalletModal';
 import { CreatePostModal } from './components/feed/CreatePostModal';
 import { VideoCallModal } from './components/videocall/VideoCallModal';
@@ -44,10 +47,18 @@ import { Post } from './types';
 import { X, Shield, Lock, FileText, Coins } from 'lucide-react';
 
 function AppContent() {
-  const { tipCreator, isCurrentUserApprovedCreator, isAuthenticated } = useApp();
+  const { tipCreator, isCurrentUserApprovedCreator, isAuthenticated, currentUser } = useApp();
   const isCreator = isCurrentUserApprovedCreator;
 
-  const [currentTab, setCurrentTab] = useState<string>(() => (isAuthenticated ? 'feed' : 'landing'));
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      if (path === '/admin/login') return 'admin-login';
+      if (path === '/admin/setup') return 'admin-setup';
+      if (path === '/admin' || path === '/admin-panel') return 'admin-panel';
+    }
+    return isAuthenticated ? 'feed' : 'landing';
+  });
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>('creator_elena');
   
   // Modals state
@@ -99,18 +110,25 @@ function AppContent() {
       const { data } = await supabase.auth.getSession();
       if (!active) return;
 
+      const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+      const isAdminRoute = pathname.startsWith('/admin') || ['admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
+
       if (data.session) {
-        if (currentTab === 'landing' || window.location.pathname === '/login') {
+        if (!isAdminRoute && (currentTab === 'landing' || pathname === '/login')) {
           window.history.pushState({}, '', '/');
           setCurrentTab('feed');
         }
       } else {
+        if (isAdminRoute) {
+          return;
+        }
+
         if (currentTab !== 'landing') {
           window.history.pushState({}, '', '/login');
           setCurrentTab('landing');
           setAuthMode('login');
           setShowAuth(true);
-        } else if (window.location.pathname === '/login') {
+        } else if (pathname === '/login') {
           setAuthMode('login');
           setShowAuth(true);
         }
@@ -141,6 +159,42 @@ function AppContent() {
   const handleNavigate = async (tab: string, creatorId?: string) => {
     // Clear access notice when navigating
     setAccessDeniedNotice(null);
+
+    // Dedicated Secure Admin Routing
+    if (tab === 'admin-login') {
+      window.history.pushState({}, '', '/admin/login');
+      setCurrentTab('admin-login');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (tab === 'admin-setup') {
+      window.history.pushState({}, '', '/admin/setup');
+      setCurrentTab('admin-setup');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (tab === 'admin-access-denied') {
+      window.history.pushState({}, '', '/admin');
+      setCurrentTab('admin-access-denied');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (tab === 'admin-panel' || tab === 'admin') {
+      const isAdminUser = currentUser?.role === 'admin' || !!(currentUser as any)?.adminPermissionLevel;
+      if (!isAdminUser) {
+        window.history.pushState({}, '', '/admin');
+        setCurrentTab('admin-access-denied');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      window.history.pushState({}, '', '/admin');
+      setCurrentTab('admin-panel');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
 
     if (['terms', 'privacy', 'community-guidelines', 'verification-rules', 'pricing', 'become-creator', 'earnings-calculator', 'payout-terms'].includes(tab)) {
       if (tab === 'become-creator') {
@@ -289,7 +343,7 @@ function AppContent() {
 
       {/* Main Viewport */}
       <main className="flex-1 pb-16 md:pb-0">
-        {!isAuthenticated && (
+        {!isAuthenticated && !['admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab) && (
           <LandingPage
             onNavigate={handleNavigate}
             onOpenAuth={(mode = 'register') => {
@@ -455,16 +509,46 @@ function AppContent() {
           )
         )}
 
+        {currentTab === 'admin-login' && (
+          <AdminLoginPage
+            onNavigateHome={() => handleNavigate('feed')}
+            onNavigateToSetup={() => handleNavigate('admin-setup')}
+            onLoginSuccess={() => handleNavigate('admin-panel')}
+          />
+        )}
+
+        {currentTab === 'admin-setup' && (
+          <AdminSetupPage
+            onNavigateHome={() => handleNavigate('feed')}
+            onNavigateToLogin={() => handleNavigate('admin-login')}
+            onSetupSuccess={() => handleNavigate('admin-panel')}
+          />
+        )}
+
+        {currentTab === 'admin-access-denied' && (
+          <AdminAccessDenied
+            onNavigateHome={() => handleNavigate('feed')}
+            onNavigateToLogin={() => handleNavigate('admin-login')}
+          />
+        )}
+
         {currentTab === 'admin-panel' && (
-          <AdminDashboard />
+          currentUser?.role === 'admin' || (currentUser as any)?.adminPermissionLevel ? (
+            <AdminDashboard onExit={() => handleNavigate('feed')} />
+          ) : (
+            <AdminAccessDenied
+              onNavigateHome={() => handleNavigate('feed')}
+              onNavigateToLogin={() => handleNavigate('admin-login')}
+            />
+          )
         )}
       </main>
 
       {/* Footer */}
       <Footer onNavigate={handleNavigate} />
 
-      {/* Mobile Bottom Navigation — shown for authenticated users */}
-      {isAuthenticated && (
+      {/* Mobile Bottom Navigation — shown for authenticated users on public/fan/creator tabs */}
+      {isAuthenticated && !['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab) && (
         <MobileBottomNav
           currentTab={currentTab === 'landing' ? 'feed' : currentTab}
           onNavigate={handleNavigate}

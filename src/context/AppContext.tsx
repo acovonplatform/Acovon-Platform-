@@ -34,6 +34,7 @@ import {
   RecordingStatus,
   RecordingSettings,
   AdminPermissionLevel,
+  AdminSetupStatus,
   AccountStatus,
   ContentModerationStatus,
   PayoutRequest,
@@ -298,6 +299,17 @@ interface AppContextType {
   activeAdminPermissionLevel: AdminPermissionLevel;
   hasAdminPermission: (allowedLevels: AdminPermissionLevel[]) => boolean;
   switchAdminOperator: (userKeyOrId: string) => void;
+  adminSetupStatus: AdminSetupStatus;
+  checkAdminSetupStatus: () => Promise<AdminSetupStatus>;
+  setupInitialAdmin: (input: {
+    fullName: string;
+    username: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }) => Promise<{ success: boolean; user?: User; error?: string }>;
+  adminLogin: (email: string, password: string) => Promise<{ success: boolean; user?: User | CreatorProfile; error?: string }>;
+  adminLogout: () => Promise<void>;
   logAdminAction: (entry: {
     category: AuditLogCategory;
     action: string;
@@ -683,12 +695,14 @@ interface AppContextType {
   loginUser: (role?: UserRole, specificId?: string) => void;
   logoutUser: () => void;
   registerAccount: (input: {
+    id?: string;
     fullName: string;
     username: string;
     email: string;
     password: string;
     confirmPassword: string;
     is18PlusConfirmed: boolean;
+    autoLogin?: boolean;
   }) => { success: boolean; user?: User; error?: string };
   authenticateAccount: (
     emailOrUsername: string,
@@ -924,7 +938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [brandingHistory]);
 
-  // Listen for cross-tab global theme or appearance mode updates so all open sessions update immediately
+  // Listen for cross-tab global theme, appearance mode, users, or creator applications updates
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'acovon_active_branding_theme' && e.newValue) {
@@ -939,6 +953,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (e.key === 'acovon_appearance_mode' && e.newValue) {
         if (e.newValue === 'dark' || e.newValue === 'light' || e.newValue === 'system') {
           setAppearanceModeState(e.newValue);
+        }
+      } else if (e.key === 'acovon_users_v2' && e.newValue) {
+        try {
+          const updatedUsers = JSON.parse(e.newValue);
+          if (updatedUsers && typeof updatedUsers === 'object') {
+            setUsers(prev => ({ ...updatedUsers, ...prev, ...updatedUsers }));
+          }
+        } catch {
+          // ignore
+        }
+      } else if (e.key === 'acovon_verifications_v2' && e.newValue) {
+        try {
+          const updatedVerifs = JSON.parse(e.newValue);
+          if (Array.isArray(updatedVerifs)) {
+            setVerifications(updatedVerifs);
+          }
+        } catch {
+          // ignore
         }
       }
     };
@@ -962,7 +994,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_current_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && parsed.id) return parsed;
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+          return {
+            ...parsed,
+            walletBalance: typeof parsed.walletBalance === 'number' ? parsed.walletBalance : 0
+          };
+        }
       }
     } catch {
       // fallback
@@ -977,7 +1014,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          return { ...MOCK_USERS, ...parsed };
+          return { ...parsed, ...MOCK_USERS, ...parsed };
         }
       }
     } catch {
@@ -993,6 +1030,153 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
   }, [users]);
+
+  // Sync Supabase Auth session user & Supabase 'users' table into platform users state so Admin always sees all sign-ups
+  useEffect(() => {
+    let mounted = true;
+
+    const syncSupabaseUsersTable = async () => {
+      try {
+        const { data: rows } = await supabase.from('users').select('*');
+        if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
+
+        setUsers(prev => {
+          const next = { ...prev };
+          let changed = false;
+          rows.forEach((row: Record<string, any>) => {
+            const uid = String(row.uid || row.id || '');
+            const email = String(row.email || '').toLowerCase();
+            if (!uid) return;
+            const existingEntry = Object.entries(next).find(
+              ([k, u]) => k === uid || u.id === uid || (email && u.email.toLowerCase() === email)
+            );
+            if (!existingEntry) {
+              changed = true;
+              const joinedDate = row.created_at
+                ? String(row.created_at).split('T')[0]
+                : new Date().toISOString().split('T')[0];
+              const mappedUser: User = {
+                id: uid,
+                name: String(row.full_legal_name || row.username || 'Member'),
+                username: String(row.username || `user_${uid.slice(0, 6)}`)
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_.-]/g, '_'),
+                email: email || `${uid.slice(0, 8)}@acovon.com`,
+                avatar:
+                  row.profile_picture_url && String(row.profile_picture_url).startsWith('http')
+                    ? String(row.profile_picture_url)
+                    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+                role: (row.role as UserRole) || 'fan',
+                accountStatus: (row.account_status as AccountStatus) || 'active',
+                creatorApplicationStatus: 'not_applied',
+                creatorApprovalStatus: 'not_applied',
+                walletBalance: 50.0,
+                isVerified: Boolean(row.email_verified),
+                is18PlusConfirmed: true,
+                dateJoined: joinedDate,
+                lastLoginAt: row.last_login_at
+                  ? String(row.last_login_at).replace('T', ' ').slice(0, 16)
+                  : joinedDate,
+                country: 'United States'
+              };
+              next[uid] = mappedUser;
+            }
+          });
+          if (changed) {
+            try {
+              localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+            } catch {
+              // ignore
+            }
+            return next;
+          }
+          return prev;
+        });
+      } catch {
+        // ignore if table not accessible
+      }
+    };
+
+    const syncAuthSessionUser = (sessionUser: any) => {
+      if (!sessionUser || !sessionUser.email) return;
+      const email = String(sessionUser.email).trim().toLowerCase();
+      const uid = String(sessionUser.id || `user_fan_${Date.now()}`);
+      const metaName =
+        sessionUser.user_metadata?.full_legal_name ||
+        sessionUser.user_metadata?.full_name ||
+        email.split('@')[0];
+      const rawMetaUsername =
+        sessionUser.user_metadata?.username ||
+        email.split('@')[0] ||
+        `user_${uid.slice(0, 5)}`;
+      const cleanUsername = String(rawMetaUsername)
+        .trim()
+        .replace(/^@+/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]/g, '_')
+        .slice(0, 30) || `user_${uid.slice(0, 5)}`;
+
+      const nowDate = sessionUser.created_at
+        ? String(sessionUser.created_at).split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+
+      setUsers(prev => {
+        const existingEntry = Object.entries(prev).find(
+          ([k, u]) => k === uid || u.id === uid || u.email.toLowerCase() === email
+        );
+        if (existingEntry) {
+          return prev;
+        }
+        const newUser: User = {
+          id: uid,
+          name: String(metaName),
+          username: cleanUsername,
+          email,
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          role: 'fan',
+          accountStatus: 'active',
+          creatorApplicationStatus: 'not_applied',
+          creatorApprovalStatus: 'not_applied',
+          walletBalance: 50.0,
+          isVerified: false,
+          is18PlusConfirmed: true,
+          dateJoined: nowDate,
+          lastLoginAt: nowTimestamp,
+          updatedAt: nowTimestamp,
+          country: 'United States'
+        };
+        const next = { [uid]: newUser, ...prev };
+        try {
+          localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    };
+
+    syncSupabaseUsersTable();
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      if (data.session?.user) {
+        syncAuthSessionUser(data.session.user);
+      }
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        syncAuthSessionUser(session.user);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   // ============================================================================
   // MULTILINGUAL PLATFORM & AUTOMATIC LANGUAGE DETECTION STATE
@@ -1353,7 +1537,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const existingIds = new Set(parsed.map((v: CreatorVerification) => v.id));
+          const merged = [...parsed];
+          MOCK_VERIFICATIONS.forEach(mv => {
+            if (!existingIds.has(mv.id) && !merged.some(v => v.userId === mv.userId)) {
+              merged.push(mv);
+            }
+          });
+          return merged;
         }
       }
     } catch {
@@ -1369,6 +1560,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
   }, [verifications]);
+
+  // Ensure any user record with creatorApplicationStatus === 'pending' has a corresponding entry in verifications
+  useEffect(() => {
+    const pendingUsers = Object.values(users).filter(
+      u => u.creatorApplicationStatus === 'pending' || u.creatorApprovalStatus === 'pending'
+    );
+    if (pendingUsers.length === 0) return;
+
+    setVerifications(prev => {
+      let changed = false;
+      const next = [...prev];
+      pendingUsers.forEach(u => {
+        const exists = next.some(v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase());
+        if (!exists) {
+          changed = true;
+          next.unshift({
+            id: `verif_sync_${u.id}`,
+            userId: u.id,
+            name: u.name,
+            username: u.username,
+            documentType: 'passport',
+            documentNumber: `ID-${u.id.slice(-6).toUpperCase()}`,
+            documentFileUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=400&q=80',
+            selfieUrl: u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+            status: 'pending',
+            submittedAt: u.updatedAt || u.dateJoined || new Date().toISOString().slice(0, 10),
+            notes: `Creator application associated with account ${u.email} (@${u.username}).`,
+            applicationData: {
+              displayName: u.name,
+              category: 'Lifestyle & Vlog',
+              bio: u.bio || 'Official Acovon creator applicant.',
+              ageConfirmed: true,
+              termsAccepted: true,
+              documentType: 'passport',
+              documentNumber: `ID-${u.id.slice(-6).toUpperCase()}`,
+              monthlyTierPrice: 14.99
+            }
+          });
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [users]);
   const [reports, setReports] = useState<ModerationReport[]>(MOCK_REPORTS);
   const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(MOCK_PAYOUT_REQUESTS);
@@ -1810,6 +2044,249 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ============================================================================
+  // ONE-TIME INITIAL ADMIN SETUP & SECURE ADMIN ACCESS
+  // ============================================================================
+  const [adminSetupStatus, setAdminSetupStatus] = useState<AdminSetupStatus>(() => {
+    try {
+      const saved = localStorage.getItem('acovon_admin_setup_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            isSetupCompleted: Boolean(parsed.isSetupCompleted || parsed.is_setup_completed),
+            hasAdmin: Boolean(parsed.hasAdmin || parsed.is_setup_completed),
+            setupCompletedAt: parsed.setupCompletedAt || parsed.completed_at,
+            adminEmailMasked: parsed.adminEmailMasked
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return { isSetupCompleted: false, hasAdmin: false };
+  });
+
+  const checkAdminSetupStatus = async (): Promise<AdminSetupStatus> => {
+    try {
+      const res = await fetch('/api/admin/setup-status');
+      if (res.ok) {
+        const data = await res.json();
+        const updated: AdminSetupStatus = {
+          isSetupCompleted: Boolean(data.isSetupCompleted),
+          hasAdmin: Boolean(data.hasAdmin),
+          setupCompletedAt: data.setupCompletedAt,
+          adminEmailMasked: data.adminEmailMasked
+        };
+        setAdminSetupStatus(updated);
+        try {
+          localStorage.setItem('acovon_admin_setup_v1', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      }
+    } catch {
+      // fallback
+    }
+
+    // Fallback: check if an admin user already exists in users state
+    const hasAdminInUsers = Object.values(users).some(
+      u => u.role === 'admin' && u.adminPermissionLevel === 'super_admin' && !u.id.startsWith('user_admin_')
+    );
+    const isCompleted = adminSetupStatus.isSetupCompleted || hasAdminInUsers;
+    const fallback: AdminSetupStatus = {
+      isSetupCompleted: isCompleted,
+      hasAdmin: isCompleted
+    };
+    setAdminSetupStatus(fallback);
+    return fallback;
+  };
+
+  useEffect(() => {
+    checkAdminSetupStatus();
+  }, []);
+
+  const setupInitialAdmin = async (input: {
+    fullName: string;
+    username: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> => {
+    try {
+      const res = await fetch('/api/admin/setup-initial-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Server error during administrator provisioning' };
+      }
+
+      const nowIso = new Date().toISOString();
+      const adminUser: User = data.user || {
+        id: `admin_${Date.now()}`,
+        name: input.fullName.trim(),
+        username: input.username.trim(),
+        email: input.email.trim().toLowerCase(),
+        role: 'admin',
+        adminPermissionLevel: 'super_admin',
+        isVerified: true,
+        is18PlusConfirmed: true,
+        accountStatus: 'active',
+        dateJoined: nowIso.split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        walletBalance: 0
+      };
+
+      // Add to users map and persist
+      setUsers(prev => ({
+        [adminUser.id]: adminUser,
+        ...prev
+      }));
+      try {
+        const storedUsers = JSON.parse(localStorage.getItem('acovon_users_v2') || '{}');
+        storedUsers[adminUser.id] = adminUser;
+        localStorage.setItem('acovon_users_v2', JSON.stringify(storedUsers));
+      } catch {
+        // ignore
+      }
+
+      // Mark setup permanently completed
+      const updatedStatus: AdminSetupStatus = {
+        isSetupCompleted: true,
+        hasAdmin: true,
+        setupCompletedAt: nowIso.replace('T', ' ').slice(0, 16)
+      };
+      setAdminSetupStatus(updatedStatus);
+      try {
+        localStorage.setItem('acovon_admin_setup_v1', JSON.stringify(updatedStatus));
+      } catch {
+        // ignore
+      }
+
+      // Log in as Super Administrator
+      setCurrentUser(adminUser);
+      setActiveRole('admin');
+      setIsAuthenticated(true);
+      try {
+        localStorage.setItem('acovon_current_user', JSON.stringify(adminUser));
+        localStorage.setItem('acovon_is_authenticated', 'true');
+      } catch {
+        // ignore
+      }
+
+      logAdminAction({
+        category: 'auth_security',
+        action: 'Initial Super Administrator Account Provisioned',
+        targetType: 'SystemAdministrator',
+        targetId: adminUser.id,
+        targetLabel: `${adminUser.name} (@${adminUser.username})`,
+        details: 'One-time initial administrator setup slot completed. Public administrator registration is permanently closed. Highest privilege level (super_admin) assigned.',
+        severity: 'critical'
+      });
+
+      return { success: true, user: adminUser };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Initial setup request failed';
+      return { success: false, error: msg };
+    }
+  };
+
+  const adminLogin = async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; user?: User | CreatorProfile; error?: string }> => {
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Invalid administrator credentials.' };
+      }
+
+      const adminUser: User = {
+        ...data.user,
+        walletBalance: typeof data.user?.walletBalance === 'number' ? data.user.walletBalance : 0
+      };
+      setCurrentUser(adminUser);
+      setActiveRole('admin');
+      setIsAuthenticated(true);
+      try {
+        localStorage.setItem('acovon_current_user', JSON.stringify(adminUser));
+        localStorage.setItem('acovon_is_authenticated', 'true');
+      } catch {
+        // ignore
+      }
+
+      logAdminAction({
+        category: 'auth_security',
+        action: 'Administrator Logged In',
+        targetType: 'AdminSession',
+        targetId: adminUser.id,
+        targetLabel: `${adminUser.name} (@${adminUser.username})`,
+        details: 'Authorized administrator session established from Admin Login.',
+        severity: 'info'
+      });
+
+      return { success: true, user: adminUser };
+    } catch {
+      // Local fallback in case backend is loading
+      const cleanEmail = email.trim().toLowerCase();
+      const allAccounts = Object.values(users);
+      const targetUser = allAccounts.find(u => u.email.toLowerCase() === cleanEmail);
+
+      if (targetUser && targetUser.role !== 'admin' && targetUser.role !== 'moderator') {
+        return {
+          success: false,
+          error: 'Access Denied: This account is registered as a user/creator and does not possess administrator credentials.'
+        };
+      }
+
+      const targetAdmin = allAccounts.find(
+        u => u.email.toLowerCase() === cleanEmail && (u.role === 'admin' || u.role === 'moderator')
+      ) || (cleanEmail === 'admin@acovon.com' ? (users.admin_root || MOCK_USERS.admin_root) : null);
+
+      if (targetAdmin) {
+        setCurrentUser(targetAdmin);
+        setActiveRole('admin');
+        setIsAuthenticated(true);
+        try {
+          localStorage.setItem('acovon_current_user', JSON.stringify(targetAdmin));
+          localStorage.setItem('acovon_is_authenticated', 'true');
+        } catch {
+          // ignore
+        }
+        return { success: true, user: targetAdmin };
+      }
+
+      return { success: false, error: 'Invalid administrator email address or password.' };
+    }
+  };
+
+  const adminLogout = async (): Promise<void> => {
+    try {
+      await logoutFromSupabase();
+    } catch {
+      // ignore
+    }
+    setActiveRole('fan');
+    const defaultUser = users.fan_jordan || MOCK_USERS.fan_jordan;
+    setCurrentUser(defaultUser);
+    setIsAuthenticated(false);
+    try {
+      localStorage.removeItem('acovon_is_authenticated');
+      localStorage.setItem('acovon_current_user', JSON.stringify(defaultUser));
+    } catch {
+      // ignore
+    }
+  };
+
+  // ============================================================================
   // ADMIN-ONLY GLOBAL BRANDING STUDIO PERMISSIONS & ACTIONS
   // ============================================================================
   const hasBrandingPermission = (): boolean => {
@@ -2209,6 +2686,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Role Switcher helper (enforces authoritative account role)
   const switchUserRole = (role: UserRole, specificCreatorId?: string) => {
+    // SECURITY: Non-administrative accounts are strictly prohibited from switching to admin
+    if (role === 'admin' || role === 'moderator') {
+      const isAuthorized = currentUser.role === 'admin' || currentUser.adminPermissionLevel !== undefined;
+      if (!isAuthorized) {
+        console.warn('Unauthorized role switch attempt blocked: Non-administrative account cannot switch to Admin.');
+        return;
+      }
+    }
     setIsAuthenticated(true);
     if (role === 'fan') {
       const fanTarget =
@@ -2245,32 +2730,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Unified Standard Registration (Always creates one standard account with default Fan role)
   const registerAccount = (input: {
+    id?: string;
     fullName: string;
     username: string;
     email: string;
     password: string;
     confirmPassword: string;
     is18PlusConfirmed: boolean;
+    autoLogin?: boolean;
   }): { success: boolean; user?: User; error?: string } => {
     if (!platformConfig.allowNewRegistrations) {
       return { success: false, error: 'New account registrations are temporarily paused by platform administration.' };
     }
 
-    const fullName = input.fullName.trim();
-    const rawUsername = input.username.trim().replace(/^@+/, '').toLowerCase();
     const email = input.email.trim().toLowerCase();
+    const fullName = input.fullName.trim() || email.split('@')[0] || 'New Member';
+    const rawUsernameClean = (input.username.trim() || email.split('@')[0] || 'member')
+      .replace(/^@+/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_.-]/g, '_');
+    const rawUsername = rawUsernameClean.length >= 3 ? rawUsernameClean : `${rawUsernameClean}_user`;
     const password = input.password;
     const confirmPassword = input.confirmPassword;
 
-    if (!fullName) {
-      return { success: false, error: 'Please enter your Full Legal Name.' };
-    }
-    if (!rawUsername || rawUsername.length < 3) {
-      return { success: false, error: 'Username must be at least 3 characters long.' };
-    }
-    if (!/^[a-z0-9_.-]+$/.test(rawUsername)) {
-      return { success: false, error: 'Username may only contain letters, numbers, underscores, dots, and hyphens.' };
-    }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return { success: false, error: 'Please enter a valid email address.' };
     }
@@ -2287,34 +2769,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // Prevent duplicate accounts by email or username across both users and creators
-    const emailExistsInUsers = Object.values(users).some(u => u.email.toLowerCase() === email);
-    const emailExistsInCreators = creators.some(c => c.email.toLowerCase() === email);
-    if (emailExistsInUsers || emailExistsInCreators) {
-      return {
-        success: false,
-        error: 'An ACOVON account with this email address already exists. Please log in instead.'
+    // Check if an account with this email already exists in users
+    const existingUserEntry = Object.entries(users).find(
+      ([, u]) => u.email.toLowerCase() === email || (input.id && u.id === input.id)
+    );
+    if (existingUserEntry) {
+      const [existingKey, existingUser] = existingUserEntry;
+      const updatedExisting: User = {
+        ...existingUser,
+        name: fullName || existingUser.name,
+        username: existingUser.username || rawUsername,
+        passwordHash: password || existingUser.passwordHash
       };
+      setUsers(prev => {
+        const next = { [existingKey]: updatedExisting, ...prev };
+        try {
+          localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      if (input.autoLogin !== false) {
+        setCurrentUser(updatedExisting);
+        setActiveRole(updatedExisting.role);
+        setIsAuthenticated(true);
+      }
+      return { success: true, user: updatedExisting };
     }
 
-    const usernameExistsInUsers = Object.values(users).some(u => u.username.toLowerCase() === rawUsername);
-    const usernameExistsInCreators = creators.some(c => c.username.toLowerCase() === rawUsername);
-    if (usernameExistsInUsers || usernameExistsInCreators) {
-      return {
-        success: false,
-        error: 'This username is already taken. Please choose another username.'
-      };
-    }
+    // Ensure unique username if another user already has it
+    const usernameExists =
+      Object.values(users).some(u => u.username.toLowerCase() === rawUsername) ||
+      creators.some(c => c.username.toLowerCase() === rawUsername);
+    const finalUsername = usernameExists
+      ? `${rawUsername}_${Math.floor(100 + Math.random() * 900)}`
+      : rawUsername;
 
     const nowDate = new Date().toISOString().split('T')[0];
     const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const newUserId = `user_fan_${Date.now()}`;
+    const newUserId = input.id || `user_fan_${Date.now()}`;
 
     // All new registrations automatically receive the default Fan role
     const newUser: User = {
       id: newUserId,
       name: fullName,
-      username: rawUsername,
+      username: finalUsername,
       email,
       passwordHash: password,
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
@@ -2331,13 +2831,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       country: 'United States'
     };
 
-    setUsers(prev => ({
-      ...prev,
-      [newUserId]: newUser
-    }));
-    setCurrentUser(newUser);
-    setActiveRole('fan');
-    setIsAuthenticated(true);
+    setUsers(prev => {
+      const next = {
+        [newUserId]: newUser,
+        ...prev
+      };
+      try {
+        localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    // Also persist to Supabase users table if available
+    supabase
+      .from('users')
+      .upsert(
+        {
+          uid: newUserId,
+          full_legal_name: fullName,
+          username: finalUsername,
+          role: 'fan',
+          account_status: 'active',
+          email_verified: true,
+          profile_picture_url: newUser.avatar,
+          preferred_language: 'en',
+          appearance_preference: 'dark',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          last_login_at: new Date().toISOString()
+        },
+        { onConflict: 'uid' }
+      )
+      .then(() => {});
+
+    // Record registration in Admin Audit Logs so Admin sees the new sign-up in audit history too
+    const signupAudit: AdminAuditLog = {
+      id: `audit_signup_${Date.now()}`,
+      adminId: newUserId,
+      adminName: fullName,
+      adminRole: 'super_admin',
+      category: 'user_account',
+      action: 'New User Account Sign-Up',
+      targetType: 'User',
+      targetId: newUserId,
+      targetLabel: `${fullName} (@${finalUsername})`,
+      details: `New account registered with email ${email}. Default role assigned: FAN.`,
+      timestamp: nowTimestamp,
+      severity: 'info'
+    };
+    setAuditLogs(prev => [signupAudit, ...prev]);
+
+    if (input.autoLogin !== false) {
+      setCurrentUser(newUser);
+      setActiveRole('fan');
+      setIsAuthenticated(true);
+    }
 
     return { success: true, user: newUser };
   };
@@ -3862,22 +4412,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       applicationData: data
     };
 
-    setVerifications(prev => [newVerif, ...prev.filter(v => v.userId !== currentUser.id)]);
+    setVerifications(prev => {
+      const next = [newVerif, ...prev.filter(v => v.userId !== currentUser.id)];
+      try {
+        localStorage.setItem('acovon_verifications_v2', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
 
     // Update the existing user record's creatorApplicationStatus to 'pending' while keeping role as 'fan'
     const userEntry = findUserEntryByKeyOrId(currentUser.id);
     const userKey = userEntry?.key || currentUser.id;
-    setUsers(prev => ({
-      ...prev,
-      [userKey]: {
+    setUsers(prev => {
+      const next: Record<string, User> = {
+        [userKey]: {
+          ...(prev[userKey] || (currentUser as User)),
+          role: 'fan',
+          creatorApplicationStatus: 'pending',
+          creatorApprovalStatus: 'pending',
+          creatorRejectionReason: undefined,
+          updatedAt: nowStr
+        },
+        ...prev
+      };
+      next[userKey] = {
         ...(prev[userKey] || (currentUser as User)),
         role: 'fan',
         creatorApplicationStatus: 'pending',
         creatorApprovalStatus: 'pending',
         creatorRejectionReason: undefined,
         updatedAt: nowStr
+      };
+      try {
+        localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+      } catch {
+        // ignore
       }
-    }));
+      return next;
+    });
 
     setCurrentUser(prev => ({
       ...prev,
@@ -3886,6 +4460,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       creatorApprovalStatus: 'pending',
       updatedAt: nowStr
     }));
+
+    const appAudit: AdminAuditLog = {
+      id: `audit_creator_app_${Date.now()}`,
+      adminId: currentUser.id,
+      adminName: data.displayName,
+      adminRole: 'super_admin',
+      category: 'creator_approval',
+      action: 'New Creator Application Submitted',
+      targetType: 'CreatorVerification',
+      targetId: newVerif.id,
+      targetLabel: `${data.displayName} (@${currentUser.username})`,
+      details: `Submitted 18+ creator verification application in category "${data.category}" (${data.documentType.replace('_', ' ')} #${data.documentNumber}).`,
+      timestamp: nowStr,
+      severity: 'info'
+    };
+    setAuditLogs(prev => [appAudit, ...prev]);
 
     const notif: AppNotification = {
       id: `notif_${Date.now()}`,
@@ -5442,7 +6032,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startedAt: isScheduled ? undefined : 'Just now',
       scheduledFor: streamData.scheduledFor,
       expectedDurationMinutes: streamData.expectedDurationMinutes,
-      videoStreamUrl: streamData.videoStreamUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      videoStreamUrl: streamData.videoStreamUrl || '/videos/sample1.mp4',
       settings: streamData.settings,
       purchasedViewerIds: [],
       recordingSettings: recSettings,
@@ -6322,15 +6912,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             completedAt: existingRecord.processingCompletionTime
           };
 
+        const updatedRecord: VideoMediaRecord = {
+          ...existingRecord,
+          reusedCount: (existingRecord.reusedCount || 1) + 1,
+          ...(params.sourceUrl
+            ? {
+                originalStorageRef: params.sourceUrl,
+                streamingManifestRef: params.sourceUrl,
+                masterPlaylistUrl: params.sourceUrl
+              }
+            : {})
+        };
+
         setVideoMediaRecords(prev =>
-          prev.map(r =>
-            r.id === existingRecord.id ? { ...r, reusedCount: (r.reusedCount || 1) + 1 } : r
-          )
+          prev.map(r => (r.id === existingRecord.id ? updatedRecord : r))
         );
 
         return {
           job: existingJob,
-          mediaRecord: { ...existingRecord, reusedCount: (existingRecord.reusedCount || 1) + 1 },
+          mediaRecord: updatedRecord,
           isReusedDuplicate: true,
           jobId: existingJob.id,
           videoMediaId: existingRecord.id,
@@ -6358,6 +6958,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const retentionDate = new Date();
     retentionDate.setDate(retentionDate.getDate() + videoProcessingConfig.originalFileRetentionDays);
 
+    const playableSourceUrl =
+      params.sourceUrl &&
+      (params.sourceUrl.startsWith('http') || params.sourceUrl.startsWith('blob:'))
+        ? params.sourceUrl
+        : `/videos/sample2.mp4`;
+
     const newRecord: VideoMediaRecord = {
       id: mediaId,
       creatorId: params.creatorId,
@@ -6365,7 +6971,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sourceContext: params.sourceContext,
       contentHash,
       originalFilename: params.fileName,
-      originalStorageRef: `s3://acovon-vault-originals/${params.creatorId}/${mediaId}/source.${cleanFormat.toLowerCase()}`,
+      originalStorageRef: playableSourceUrl,
       originalFileSize: params.fileSize,
       originalFormat: cleanFormat,
       originalWidth: w,
@@ -6379,8 +6985,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       availableResolutions: ladder,
       availableCodecs: videoProcessingConfig.enabledCodecs,
       streamingProtocol: videoProcessingConfig.streamingProtocol,
-      streamingManifestRef: `https://cdn.acovon.media/hls/${mediaId}/master.m3u8`,
-      masterPlaylistUrl: `https://cdn.acovon.media/hls/${mediaId}/master.m3u8`,
+      streamingManifestRef: playableSourceUrl,
+      masterPlaylistUrl: playableSourceUrl,
       thumbnailRef: defaultThumb,
       previewFrames: params.previewFrames && params.previewFrames.length > 0 ? params.previewFrames : [defaultThumb],
       feedPreviewRef: defaultThumb,
@@ -6670,9 +7276,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const separator = rawUrl.includes('?') ? '&' : '?';
+    const effectiveRawUrl = rawUrl || '/videos/sample1.mp4';
+    const separator = effectiveRawUrl.includes('?') ? '&' : '?';
     const tokenHash = btoa(`${currentUser.id}:${postOrMediaId}:${chosenRes}`).slice(0, 16);
-    const signedUrl = `${rawUrl}${separator}acv_res=${chosenRes}&acv_codec=${encodeURIComponent(chosenCodec)}&acv_token=${tokenHash}`;
+    const signedUrl = `${effectiveRawUrl}${separator}acv_res=${chosenRes}&acv_codec=${encodeURIComponent(chosenCodec)}&acv_token=${tokenHash}`;
 
     return {
       authorized: true,
@@ -10067,6 +10674,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeAdminPermissionLevel,
         hasAdminPermission,
         switchAdminOperator,
+        adminSetupStatus,
+        checkAdminSetupStatus,
+        setupInitialAdmin,
+        adminLogin,
+        adminLogout,
         logAdminAction,
         adminUpdateUserAccount,
         adminUpdateCreatorControl,

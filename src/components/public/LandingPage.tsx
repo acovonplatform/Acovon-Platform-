@@ -67,7 +67,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
           ? `Promoted PPV Vault · ${targetPost.ppvPreviewDuration || 15}s Free Preview · $${targetPost.ppvPrice.toFixed(2)} Full Unlock`
           : `${promo.packageTitle} · From $${creator?.tiers?.[0]?.price?.toFixed(2) || '14.99'}/mo`,
         packageBadge: promo.packageTitle || 'Creator Promotion',
-        videoUrl: videoMedia?.url || DEMO_MEDIA_VIDEOS[idx % DEMO_MEDIA_VIDEOS.length],
+        videoUrl: videoMedia?.url || DEMO_MEDIA_VIDEOS[idx % DEMO_MEDIA_VIDEOS.length] || '/videos/sample1.mp4',
         posterUrl: videoMedia?.thumbnailUrl || creator?.coverImage || '/src/assets/images/hero_acovon_creator_1793476683041.jpg'
       });
     });
@@ -92,7 +92,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
           ? `PPV Vault · ${creatorVideoPost.ppvPreviewDuration || 15}s Free Preview · $${creatorVideoPost.ppvPrice.toFixed(2)} Full Unlock`
           : `Featured Creator Promotion · Subscriptions from $${creator.tiers?.[0]?.price?.toFixed(2) || '14.99'}/mo`,
         packageBadge: 'Promoted Creator Spotlight',
-        videoUrl: videoMedia?.url || DEMO_MEDIA_VIDEOS[(idx + 1) % DEMO_MEDIA_VIDEOS.length],
+        videoUrl: videoMedia?.url || DEMO_MEDIA_VIDEOS[(idx + 1) % DEMO_MEDIA_VIDEOS.length] || '/videos/sample1.mp4',
         posterUrl: videoMedia?.thumbnailUrl || creator.coverImage || '/src/assets/images/hero_acovon_creator_1793476683041.jpg'
       });
     });
@@ -199,6 +199,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenAuth
                   loop
                   muted={isMuted}
                   playsInline
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.src.includes('/videos/sample1.mp4')) {
+                      el.src = '/videos/sample1.mp4';
+                      el.load();
+                    }
+                  }}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40 pointer-events-none" />

@@ -20,6 +20,7 @@ import {
   Sparkles,
   Maximize2,
   Crown,
+  Film,
   UserCheck,
   UserPlus,
   X,
@@ -39,6 +40,7 @@ interface PostCardProps {
   post: Post;
   recommendationResult?: RecommendedPostResult;
   feedSurface?: EngagementSurface;
+  hideCreatorHeader?: boolean;
   onNavigateToCreator: (creatorId: string) => void;
   onOpenTipModal: (creatorId: string, creatorName: string) => void;
   onOpenSubscribeModal?: (creatorId: string) => void;
@@ -51,6 +53,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   post,
   recommendationResult,
   feedSurface = 'feed_all',
+  hideCreatorHeader = false,
   onNavigateToCreator,
   onOpenTipModal,
   onOpenSubscribeModal,
@@ -137,6 +140,18 @@ export const PostCard: React.FC<PostCardProps> = ({
   const linkedMediaRecord = videoAsset?.videoMediaId
     ? videoMediaRecords.find(r => r.id === videoAsset.videoMediaId)
     : undefined;
+
+  const resolvedVideoSrc =
+    videoAsset?.url && !videoAsset.url.includes('cdn.acovon.media') && !videoAsset.url.endsWith('.m3u8')
+      ? videoAsset.url
+      : videoAsset?.previewUrl && !videoAsset.previewUrl.includes('cdn.acovon.media') && !videoAsset.previewUrl.endsWith('.m3u8')
+      ? videoAsset.previewUrl
+      : linkedMediaRecord?.originalStorageRef &&
+        (linkedMediaRecord.originalStorageRef.startsWith('http') ||
+          linkedMediaRecord.originalStorageRef.startsWith('blob:')) &&
+        !linkedMediaRecord.originalStorageRef.includes('cdn.acovon.media')
+      ? linkedMediaRecord.originalStorageRef
+      : '/videos/sample1.mp4';
 
   const availableResolutions: VideoResolution[] =
     videoAsset?.availableResolutions ||
@@ -283,10 +298,15 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      setDuration(videoRef.current.duration);
+      const rawDur = videoRef.current.duration;
+      const validDur =
+        Number.isFinite(rawDur) && rawDur > 0
+          ? rawDur
+          : videoAsset?.durationSeconds || 60;
+      setDuration(validDur);
       if (videoAsset) {
         const savedPos = getVideoPlaybackPosition(videoAsset.id);
-        if (savedPos > 1 && savedPos < videoRef.current.duration - 2 && (!isLockedPPV || savedPos < previewDuration)) {
+        if (savedPos > 1 && savedPos < validDur - 2 && (!isLockedPPV || savedPos < previewDuration)) {
           videoRef.current.currentTime = savedPos;
           setCurrentTime(savedPos);
         }
@@ -298,7 +318,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     if (!videoRef.current) return;
     if (previewExceeded && isLockedPPV) return;
 
-    if (isPlaying) {
+    if (!videoRef.current.paused || isPlaying) {
       const watchedSecs = videoRef.current.currentTime;
       if (watchedSecs > 0 && watchedSecs < 3) {
         trackEngagementEvent({
@@ -330,8 +350,16 @@ export const PostCard: React.FC<PostCardProps> = ({
           tags: post.tags,
           surface: feedSurface
         });
-      }).catch(err => {
-        console.error("Playback error", err);
+      }).catch(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = true;
+          setIsMuted(true);
+          videoRef.current.play().then(() => {
+            setIsPlaying(true);
+          }).catch(err => {
+            console.error("Playback error", err);
+          });
+        }
       });
     }
   };
@@ -429,7 +457,10 @@ export const PostCard: React.FC<PostCardProps> = ({
       videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 5);
     } else if ((e.key === 'f' || e.key === 'F') && onOpenVideoPlayer) {
       e.preventDefault();
-      onOpenVideoPlayer(post.id, videoRef.current.currentTime);
+      const time = videoRef.current.currentTime;
+      videoRef.current.pause();
+      setIsPlaying(false);
+      onOpenVideoPlayer(post.id, time);
     }
   };
 
@@ -489,6 +520,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   };
 
   const formatTime = (secs: number) => {
+    if (!Number.isFinite(secs) || secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -531,182 +563,239 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
       )}
       
-      {/* Header: Author Info, Follow & Subscribe Actions */}
-      <div className="p-3 sm:p-5 flex items-center justify-between border-b border-[#1c1c22] gap-2 sm:gap-3">
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          <button 
-            type="button"
-            onClick={() => {
-              trackEngagementEvent({
-                eventType: 'creator_profile_opened',
-                postId: post.id,
-                creatorId: post.creatorId,
-                category: primaryCategory,
-                surface: feedSurface
-              });
-              onNavigateToCreator(post.creatorId);
-            }}
-            className="cursor-pointer group flex items-center gap-2.5 sm:gap-3 text-left focus:outline-none min-w-0 flex-1"
-          >
-            <div className="relative shrink-0">
-              <img
-                src={post.creatorAvatar}
-                alt={post.creatorName}
-                referrerPolicy="no-referrer"
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#d4af37]/40 group-hover:border-[#d4af37] transition-colors"
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1 font-semibold text-neutral-100 group-hover:text-[#fce7b0] transition-colors text-xs sm:text-sm min-w-0">
-                <span className="truncate">{post.creatorName}</span>
-                <VerifiedBadge creatorId={post.creatorId} size="sm" />
-              </div>
-              
-              <div className="flex items-center gap-1 text-[11px] sm:text-xs text-neutral-400 truncate">
-                <span className="truncate">@{post.creatorUsername}</span>
-                <span aria-hidden="true" className="shrink-0">·</span>
-                <span className="shrink-0">{post.createdAt}</span>
-              </div>
-            </div>
-          </button>
-        </div>
-
-        {/* Action Buttons: Follow & Subscribe + 3-Dot Personalization Menu */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          
-          {/* Follow / Following Button */}
-          {!isAuthor && (
-            <button
+      {/* Header: Author Info, Follow & Subscribe Actions (Hidden on Creator Profile to match TikTok & Instagram) */}
+      {!hideCreatorHeader ? (
+        <div className="p-3 sm:p-5 flex items-center justify-between border-b border-[#1c1c22] gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <button 
               type="button"
               onClick={() => {
-                const willFollow = !isFollowingCreator;
-                toggleFollowCreator(post.creatorId);
                 trackEngagementEvent({
-                  eventType: willFollow ? 'creator_followed' : 'creator_unfollowed',
+                  eventType: 'creator_profile_opened',
                   postId: post.id,
                   creatorId: post.creatorId,
                   category: primaryCategory,
                   surface: feedSurface
                 });
+                onNavigateToCreator(post.creatorId);
               }}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                isFollowingCreator
-                  ? 'bg-[#1c1c22] text-neutral-300 border border-[#2a2a35] hover:border-neutral-500'
-                  : 'bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold shadow-sm'
-              }`}
-              title={isFollowingCreator ? 'Following this creator' : 'Follow creator'}
+              className="cursor-pointer group flex items-center gap-2.5 sm:gap-3 text-left focus:outline-none min-w-0 flex-1"
             >
-              {isFollowingCreator ? (
-                <>
-                  <UserCheck className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                  <span className="hidden xs:inline">Following</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-3.5 h-3.5 shrink-0" />
-                  <span>Follow</span>
-                </>
-              )}
+              <div className="relative shrink-0">
+                <img
+                  src={post.creatorAvatar}
+                  alt={post.creatorName}
+                  referrerPolicy="no-referrer"
+                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#d4af37]/40 group-hover:border-[#d4af37] transition-colors"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 font-semibold text-neutral-100 group-hover:text-[#fce7b0] transition-colors text-xs sm:text-sm min-w-0">
+                  <span className="truncate">{post.creatorName}</span>
+                </div>
+                
+                <div className="flex items-center gap-1 text-[11px] sm:text-xs text-neutral-400 truncate">
+                  <span className="truncate">@{post.creatorUsername}</span>
+                  <VerifiedBadge creatorId={post.creatorId} size="xs" />
+                  <span aria-hidden="true" className="shrink-0">·</span>
+                  <span className="shrink-0">{post.createdAt}</span>
+                </div>
+              </div>
             </button>
-          )}
+          </div>
 
-          {/* Subscribe Button */}
-          {!isAuthor && (
-            isSubscribed ? (
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-mono font-medium text-[#fce7b0] bg-[#d4af37]/15 border border-[#d4af37]/30">
-                <Crown className="w-3 h-3 text-[#d4af37]" />
-                <span>Subscribed</span>
-              </span>
-            ) : (
-              onOpenSubscribeModal && (
-                <button
-                  type="button"
-                  onClick={() => onOpenSubscribeModal(post.creatorId)}
-                  className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500 to-[#d4af37] hover:brightness-110 text-black text-[11px] sm:text-xs font-extrabold rounded-xl shadow-md cursor-pointer flex items-center gap-1"
-                  title="Subscribe for exclusive creator vault access"
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span>Subscribe</span>
-                </button>
+          {/* Action Buttons: Follow & Subscribe + 3-Dot Personalization Menu */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Follow / Following Button */}
+            {!isAuthor && (
+              <button
+                type="button"
+                onClick={() => {
+                  const willFollow = !isFollowingCreator;
+                  toggleFollowCreator(post.creatorId);
+                  trackEngagementEvent({
+                    eventType: willFollow ? 'creator_followed' : 'creator_unfollowed',
+                    postId: post.id,
+                    creatorId: post.creatorId,
+                    category: primaryCategory,
+                    surface: feedSurface
+                  });
+                }}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                  isFollowingCreator
+                    ? 'bg-[#1c1c22] text-neutral-300 border border-[#2a2a35] hover:border-neutral-500'
+                    : 'bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold shadow-sm'
+                }`}
+                title={isFollowingCreator ? 'Following this creator' : 'Follow creator'}
+              >
+                {isFollowingCreator ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                    <span className="hidden xs:inline">Following</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                    <span>Follow</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Subscribe Button */}
+            {!isAuthor && (
+              isSubscribed ? (
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-mono font-medium text-[#fce7b0] bg-[#d4af37]/15 border border-[#d4af37]/30">
+                  <Crown className="w-3 h-3 text-[#d4af37]" />
+                  <span>Subscribed</span>
+                </span>
+              ) : (
+                onOpenSubscribeModal && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSubscribeModal(post.creatorId)}
+                    className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500 to-[#d4af37] hover:brightness-110 text-black text-[11px] sm:text-xs font-extrabold rounded-xl shadow-md cursor-pointer flex items-center gap-1"
+                    title="Subscribe for exclusive creator vault access"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span>Subscribe</span>
+                  </button>
+                )
               )
-            )
-          )}
+            )}
 
-          {showDemoBadges && post.isDemo && (
-            <span className="hidden sm:inline-block text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
-              DEMO
-            </span>
-          )}
+            {showDemoBadges && post.isDemo && (
+              <span className="hidden sm:inline-block text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+                DEMO
+              </span>
+            )}
 
-          {/* 3-Dot Personalization & Report Dropdown Menu */}
+            {/* 3-Dot Personalization & Report Dropdown Menu */}
+            <div className="relative" ref={optionsMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowOptionsMenu(prev => !prev)}
+                className="p-1.5 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer rounded-lg hover:bg-[#1c1c24]"
+                title="Feed Personalization & Post Options"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+
+              {showOptionsMenu && (
+                <div className="absolute right-0 top-9 z-40 w-60 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c36] rounded-2xl shadow-2xl p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
+                  <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 border-b border-[#23232c]">
+                    Feed Personalization
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePersonalizationAction('show_more')}
+                    className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] hover:text-[#fce7b0] transition-colors cursor-pointer"
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Show More Like This</div>
+                      <div className="text-[10px] text-neutral-400">Boost {primaryCategory || 'this topic'}</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePersonalizationAction('not_interested')}
+                    className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
+                  >
+                    <EyeOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Not Interested</div>
+                      <div className="text-[10px] text-neutral-400">Remove post &amp; lower topic score</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePersonalizationAction('show_less')}
+                    className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
+                  >
+                    <ThumbsDown className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Show Less Like This</div>
+                      <div className="text-[10px] text-neutral-400">Reduce {primaryCategory || 'similar posts'}</div>
+                    </div>
+                  </button>
+
+                  {!isAuthor && (
+                    <button
+                      type="button"
+                      onClick={() => handlePersonalizationAction('hide_creator')}
+                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Hide This Creator</div>
+                        <div className="text-[10px] text-neutral-400">Stop recommending @{post.creatorUsername}</div>
+                      </div>
+                    </button>
+                  )}
+
+                  <div className="border-t border-[#23232c] my-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOptionsMenu(false);
+                      setShowReportModal(true);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Report Content</div>
+                      <div className="text-[10px] text-rose-300/80">Flag for Trust &amp; Safety moderation</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Sleek Minimal Post Meta Header (matches TikTok & Instagram creator video feed - no duplicate profile avatar/username/follow button) */
+        <div className="px-3.5 sm:px-5 py-2.5 flex items-center justify-between border-b border-[#1c1c22]/70 text-xs bg-[#0d0d11]/60">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-neutral-400 font-mono">{post.createdAt}</span>
+            {post.visibility === 'pay_per_view' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/50 text-[10px] font-bold text-amber-300">
+                <Lock className="w-2.5 h-2.5 text-amber-400" />
+                <span>PPV ${post.ppvPrice?.toFixed(2)}</span>
+              </span>
+            )}
+            {post.visibility === 'subscribers' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#d4af37]/25 border border-[#d4af37]/50 text-[10px] font-bold text-[#fce7b0]">
+                <Crown className="w-2.5 h-2.5 text-[#d4af37]" />
+                <span>Subscribers Only</span>
+              </span>
+            )}
+            {post.isHighlight && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-950/80 border border-rose-500/50 text-[10px] font-bold text-rose-300">
+                <Film className="w-2.5 h-2.5 text-rose-400" />
+                <span>Highlight Clip</span>
+              </span>
+            )}
+          </div>
+
+          {/* Minimal 3-Dot Options Menu */}
           <div className="relative" ref={optionsMenuRef}>
             <button
               type="button"
               onClick={() => setShowOptionsMenu(prev => !prev)}
               className="p-1.5 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer rounded-lg hover:bg-[#1c1c24]"
-              title="Feed Personalization & Post Options"
+              title="Post Options"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
 
             {showOptionsMenu && (
-              <div className="absolute right-0 top-9 z-40 w-60 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c36] rounded-2xl shadow-2xl p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
-                <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 border-b border-[#23232c]">
-                  Feed Personalization
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handlePersonalizationAction('show_more')}
-                  className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] hover:text-[#fce7b0] transition-colors cursor-pointer"
-                >
-                  <ThumbsUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Show More Like This</div>
-                    <div className="text-[10px] text-neutral-400">Boost {primaryCategory || 'this topic'}</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePersonalizationAction('not_interested')}
-                  className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
-                >
-                  <EyeOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Not Interested</div>
-                    <div className="text-[10px] text-neutral-400">Remove post &amp; lower topic score</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePersonalizationAction('show_less')}
-                  className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
-                >
-                  <ThumbsDown className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Show Less Like This</div>
-                    <div className="text-[10px] text-neutral-400">Reduce {primaryCategory || 'similar posts'}</div>
-                  </div>
-                </button>
-
-                {!isAuthor && (
-                  <button
-                    type="button"
-                    onClick={() => handlePersonalizationAction('hide_creator')}
-                    className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-200 hover:bg-[#1f1f29] transition-colors cursor-pointer"
-                  >
-                    <UserX className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                    <div>
-                      <div className="font-semibold">Hide This Creator</div>
-                      <div className="text-[10px] text-neutral-400">Stop recommending @{post.creatorUsername}</div>
-                    </div>
-                  </button>
-                )}
-
-                <div className="border-t border-[#23232c] my-1" />
-
+              <div className="absolute right-0 top-9 z-40 w-56 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c36] rounded-2xl shadow-2xl p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
                 <button
                   type="button"
                   onClick={() => {
@@ -725,7 +814,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Post Text Caption */}
       <div className="px-3.5 sm:px-5 pt-3.5 sm:pt-4 pb-3">
@@ -777,12 +866,21 @@ export const PostCard: React.FC<PostCardProps> = ({
         >
           <video
             ref={videoRef}
-            src={videoAsset.url}
-            poster={videoAsset.thumbnailUrl}
+            src={resolvedVideoSrc}
+            poster={videoAsset.thumbnailUrl !== videoAsset.url ? videoAsset.thumbnailUrl : undefined}
             preload="metadata"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
             onEnded={handleVideoEnded}
+            onError={(e) => {
+              const el = e.currentTarget;
+              if (!el.src.includes('/videos/sample1.mp4')) {
+                el.src = '/videos/sample1.mp4';
+                el.load();
+              }
+            }}
             muted={isMuted}
             playsInline
             onClick={handleTogglePlay}
@@ -1081,7 +1179,14 @@ export const PostCard: React.FC<PostCardProps> = ({
 
                   {onOpenVideoPlayer && (
                     <button
-                      onClick={() => onOpenVideoPlayer(post.id, videoRef.current?.currentTime)}
+                      onClick={() => {
+                        const time = videoRef.current?.currentTime || 0;
+                        if (videoRef.current) {
+                          videoRef.current.pause();
+                          setIsPlaying(false);
+                        }
+                        onOpenVideoPlayer(post.id, time);
+                      }}
                       className="p-1.5 bg-black/60 hover:bg-black text-[#d4af37] hover:text-white rounded-lg border border-white/10 transition-colors cursor-pointer flex items-center gap-1 text-xs"
                       title="Open Full Screen Player (F)"
                     >
@@ -1294,11 +1399,14 @@ export const PostCard: React.FC<PostCardProps> = ({
         <div className="p-4 sm:p-5 bg-[#16161b] border-t border-[#1c1c22] space-y-3 animate-in fade-in">
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
             {/* Official Creator Pinned Reply */}
-            <div className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-sky-500/20 space-y-1">
+            <div className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-[#27272a] space-y-1">
               <div className="flex items-center gap-1.5 font-semibold text-white">
                 <span>{post.creatorName}</span>
-                <VerifiedBadge creatorId={post.creatorId} size="xs" />
-                <span className="text-[10px] text-neutral-400 font-normal">@{post.creatorUsername} · Creator</span>
+                <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-1">
+                  <span>@{post.creatorUsername}</span>
+                  <VerifiedBadge creatorId={post.creatorId} size="xs" />
+                  <span>· Creator</span>
+                </span>
               </div>
               <p data-ugc="true" className="text-neutral-300">Thank you everyone for tuning into this release! Drop your questions below.</p>
               <TranslateContentButton

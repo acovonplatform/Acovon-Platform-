@@ -168,3 +168,56 @@ CREATE POLICY "Owner can delete own files in {uid}/..."
     bucket_id = 'app-files' AND
     (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ============================================================================
+-- 6. ONE-TIME ADMIN SETUP & AUDIT LOG TABLES
+-- ============================================================================
+
+-- Single-row setup status table (enforces atomic one-time setup)
+CREATE TABLE IF NOT EXISTS public.admin_setup (
+  id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  is_setup_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  admin_uid UUID REFERENCES public.users(uid) ON DELETE SET NULL,
+  admin_email TEXT,
+  initialized_by TEXT NOT NULL DEFAULT 'platform_owner',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Administrator security audit logs
+CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
+  id TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL,
+  admin_name TEXT NOT NULL,
+  admin_role TEXT NOT NULL DEFAULT 'super_admin',
+  category TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  target_label TEXT NOT NULL,
+  details TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'critical')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.admin_setup ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Anyone can check setup completed status (needed to know if setup is closed)
+CREATE POLICY "Public read of admin setup status"
+  ON public.admin_setup FOR SELECT
+  USING (true);
+
+-- Only authenticated admins can read audit logs
+CREATE POLICY "Admins can view audit logs"
+  ON public.admin_audit_logs FOR SELECT
+  TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.users WHERE uid = auth.uid() AND role = 'admin'));
+
+-- Only authenticated admins or system can insert audit logs
+CREATE POLICY "Admins can insert audit logs"
+  ON public.admin_audit_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE uid = auth.uid() AND role = 'admin'));
+

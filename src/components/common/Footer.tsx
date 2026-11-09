@@ -63,6 +63,17 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <li><button onClick={() => onNavigate('verification-rules')} className="hover:text-white transition-colors cursor-pointer">Age & ID Verification</button></li>
             <li><button onClick={() => onNavigate('terms')} className="hover:text-white transition-colors cursor-pointer">Terms of Service</button></li>
             <li><button onClick={() => onNavigate('privacy')} className="hover:text-white transition-colors cursor-pointer">Privacy & GDPR</button></li>
+            <li>
+              <button
+                type="button"
+                onClick={() => onNavigate('admin-login')}
+                className="text-stone-500 dark:text-neutral-500 hover:text-stone-900 dark:hover:text-neutral-200 transition-colors cursor-pointer flex items-center gap-1.5 pt-1"
+                title="ACOVON Platform Administration Portal"
+              >
+                <Lock className="w-3 h-3 text-[#d4af37]/80" />
+                <span>Admin Login</span>
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -70,12 +81,22 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
       <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-[#1f1f23] flex flex-col sm:flex-row items-center justify-between gap-4 text-neutral-500 text-[11px]">
         <div>© 2026 ACOVON International Inc. All rights reserved. Registered trademark.</div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-5 flex-wrap">
           <span>Global Multi-Currency Settlements</span>
           <span aria-hidden="true">·</span>
           <span>End-to-End Escrow Protection</span>
           <span aria-hidden="true">·</span>
           <span>256-bit Encrypted Streams</span>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={() => onNavigate('admin-login')}
+            className="hover:text-neutral-300 transition-colors cursor-pointer flex items-center gap-1 font-medium"
+            title="Secure Administrator Access"
+          >
+            <Lock className="w-2.5 h-2.5 text-[#d4af37]" />
+            <span>Admin Login</span>
+          </button>
         </div>
       </div>
     </footer>

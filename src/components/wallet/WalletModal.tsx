@@ -154,7 +154,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               <div className="p-5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-1">
                 <span className="text-xs text-neutral-400">Available Liquid Balance</span>
                 <div className="text-3xl font-bold font-mono text-white tabular-nums">
-                  ${currentUser.walletBalance.toFixed(2)}
+                  ${Number(currentUser?.walletBalance || 0).toFixed(2)}
                 </div>
                 <span className="text-[11px] text-neutral-500">Ready for instant unlocks, subscriptions & video calls</span>
               </div>
@@ -287,7 +287,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               <input
                 type="number"
                 min={commissionSettings.minWithdrawalAmount}
-                max={currentUser.walletBalance}
+                max={currentUser?.walletBalance || 0}
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(Number(e.target.value))}
                 className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2 text-xs text-white font-mono"

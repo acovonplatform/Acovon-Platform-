@@ -34,12 +34,12 @@ const DEMO_PRESET_PHOTOS = [
 const DEMO_PRESET_VIDEOS = [
   { 
     label: 'Runway Teaser (0:15)', 
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 
+    url: '/videos/sample1.mp4', 
     thumb: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=900' 
   },
   { 
     label: 'Studio Rehearsal (0:12)', 
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', 
+    url: '/videos/sample2.mp4', 
     thumb: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=900' 
   }
 ];
@@ -630,7 +630,18 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
                   {contentType === 'photo' ? (
                     <img src={mediaUrl} alt="Preview" className="w-full h-full object-contain" />
                   ) : (
-                    <video src={mediaUrl} controls className="w-full h-full object-contain" />
+                    <video
+                      src={mediaUrl || '/videos/sample1.mp4'}
+                      controls
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        if (!el.src.includes('/videos/sample1.mp4')) {
+                          el.src = '/videos/sample1.mp4';
+                          el.load();
+                        }
+                      }}
+                      className="w-full h-full object-contain"
+                    />
                   )}
                   {caption && (
                     <div className="absolute bottom-0 inset-x-0 p-2 bg-black/60 backdrop-blur text-white text-xs text-center">

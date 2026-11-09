@@ -2,6 +2,13 @@ export type UserRole = 'fan' | 'creator' | 'admin' | 'moderator';
 
 export type AdminPermissionLevel = 'super_admin' | 'admin' | 'moderator' | 'finance_admin' | 'support_admin';
 
+export interface AdminSetupStatus {
+  isSetupCompleted: boolean;
+  hasAdmin: boolean;
+  setupCompletedAt?: string;
+  adminEmailMasked?: string;
+}
+
 export type AccountStatus = 'active' | 'restricted' | 'suspended' | 'banned' | 'disabled';
 
 export type CreatorApplicationStatus = 'not_applied' | 'pending' | 'approved' | 'rejected';

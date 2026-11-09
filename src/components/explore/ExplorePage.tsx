@@ -311,11 +311,14 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                       className="w-11 h-11 rounded-xl object-cover border border-[#d4af37]/40 shrink-0"
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1 text-xs font-bold text-white truncate">
-                        <span className="truncate">{creator.name}</span>
-                        <VerifiedBadge creatorId={creator.id} size="xs" />
+                      <div className="text-xs font-bold text-white truncate">
+                        {creator.name}
                       </div>
-                      <div className="text-[10px] text-neutral-400 truncate">{creator.category}</div>
+                      <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
+                        <span>@{creator.username}</span>
+                        <VerifiedBadge creatorId={creator.id} size="xs" />
+                        <span>· {creator.category}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="space-y-1 pt-1 border-t border-[#24242f]">
@@ -574,7 +577,6 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                             <h3 className="font-bold text-white text-base group-hover:text-[#fce7b0] transition-colors">
                               {creator.name}
                             </h3>
-                            <VerifiedBadge creatorId={creator.id} size="sm" />
                             {showDemoBadges && creator.isDemo && (
                               <span className="text-[9px] font-mono font-bold tracking-wider px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
                                 DEMO
@@ -584,7 +586,10 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
                           {/* Unboxed Metadata */}
                           <div className="flex items-center gap-1.5 text-xs text-neutral-400">
-                            <span>@{creator.username}</span>
+                            <span className="inline-flex items-center gap-1">
+                              <span>@{creator.username}</span>
+                              <VerifiedBadge creatorId={creator.id} size="xs" />
+                            </span>
                             <span aria-hidden="true">·</span>
                             <span>{creator.category}</span>
                             <span aria-hidden="true">·</span>
@@ -734,8 +739,10 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                             <span className="text-xs font-semibold text-white group-hover/creator:text-[#fce7b0] transition-colors">
                               {post.creatorName}
                             </span>
-                            <VerifiedBadge creatorId={post.creatorId} size="xs" />
-                            <span className="text-[10px] text-neutral-400">@{post.creatorUsername}</span>
+                            <span className="text-[10px] text-neutral-400 inline-flex items-center gap-1">
+                              <span>@{post.creatorUsername}</span>
+                              <VerifiedBadge creatorId={post.creatorId} size="xs" />
+                            </span>
                           </div>
                         </div>
 
@@ -810,12 +817,13 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                   className="w-9 h-9 rounded-full object-cover border border-[#d4af37]/40"
                 />
                 <div>
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-white group-hover:text-[#fce7b0]">
+                  <div className="text-sm font-semibold text-white group-hover:text-[#fce7b0]">
                     <span>{activePreviewPost.creatorName}</span>
-                    <VerifiedBadge creatorId={activePreviewPost.creatorId} size="xs" />
                   </div>
-                  <div className="text-[11px] text-neutral-400">
-                    @{activePreviewPost.creatorUsername} · {activePreviewPost.visibility}
+                  <div className="text-[11px] text-neutral-400 flex items-center gap-1">
+                    <span>@{activePreviewPost.creatorUsername}</span>
+                    <VerifiedBadge creatorId={activePreviewPost.creatorId} size="xs" />
+                    <span>· {activePreviewPost.visibility}</span>
                   </div>
                 </div>
               </div>
@@ -832,10 +840,17 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
             <div className="relative bg-black aspect-video flex items-center justify-center">
               {activePreviewPost.media[0]?.type === 'video' ? (
                 <video
-                  src={activePreviewPost.media[0].url}
+                  src={activePreviewPost.media[0].url || '/videos/sample1.mp4'}
                   controls
                   autoPlay
                   playsInline
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.src.includes('/videos/sample1.mp4')) {
+                      el.src = '/videos/sample1.mp4';
+                      el.load();
+                    }
+                  }}
                   className="w-full h-full object-contain"
                 />
               ) : (

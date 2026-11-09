@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CustomVideoRequest } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
+import {
+  uploadUserFileToSupabase,
+  deleteSupabaseFileByPath
+} from '../../services/supabase';
 import { 
   Clapperboard, 
   CheckCircle, 
@@ -13,7 +17,8 @@ import {
   Upload, 
   X,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Trash2
 } from 'lucide-react';
 
 interface CustomRequestsManagerProps {
@@ -33,8 +38,15 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
   const [filter, setFilter] = useState<'all' | 'pending' | 'delivered' | 'completed'>('all');
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [deliveringReqId, setDeliveringReqId] = useState<string | null>(null);
-  const [deliveryVideoUrl, setDeliveryVideoUrl] = useState('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
+  const [deliveryVideoUrl, setDeliveryVideoUrl] = useState('');
+  const [deliveryVideoFileName, setDeliveryVideoFileName] = useState('');
+  const [deliveryVideoFileSize, setDeliveryVideoFileSize] = useState('');
+  const [deliveryStoragePath, setDeliveryStoragePath] = useState<string | undefined>(undefined);
+  const [deliverySupabaseFileId, setDeliverySupabaseFileId] = useState<string | undefined>(undefined);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState('');
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Filter requests relevant to current user:
   // If creator: requests where creatorId === currentUser.id
@@ -52,11 +64,72 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
     return true;
   });
 
+  const handleVideoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+
+    if (!file.type.startsWith('video/') && !/\.(mp4|mov|webm|m4v|mkv)$/i.test(file.name)) {
+      setUploadError('Please select a valid video file (MP4, MOV, or WEBM).');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploadingVideo(true);
+    try {
+      const uploadRes = await uploadUserFileToSupabase({
+        uid: currentUser.id,
+        file,
+        featureName: 'custom-requests',
+        itemId: deliveringReqId || `req_${Date.now()}`,
+        visibility: 'private'
+      });
+
+      const localPreview = URL.createObjectURL(file);
+      setDeliveryVideoUrl(uploadRes.signedUrl || localPreview);
+      setDeliveryVideoFileName(file.name);
+      setDeliveryVideoFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+      setDeliveryStoragePath(uploadRes.storagePath);
+      setDeliverySupabaseFileId(uploadRes.record?.file_id);
+    } catch {
+      setUploadError('Failed to upload video file. Please try again.');
+    } finally {
+      setIsUploadingVideo(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveVideoFile = async () => {
+    if (deliveryStoragePath) {
+      await deleteSupabaseFileByPath({
+        storagePath: deliveryStoragePath,
+        fileId: deliverySupabaseFileId,
+        uid: currentUser.id
+      });
+    }
+    setDeliveryVideoUrl('');
+    setDeliveryVideoFileName('');
+    setDeliveryVideoFileSize('');
+    setDeliveryStoragePath(undefined);
+    setDeliverySupabaseFileId(undefined);
+    setUploadError(null);
+  };
+
   const handleDeliverSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveringReqId) return;
+    if (!deliveryVideoUrl.trim()) {
+      setUploadError('Please upload a video file before delivering.');
+      return;
+    }
     updateCustomRequestStatus(deliveringReqId, 'delivered', deliveryVideoUrl, deliveryNotes);
     setDeliveringReqId(null);
+    setDeliveryVideoUrl('');
+    setDeliveryVideoFileName('');
+    setDeliveryVideoFileSize('');
+    setDeliveryStoragePath(undefined);
+    setDeliverySupabaseFileId(undefined);
+    setUploadError(null);
     setDeliveryNotes('');
   };
 
@@ -156,7 +229,10 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                   <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
                     <span className="inline-flex items-center gap-1">
                       Creator: <strong className="text-neutral-200">{req.creatorName}</strong>
-                      <VerifiedBadge creatorId={req.creatorId} size="xs" />
+                      <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
+                        @{creators.find(c => c.id === req.creatorId)?.username || req.creatorName.toLowerCase().replace(/\s+/g, '')}
+                        <VerifiedBadge creatorId={req.creatorId} size="xs" />
+                      </span>
                     </span>
                     <span aria-hidden="true">·</span>
                     <span>For: <strong className="text-neutral-200">{req.recipientName}</strong></span>
@@ -190,7 +266,6 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                     <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
                       <FileCheck className="w-4 h-4" />
                       <span>Completed Video Delivery from {req.creatorName}</span>
-                      <VerifiedBadge creatorId={req.creatorId} size="xs" />
                     </div>
                     <button
                       onClick={() => setSelectedVideo(req.deliveredVideoUrl!)}
@@ -296,6 +371,13 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                 src={selectedVideo}
                 controls
                 autoPlay
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.src.includes('/videos/sample1.mp4')) {
+                    el.src = '/videos/sample1.mp4';
+                    el.load();
+                  }
+                }}
                 className="w-full h-full object-contain"
               />
             </div>
@@ -308,28 +390,101 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
             <button
-              onClick={() => setDeliveringReqId(null)}
-              className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white"
+              onClick={() => {
+                setDeliveringReqId(null);
+                setUploadError(null);
+              }}
+              className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-base font-bold text-white mb-2">Deliver Completed Custom Video</h3>
+            <h3 className="text-base font-bold text-white mb-2">Deliver Custom Video</h3>
             <p className="text-xs text-neutral-400 mb-4">
-              Upload or attach your personalized recording for this fan.
+              Upload your personalized video file for this fan.
             </p>
 
             <form onSubmit={handleDeliverSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-neutral-300 mb-1">
-                  Video Stream URL
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                  Video File
                 </label>
                 <input
-                  type="text"
-                  value={deliveryVideoUrl}
-                  onChange={(e) => setDeliveryVideoUrl(e.target.value)}
-                  className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white"
+                  ref={videoFileInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm,video/*"
+                  onChange={handleVideoFileSelect}
+                  className="hidden"
                 />
+
+                {!deliveryVideoUrl ? (
+                  <button
+                    type="button"
+                    disabled={isUploadingVideo}
+                    onClick={() => videoFileInputRef.current?.click()}
+                    className="w-full py-6 px-4 bg-[#18181c] hover:bg-[#1f1f26] border border-dashed border-[#383842] hover:border-[#d4af37] rounded-xl flex flex-col items-center justify-center gap-2 text-neutral-300 text-xs transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <Upload className="w-6 h-6 text-[#d4af37]" />
+                    <span className="font-semibold text-white">
+                      {isUploadingVideo ? 'Uploading Video File...' : 'Click to Upload Video File'}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      MP4, MOV, or WEBM (up to 500 MB)
+                    </span>
+                  </button>
+                ) : (
+                  <div className="bg-[#18181c] border border-[#27272a] rounded-xl p-3 space-y-2.5 text-xs">
+                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                      <video
+                        src={deliveryVideoUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          if (!el.src.includes('/videos/sample1.mp4')) {
+                            el.src = '/videos/sample1.mp4';
+                            el.load();
+                          }
+                        }}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-white font-semibold truncate">
+                          {deliveryVideoFileName || 'Uploaded Custom Video'}
+                        </div>
+                        {deliveryVideoFileSize && (
+                          <div className="text-[10px] text-neutral-400 font-mono">
+                            {deliveryVideoFileSize}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => videoFileInputRef.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#23232b] hover:bg-[#2c2c36] text-neutral-200 text-[11px] font-medium cursor-pointer"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveVideoFile}
+                          className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 cursor-pointer"
+                          title="Remove uploaded video"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {uploadError && (
+                  <p className="text-rose-400 text-[11px] mt-1.5">{uploadError}</p>
+                )}
               </div>
 
               <div>
@@ -348,16 +503,20 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setDeliveringReqId(null)}
-                  className="px-4 py-2 text-xs text-neutral-400 hover:text-white"
+                  onClick={() => {
+                    setDeliveringReqId(null);
+                    setUploadError(null);
+                  }}
+                  className="px-4 py-2 text-xs text-neutral-400 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl"
+                  disabled={isUploadingVideo || !deliveryVideoUrl}
+                  className="px-5 py-2 bg-[#d4af37] hover:bg-[#e5c07b] disabled:opacity-50 text-black font-semibold text-xs rounded-xl cursor-pointer"
                 >
-                  Send to Fan
+                  {isUploadingVideo ? 'Uploading...' : 'Send to Fan'}
                 </button>
               </div>
             </form>

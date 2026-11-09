@@ -914,6 +914,13 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                   <video
                     src={previewFile.download_url}
                     controls
+                    onError={(e) => {
+                      const el = e.currentTarget;
+                      if (!el.src.includes('/videos/sample1.mp4')) {
+                        el.src = '/videos/sample1.mp4';
+                        el.load();
+                      }
+                    }}
                     className="max-h-[58vh] w-full"
                   />
                 ) : (

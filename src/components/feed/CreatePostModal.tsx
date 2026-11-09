@@ -123,15 +123,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     c.toLowerCase().includes(categorySearch.toLowerCase())
   );
 
-  // Clean up object URLs on unmount
-  useEffect(() => {
-    return () => {
-      selectedFiles.forEach(f => {
-        if (f.previewUrl.startsWith('blob:')) URL.revokeObjectURL(f.previewUrl);
-      });
-    };
-  }, [selectedFiles]);
-
   // Extract metadata & multi-frame thumbnails using offscreen video + canvas
   const extractVideoMetadataAndFrames = (
     videoFile: File
@@ -143,6 +134,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     height: number;
   }> => {
     return new Promise((resolve) => {
+      let settled = false;
       const video = document.createElement('video');
       video.preload = 'metadata';
       const objectUrl = URL.createObjectURL(videoFile);
@@ -157,12 +149,55 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80'
       ];
 
+      const finish = (result: {
+        thumbnailUrl: string;
+        previewFrames: string[];
+        duration: number;
+        width: number;
+        height: number;
+      }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        try {
+          video.removeAttribute('src');
+          video.load();
+          URL.revokeObjectURL(objectUrl);
+        } catch {
+          // ignore
+        }
+        resolve(result);
+      };
+
+      const timeoutId = setTimeout(() => {
+        const dur = Number.isFinite(video.duration) && video.duration > 0 ? Math.round(video.duration) : 60;
+        finish({
+          thumbnailUrl: fallbackFrames[0],
+          previewFrames: fallbackFrames,
+          duration: dur,
+          width: video.videoWidth || 1920,
+          height: video.videoHeight || 1080
+        });
+      }, 2500);
+
       video.onloadedmetadata = () => {
-        const seekTime = Math.min(1.0, (video.duration || 60) / 4);
-        video.currentTime = seekTime;
+        const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 60;
+        const seekTime = Math.min(1.0, dur / 4);
+        try {
+          video.currentTime = seekTime;
+        } catch {
+          finish({
+            thumbnailUrl: fallbackFrames[0],
+            previewFrames: fallbackFrames,
+            duration: Math.round(dur),
+            width: video.videoWidth || 1920,
+            height: video.videoHeight || 1080
+          });
+        }
       };
 
       video.onseeked = () => {
+        const dur = Number.isFinite(video.duration) && video.duration > 0 ? Math.round(video.duration) : 60;
         try {
           const width = video.videoWidth || 1920;
           const height = video.videoHeight || 1080;
@@ -173,10 +208,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
           if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             const thumbUrl = canvas.toDataURL('image/webp', 0.85);
-            resolve({
+            finish({
               thumbnailUrl: thumbUrl,
               previewFrames: [thumbUrl, ...fallbackFrames.slice(1)],
-              duration: Math.round(video.duration || 60),
+              duration: dur,
               width,
               height
             });
@@ -185,17 +220,17 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         } catch {
           // fallback
         }
-        resolve({
+        finish({
           thumbnailUrl: fallbackFrames[0],
           previewFrames: fallbackFrames,
-          duration: Math.round(video.duration || 60),
+          duration: dur,
           width: video.videoWidth || 1920,
           height: video.videoHeight || 1080
         });
       };
 
       video.onerror = () => {
-        resolve({
+        finish({
           thumbnailUrl: fallbackFrames[0],
           previewFrames: fallbackFrames,
           duration: 60,
@@ -515,7 +550,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
       return {
         id: `media_${Date.now()}_${idx}`,
         type: item.type,
-        url: mediaRec?.masterPlaylistUrl || item.previewUrl,
+        url: item.previewUrl || mediaRec?.masterPlaylistUrl || '',
         thumbnailUrl: item.thumbnailUrl,
         previewUrl: item.type === 'video' ? item.previewUrl : undefined,
         durationSeconds: item.durationSeconds || 120,
@@ -755,9 +790,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                           <div className="sm:col-span-5 relative aspect-video rounded-xl overflow-hidden bg-black border border-[#2e2e38]">
                             {item.type === 'video' ? (
                               <video
-                                src={item.previewUrl}
+                                src={item.previewUrl || '/videos/sample1.mp4'}
                                 poster={item.thumbnailUrl}
                                 controls
+                                onError={(e) => {
+                                  const el = e.currentTarget;
+                                  if (!el.src.includes('/videos/sample1.mp4')) {
+                                    el.src = '/videos/sample1.mp4';
+                                    el.load();
+                                  }
+                                }}
                                 className="w-full h-full object-contain"
                               />
                             ) : (

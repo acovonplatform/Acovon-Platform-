@@ -132,6 +132,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
+      // Record the newly signed-up user in platform state & Admin user list immediately (without auto-login)
+      registerAccount({
+        id: signUpData.user?.id,
+        fullName: fullName.trim() || signedUpEmail.split('@')[0],
+        username: username.trim() || signedUpEmail.split('@')[0],
+        email: signedUpEmail,
+        password,
+        confirmPassword,
+        is18PlusConfirmed: true,
+        autoLogin: false
+      });
+
       const emailVerificationNeeded = !signUpData.session;
 
       // Do NOT auto-login after signup — sign out temporary session and take user to Sign In with pre-filled email
@@ -179,8 +191,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!localAuth.success && signInData.user) {
       const fallbackUsername = (signInData.user.email?.split('@')[0] || 'member')
         .toLowerCase()
-        .replace(/[^a-z0-9_.-]/g, '');
+        .replace(/[^a-z0-9_.-]/g, '_');
       registerAccount({
+        id: signInData.user.id,
         fullName: signInData.user.user_metadata?.full_legal_name || fullName.trim() || fallbackUsername,
         username:
           signInData.user.user_metadata?.username ||
@@ -189,7 +202,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         email: signInData.user.email || email.trim(),
         password,
         confirmPassword: password,
-        is18PlusConfirmed: true
+        is18PlusConfirmed: true,
+        autoLogin: true
       });
     }
 

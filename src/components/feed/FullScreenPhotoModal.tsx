@@ -384,9 +384,11 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
                   <span className="text-xs sm:text-sm font-bold text-white group-hover:text-[#fce7b0] truncate">
                     {currentPost.creatorName}
                   </span>
-                  <VerifiedBadge creatorId={currentPost.creatorId} size="sm" />
                 </div>
-                <span className="text-[11px] sm:text-xs text-neutral-400 truncate block">@{currentPost.creatorUsername}</span>
+                <span className="text-[11px] sm:text-xs text-neutral-400 truncate flex items-center gap-1">
+                  <span>@{currentPost.creatorUsername}</span>
+                  <VerifiedBadge creatorId={currentPost.creatorId} size="xs" />
+                </span>
               </div>
             </button>
 

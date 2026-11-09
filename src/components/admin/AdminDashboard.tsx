@@ -111,9 +111,14 @@ const ADMIN_ROLE_LABELS: Record<AdminPermissionLevel, { label: string; badgeClas
   }
 };
 
-export const AdminDashboard: React.FC = () => {
+export interface AdminDashboardProps {
+  onExit?: () => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const {
     currentUser,
+    adminLogout,
     users,
     creators,
     posts,
@@ -197,7 +202,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Section 2: User Management State
   const [userSearch, setUserSearch] = useState('');
-  const [userRoleFilter, setUserRoleFilter] = useState<'all' | UserRole>('all');
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'new_signups' | 'creator_applicants' | UserRole>('all');
   const [userStatusFilter, setUserStatusFilter] = useState<'all' | AccountStatus>('all');
   const [userPage, setUserPage] = useState(1);
   const [selectedUserDetailId, setSelectedUserDetailId] = useState<string | null>(null);
@@ -206,6 +211,7 @@ export const AdminDashboard: React.FC = () => {
   const [creatorSearch, setCreatorSearch] = useState('');
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>(creators[0]?.id || 'creator_elena');
   const [verifNotesInput, setVerifNotesInput] = useState<Record<string, string>>({});
+  const [verifStatusFilter, setVerifStatusFilter] = useState<'all' | 'pending' | 'info_requested' | 'approved' | 'rejected'>('all');
 
   // Section 4: Content Management State
   const [contentTab, setContentTab] = useState<'posts' | 'recordings' | 'statuses' | 'private_safety' | 'demo'>('posts');
@@ -268,18 +274,71 @@ export const AdminDashboard: React.FC = () => {
   const [auditCategoryFilter, setAuditCategoryFilter] = useState<string>('all');
   const [auditSeverityFilter, setAuditSeverityFilter] = useState<string>('all');
 
+  // Helper to identify newly registered accounts vs pre-seeded demo accounts
+  const isNewSignUpAccount = (u: User | CreatorProfile) => {
+    const seededIds = new Set([
+      'user_admin_1',
+      'user_mod_1',
+      'user_fin_1',
+      'user_sup_1',
+      'user_fan_1',
+      'user_fan_2',
+      'user_fan_3',
+      'creator_elena'
+    ]);
+    if (seededIds.has(u.id)) return false;
+    if (/^creator_\d+$/.test(u.id)) return false;
+    return true;
+  };
+
   // ============================================================================
   // Unified Real-Time Platform Metrics & Aggregations
   // ============================================================================
   const allUnifiedUsers = useMemo(() => {
     const map = new Map<string, User | CreatorProfile>();
     Object.values(users).forEach(u => map.set(u.id, u));
-    creators.forEach(c => map.set(c.id, c));
-    return Array.from(map.values());
-  }, [users, creators]);
+    creators.forEach(c => {
+      const existing = map.get(c.id);
+      map.set(c.id, existing ? { ...c, ...existing, role: c.role } : c);
+    });
+    const list = Array.from(map.values());
+    return list.sort((a, b) => {
+      const aIsNew = isNewSignUpAccount(a) ? 1 : 0;
+      const bIsNew = isNewSignUpAccount(b) ? 1 : 0;
+      if (aIsNew !== bIsNew) return bIsNew - aIsNew;
+
+      const aHasPendingApp =
+        a.creatorApplicationStatus === 'pending' || verifications.some(v => v.userId === a.id && v.status === 'pending')
+          ? 1
+          : 0;
+      const bHasPendingApp =
+        b.creatorApplicationStatus === 'pending' || verifications.some(v => v.userId === b.id && v.status === 'pending')
+          ? 1
+          : 0;
+      if (aHasPendingApp !== bHasPendingApp) return bHasPendingApp - aHasPendingApp;
+
+      return (b.dateJoined || '').localeCompare(a.dateJoined || '');
+    });
+  }, [users, creators, verifications]);
+
+  const sortedVerifications = useMemo(() => {
+    const priority: Record<string, number> = {
+      pending: 0,
+      info_requested: 1,
+      approved: 2,
+      rejected: 3
+    };
+    return [...verifications].sort((a, b) => {
+      const pa = priority[a.status] ?? 4;
+      const pb = priority[b.status] ?? 4;
+      if (pa !== pb) return pa - pb;
+      return (b.submittedAt || '').localeCompare(a.submittedAt || '');
+    });
+  }, [verifications]);
 
   const metrics = useMemo(() => {
     const totalUsers = allUnifiedUsers.length;
+    const newSignUpsCount = allUnifiedUsers.filter(u => isNewSignUpAccount(u)).length;
     const activeFans = allUnifiedUsers.filter(
       u => u.role === 'fan' && (!u.accountStatus || u.accountStatus === 'active')
     ).length;
@@ -287,6 +346,7 @@ export const AdminDashboard: React.FC = () => {
       c => !c.accountStatus || c.accountStatus === 'active'
     ).length;
     const pendingCreatorApps = verifications.filter(v => v.status === 'pending' || v.status === 'info_requested').length;
+    const totalCreatorApps = verifications.length;
     const suspendedOrBanned = allUnifiedUsers.filter(
       u => u.accountStatus === 'suspended' || u.accountStatus === 'banned' || u.accountStatus === 'restricted'
     ).length;
@@ -344,9 +404,11 @@ export const AdminDashboard: React.FC = () => {
 
     return {
       totalUsers,
+      newSignUpsCount,
       activeFans,
       activeCreators,
       pendingCreatorApps,
+      totalCreatorApps,
       suspendedOrBanned,
       totalPublishedPosts: publishedPosts.length,
       totalPhotos,
@@ -639,6 +701,17 @@ export const AdminDashboard: React.FC = () => {
                 </button>
               );
             })}
+            <button
+              onClick={async () => {
+                await adminLogout();
+                onExit?.();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-medium text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 transition-colors cursor-pointer ml-1"
+              title="Sign Out of Admin Control Center"
+            >
+              <Power className="w-3 h-3 text-rose-400" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       </div>
@@ -899,6 +972,205 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Live New Sign-Ups & All Creator Applications Overview Panels */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Recent User Sign-Ups */}
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Users className="w-4 h-4 text-[#d4af37]" />
+                        <span>Newest Account Sign-Ups</span>
+                        {metrics.newSignUpsCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px]">
+                            {metrics.newSignUpsCount} New
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[11px] text-neutral-400">
+                        All newly registered accounts synced in real time across the platform
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserRoleFilter('all');
+                        setUserPage(1);
+                        setActiveSection('users');
+                      }}
+                      className="px-3 py-1.5 bg-[#1a1a22] hover:bg-[#23232e] border border-[#2e2e38] rounded-xl text-[11px] font-semibold text-[#fce7b0] cursor-pointer shrink-0"
+                    >
+                      View All Users ({allUnifiedUsers.length})
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    {allUnifiedUsers.slice(0, 8).map(u => {
+                      const isNew = isNewSignUpAccount(u);
+                      const userVerif = verifications.find(
+                        v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase()
+                      );
+                      const appStatus = userVerif?.status || u.creatorApplicationStatus;
+                      return (
+                        <div
+                          key={u.id}
+                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex items-center justify-between gap-3 text-xs transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={u.avatar}
+                              alt={u.name}
+                              className="w-9 h-9 rounded-full object-cover border border-[#2e2e38] shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-white truncate">{u.name}</span>
+                                {isNew && (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[9px] uppercase">
+                                    New Sign-Up
+                                  </span>
+                                )}
+                                {appStatus && appStatus !== 'not_applied' && (
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded font-mono text-[9px] uppercase border ${
+                                      appStatus === 'approved'
+                                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                        : appStatus === 'rejected'
+                                        ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                                        : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                                    }`}
+                                  >
+                                    Creator App: {appStatus.replace('_', ' ')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-neutral-400 truncate">
+                                @{u.username} · {u.email} · Joined {u.dateJoined}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="font-mono text-[10px] uppercase text-neutral-300 px-2 py-0.5 bg-[#121216] rounded border border-[#272730]">
+                              {u.role}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedUserDetailId(u.id);
+                                setActiveSection('users');
+                              }}
+                              className="px-2.5 py-1 bg-[#23232e] hover:bg-[#2c2c3a] text-white rounded-lg text-[11px] cursor-pointer"
+                            >
+                              Inspect
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* All Creator Applications Queue Summary */}
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-[#d4af37]" />
+                        <span>All Creator Applications</span>
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-[10px]">
+                          {metrics.pendingCreatorApps} Pending · {metrics.totalCreatorApps} Total
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-neutral-400">
+                        Creator onboarding applications and 18+ identity verification submissions
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerifStatusFilter('all');
+                        setActiveSection('creators');
+                      }}
+                      className="px-3 py-1.5 bg-[#1a1a22] hover:bg-[#23232e] border border-[#2e2e38] rounded-xl text-[11px] font-semibold text-[#fce7b0] cursor-pointer shrink-0"
+                    >
+                      Open Full Queue ({sortedVerifications.length})
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    {sortedVerifications.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-neutral-500 bg-[#18181f] rounded-xl border border-[#272730]">
+                        No creator applications submitted yet.
+                      </div>
+                    ) : (
+                      sortedVerifications.map(v => (
+                        <div
+                          key={v.id}
+                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex items-center justify-between gap-3 text-xs transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={v.selfieUrl}
+                              alt={v.name}
+                              className="w-9 h-9 rounded-lg object-cover border border-[#2e2e38] shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-white truncate">
+                                  {v.name} (@{v.username})
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-mono text-[9px] uppercase border ${
+                                    v.status === 'approved'
+                                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                      : v.status === 'rejected'
+                                      ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                                      : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                                  }`}
+                                >
+                                  {v.status.replace('_', ' ')}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-neutral-400 truncate">
+                                {v.applicationData?.category || 'Creator'} · {v.documentType.replace('_', ' ')} #{v.documentNumber} · {v.submittedAt}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {v.status !== 'approved' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  reviewVerification(
+                                    v.id,
+                                    'approved',
+                                    'Biometric 18+ ID and facial selfie match verified.'
+                                  );
+                                  notifyFeedback('success', `Approved creator application for ${v.name}.`);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-[11px] cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVerifStatusFilter('all');
+                                setActiveSection('creators');
+                              }}
+                              className="px-2.5 py-1 bg-[#23232e] hover:bg-[#2c2c3a] text-white rounded-lg text-[11px] cursor-pointer"
+                            >
+                              Review
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* 6 Real-Data Platform Analytics Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Chart 1 & 2: Revenue Breakdown by Vertical */}
@@ -1060,13 +1332,23 @@ export const AdminDashboard: React.FC = () => {
                 u.username.toLowerCase().includes(q) ||
                 u.email.toLowerCase().includes(q) ||
                 (u.country || '').toLowerCase().includes(q);
-              const matchesRole = userRoleFilter === 'all' || u.role === userRoleFilter;
+              const hasCreatorApp =
+                (u.creatorApplicationStatus && u.creatorApplicationStatus !== 'not_applied') ||
+                verifications.some(v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase());
+              const matchesRole =
+                userRoleFilter === 'all'
+                  ? true
+                  : userRoleFilter === 'new_signups'
+                  ? isNewSignUpAccount(u)
+                  : userRoleFilter === 'creator_applicants'
+                  ? Boolean(hasCreatorApp)
+                  : u.role === userRoleFilter;
               const st = u.accountStatus || 'active';
               const matchesStatus = userStatusFilter === 'all' || st === userStatusFilter;
               return matchesSearch && matchesRole && matchesStatus;
             });
 
-            const pageSize = 8;
+            const pageSize = 10;
             const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
             const paginatedUsers = filteredUsers.slice((userPage - 1) * pageSize, userPage * pageSize);
             const inspectedUser = selectedUserDetailId
@@ -1080,8 +1362,43 @@ export const AdminDashboard: React.FC = () => {
                     <div>
                       <h2 className="text-lg font-bold text-white">02. User Management &amp; Account Security</h2>
                       <p className="text-xs text-neutral-400 mt-0.5">
-                        Inspect registered accounts, manage roles, verify identities, enforce suspensions or bans, and review user transaction history.
+                        Inspect registered accounts, new sign-ups, creator applications, manage roles, verify identities, and enforce suspensions or bans.
                       </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => { setUserRoleFilter('all'); setUserPage(1); }}
+                        className={`px-3 py-1.5 rounded-xl border cursor-pointer ${
+                          userRoleFilter === 'all'
+                            ? 'bg-[#d4af37]/20 border-[#d4af37]/50 text-[#fce7b0] font-semibold'
+                            : 'bg-[#18181f] border-[#272730] text-neutral-300'
+                        }`}
+                      >
+                        All Accounts ({allUnifiedUsers.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setUserRoleFilter('new_signups'); setUserPage(1); }}
+                        className={`px-3 py-1.5 rounded-xl border cursor-pointer ${
+                          userRoleFilter === 'new_signups'
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-semibold'
+                            : 'bg-[#18181f] border-[#272730] text-neutral-300'
+                        }`}
+                      >
+                        New Sign-Ups ({metrics.newSignUpsCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setUserRoleFilter('creator_applicants'); setUserPage(1); }}
+                        className={`px-3 py-1.5 rounded-xl border cursor-pointer ${
+                          userRoleFilter === 'creator_applicants'
+                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-semibold'
+                            : 'bg-[#18181f] border-[#272730] text-neutral-300'
+                        }`}
+                      >
+                        Creator Applicants ({verifications.length})
+                      </button>
                     </div>
                   </div>
 
@@ -1099,10 +1416,12 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                     <select
                       value={userRoleFilter}
-                      onChange={e => { setUserRoleFilter(e.target.value as 'all' | UserRole); setUserPage(1); }}
+                      onChange={e => { setUserRoleFilter(e.target.value as 'all' | 'new_signups' | 'creator_applicants' | UserRole); setUserPage(1); }}
                       className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 text-white"
                     >
                       <option value="all">All Roles ({allUnifiedUsers.length})</option>
+                      <option value="new_signups">New Sign-Ups ({metrics.newSignUpsCount})</option>
+                      <option value="creator_applicants">Creator Applicants ({verifications.length})</option>
                       <option value="fan">Fans</option>
                       <option value="creator">Creators</option>
                       <option value="admin">Admins</option>
@@ -1127,7 +1446,7 @@ export const AdminDashboard: React.FC = () => {
                       <thead>
                         <tr className="border-b border-[#232329] text-neutral-400">
                           <th className="pb-3 font-medium">User / Account</th>
-                          <th className="pb-3 font-medium">Role</th>
+                          <th className="pb-3 font-medium">Role &amp; Creator App</th>
                           <th className="pb-3 font-medium">Status</th>
                           <th className="pb-3 font-medium">Joined / Country</th>
                           <th className="pb-3 font-medium">Wallet Balance</th>
@@ -1137,22 +1456,49 @@ export const AdminDashboard: React.FC = () => {
                       <tbody className="divide-y divide-[#1c1c22]">
                         {paginatedUsers.map(u => {
                           const accStatus = u.accountStatus || 'active';
+                          const isNew = isNewSignUpAccount(u);
+                          const matchedVerif = verifications.find(
+                            v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase()
+                          );
+                          const creatorAppStatus = matchedVerif?.status || u.creatorApplicationStatus;
                           return (
                             <tr key={u.id} className="hover:bg-[#16161d] transition-colors">
                               <td className="py-3.5 pr-4">
                                 <div className="flex items-center gap-3">
                                   <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover border border-[#2e2e38]" />
                                   <div>
-                                    <div className="font-semibold text-white flex items-center gap-1.5">
+                                    <div className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
                                       <span>{u.name}</span>
                                       {u.isVerified && <CheckCircle2 className="w-3.5 h-3.5 text-[#d4af37]" />}
+                                      {isNew && (
+                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[9px] uppercase">
+                                          New Sign-Up
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[11px] text-neutral-400">@{u.username} · {u.email}</div>
                                   </div>
                                 </div>
                               </td>
-                              <td className="py-3.5 pr-4 capitalize font-mono text-neutral-200">
-                                {u.adminPermissionLevel ? u.adminPermissionLevel.replace('_', ' ') : u.role}
+                              <td className="py-3.5 pr-4">
+                                <div className="capitalize font-mono text-neutral-200">
+                                  {u.adminPermissionLevel ? u.adminPermissionLevel.replace('_', ' ') : u.role}
+                                </div>
+                                {creatorAppStatus && creatorAppStatus !== 'not_applied' && (
+                                  <div className="mt-1">
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 rounded font-mono text-[9px] uppercase border ${
+                                        creatorAppStatus === 'approved'
+                                          ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                          : creatorAppStatus === 'rejected'
+                                          ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                                          : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                                      }`}
+                                    >
+                                      Creator App: {creatorAppStatus.replace('_', ' ')}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3.5 pr-4">
                                 <span
@@ -1179,6 +1525,18 @@ export const AdminDashboard: React.FC = () => {
                               </td>
                               <td className="py-3.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  {matchedVerif && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setVerifStatusFilter('all');
+                                        setActiveSection('creators');
+                                      }}
+                                      className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37]/30 border border-[#d4af37]/40 text-[#fce7b0] rounded-lg cursor-pointer text-[11px] font-semibold"
+                                    >
+                                      Review App
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => setSelectedUserDetailId(u.id)}
                                     className="px-2.5 py-1 bg-[#1e1e26] hover:bg-[#282833] text-neutral-200 rounded-lg cursor-pointer text-[11px]"
@@ -1251,7 +1609,7 @@ export const AdminDashboard: React.FC = () => {
                   {/* Pagination */}
                   <div className="flex items-center justify-between pt-2 text-xs text-neutral-400">
                     <span>
-                      Showing {(userPage - 1) * pageSize + 1}–{Math.min(userPage * pageSize, filteredUsers.length)} of {filteredUsers.length} accounts
+                      Showing {filteredUsers.length === 0 ? 0 : (userPage - 1) * pageSize + 1}–{Math.min(userPage * pageSize, filteredUsers.length)} of {filteredUsers.length} accounts
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1417,25 +1775,51 @@ export const AdminDashboard: React.FC = () => {
             const creatorPosts = posts.filter(p => p.creatorId === selectedCreator?.id);
             const creatorReqs = customRequests.filter(r => r.creatorId === selectedCreator?.id);
             const creatorSubs = subscriptions.filter(s => s.creatorId === selectedCreator?.id && s.status === 'active');
+            const filteredVerifications = sortedVerifications.filter(
+              v => verifStatusFilter === 'all' || v.status === verifStatusFilter
+            );
 
             return (
               <div className="space-y-6">
                 {/* Creator Applications & Identity Verification Queue */}
                 <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">03. Creator Applications &amp; 18+ Verification Queue</h2>
                       <p className="text-xs text-neutral-400 mt-0.5">
-                        Review government ID documents, facial selfie matches, and creator onboarding applications.
+                        Review government ID documents, facial selfie matches, and all creator onboarding applications.
                       </p>
                     </div>
-                    <span className="text-xs font-mono text-[#fce7b0]">
-                      {verifications.filter(v => v.status === 'pending').length} Pending Review
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {[
+                        { id: 'all', label: `All (${sortedVerifications.length})` },
+                        { id: 'pending', label: `Pending (${verifications.filter(v => v.status === 'pending').length})` },
+                        { id: 'info_requested', label: `Info Requested (${verifications.filter(v => v.status === 'info_requested').length})` },
+                        { id: 'approved', label: `Approved (${verifications.filter(v => v.status === 'approved').length})` },
+                        { id: 'rejected', label: `Rejected (${verifications.filter(v => v.status === 'rejected').length})` }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setVerifStatusFilter(tab.id as typeof verifStatusFilter)}
+                          className={`px-3 py-1.5 rounded-xl border cursor-pointer ${
+                            verifStatusFilter === tab.id
+                              ? 'bg-[#d4af37]/20 border-[#d4af37]/50 text-[#fce7b0] font-semibold'
+                              : 'bg-[#18181f] border-[#272730] text-neutral-300'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="space-y-3">
-                    {verifications.map(v => (
+                    {filteredVerifications.map(v => {
+                      const applicantAccount = allUnifiedUsers.find(
+                        u => u.id === v.userId || u.username.toLowerCase() === v.username.toLowerCase()
+                      );
+                      return (
                       <div key={v.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
                         <div className="space-y-1.5 flex-1">
                           <div className="flex items-center gap-2.5 flex-wrap">
@@ -1458,7 +1842,7 @@ export const AdminDashboard: React.FC = () => {
                             )}
                           </div>
                           <div className="text-neutral-400">
-                            Document: <strong className="text-neutral-200 capitalize">{v.documentType.replace('_', ' ')}</strong> · ID Number: <strong className="font-mono text-neutral-200">{v.documentNumber}</strong> · Submitted: {v.submittedAt}
+                            Account Email: <strong className="text-neutral-200">{applicantAccount?.email || `${v.username}@acovon.com`}</strong> · Document: <strong className="text-neutral-200 capitalize">{v.documentType.replace('_', ' ')}</strong> · ID Number: <strong className="font-mono text-neutral-200">{v.documentNumber}</strong> · Submitted: {v.submittedAt}
                           </div>
                           {v.applicationData?.bio && (
                             <div className="text-neutral-300 italic">"{v.applicationData.bio}"</div>
@@ -1510,7 +1894,8 @@ export const AdminDashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 

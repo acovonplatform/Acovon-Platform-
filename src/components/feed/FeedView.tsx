@@ -5,7 +5,6 @@ import { CATEGORIES } from '../../data/mockData';
 import { PostCard } from './PostCard';
 import { AdBanner } from '../ads/AdBanner';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { RoleTargetedAnnouncementBanners } from '../common/AnnouncementExperience';
 import { PlusCircle, Sparkles, Sliders, RotateCcw, EyeOff, Check, Unlock, Flame, Search, X } from 'lucide-react';
 
 interface FeedViewProps {
@@ -202,17 +201,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 overflow-x-hidden">
-
-      {/* Role-Targeted Dashboard Announcement Banners & Persistent Notices */}
-      <RoleTargetedAnnouncementBanners
-        onNavigate={(tab, creatorId) => {
-          if (onNavigate) onNavigate(tab, creatorId);
-        }}
-        onOpenWallet={onOpenWallet}
-        onOpenPrivacy={onOpenPrivacy}
-        onOpenHelpCenter={onOpenHelpCenter}
-      />
-
       {/* Horizontal Status / Stories Bar */}
       <div className="flex items-center gap-3 sm:gap-3.5 overflow-x-auto pb-3.5 mb-5 no-scrollbar border-b border-[#26262b]">
         {/* Creator's Own Story Button if user is a creator */}
@@ -363,12 +351,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#d4af37]/30"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-[#f4f4f5] flex items-center gap-1 truncate">
-                      <span className="truncate">{creator.name}</span>
-                      <VerifiedBadge creatorId={creator.id} size="xs" />
+                    <div className="text-xs font-bold text-[#f4f4f5] truncate">
+                      {creator.name}
                     </div>
-                    <div className="text-[10px] text-neutral-400 truncate">
-                      @{creator.username} · {creator.category}
+                    <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
+                      <span>@{creator.username}</span>
+                      <VerifiedBadge creatorId={creator.id} size="xs" />
+                      <span>· {creator.category}</span>
                     </div>
                   </div>
                 </button>

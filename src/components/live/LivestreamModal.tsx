@@ -286,10 +286,13 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  <h3 className="font-semibold text-white text-xs sm:text-base tracking-wide flex items-center gap-1 truncate">
-                    <span className="truncate">{stream.creatorName}</span>
-                    <VerifiedBadge creatorId={stream.creatorId} size="sm" />
+                  <h3 className="font-semibold text-white text-xs sm:text-base tracking-wide truncate">
+                    {stream.creatorName}
                   </h3>
+                  <span className="text-[11px] text-neutral-400 inline-flex items-center gap-1">
+                    <span>@{stream.creatorUsername}</span>
+                    <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                  </span>
                   {isEndedReplay ? (
                     <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#fce7b0]">
                       <Film className="w-3 h-3 text-[#d4af37]" />
@@ -412,11 +415,18 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                 {/* Active Video Stream */}
                 <video
                   ref={videoRef}
-                  src={stream.videoStreamUrl}
+                  src={stream.videoStreamUrl || '/videos/sample1.mp4'}
                   autoPlay
                   loop
                   muted={isMuted}
                   playsInline
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.src.includes('/videos/sample1.mp4')) {
+                      el.src = '/videos/sample1.mp4';
+                      el.load();
+                    }
+                  }}
                   className="w-full h-full object-cover"
                 />
 
@@ -763,7 +773,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                       </button>
 
                       <p className="text-[11px] text-zinc-500">
-                        Deducted instantly from your Acovon Wallet balance (${currentUser.walletBalance.toFixed(2)} available).
+                        Deducted instantly from your Acovon Wallet balance (${Number(currentUser?.walletBalance || 0).toFixed(2)} available).
                       </p>
                     </div>
                   )}

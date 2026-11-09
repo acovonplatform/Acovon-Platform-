@@ -199,7 +199,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Wallet className="w-4 h-4 text-[#b38f28] dark:text-[#d4af37]" />
                 <span className="text-xs font-mono font-medium tabular-nums text-stone-800 dark:text-neutral-200">
-                  ${currentUser.walletBalance.toFixed(2)}
+                  ${Number(currentUser?.walletBalance || 0).toFixed(2)}
                 </span>
               </button>
 

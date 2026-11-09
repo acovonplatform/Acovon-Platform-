@@ -342,11 +342,11 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
               <div>
                 <div className="flex items-center gap-1.5 font-semibold text-sm drop-shadow">
                   <span>{currentCreator.name}</span>
-                  <VerifiedBadge creatorId={currentCreator.id} size="xs" />
                   <span className="text-white/60 text-xs font-normal">· {formatTimeAgo(currentStatus.createdAt)}</span>
                 </div>
-                <div className="text-[11px] text-amber-300/90 font-medium">
-                  @{currentCreator.username}
+                <div className="text-[11px] text-amber-300/90 font-medium flex items-center gap-1">
+                  <span>@{currentCreator.username}</span>
+                  <VerifiedBadge creatorId={currentCreator.id} size="xs" />
                 </div>
               </div>
             </button>
@@ -495,13 +495,20 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             <div className="w-full h-full relative flex items-center justify-center bg-black">
               <video
                 ref={videoRef}
-                src={currentStatus.mediaUrl}
+                src={currentStatus.mediaUrl || '/videos/sample1.mp4'}
                 poster={currentStatus.thumbnailUrl}
                 playsInline
                 autoPlay
                 muted={isMuted}
                 loop={false}
                 onEnded={goToNextStory}
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (!el.src.includes('/videos/sample1.mp4')) {
+                    el.src = '/videos/sample1.mp4';
+                    el.load();
+                  }
+                }}
                 className="w-full h-full object-cover"
               />
             </div>

@@ -1,19 +1,10 @@
 import { CreatorProfile, Post, Livestream, LiveChatMessage } from '../types';
 
 export const DEMO_MEDIA_VIDEOS = [
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyblazes.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4'
+  ,
+  ,
+  ,
+  
 ];
 
 export const DEMO_POSTS: Post[] = [
@@ -29,8 +20,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_elena_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        url: '/videos/sample1.mp4',
+        previewUrl: '/videos/sample2.mp4',
         thumbnailUrl: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
         durationSeconds: 840
       }
@@ -60,7 +51,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_clip_elena_1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        url: '/videos/sample3.mp4',
         thumbnailUrl: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
         durationSeconds: 30
       }
@@ -147,7 +138,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_marcus_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        url: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 310
       }
@@ -174,8 +165,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_marcus_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+        url: '/videos/sample1.mp4',
+        previewUrl: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 1840
       }
@@ -228,8 +219,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_sarah_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+        url: '/videos/sample3.mp4',
+        previewUrl: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 2700
       }
@@ -257,7 +248,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_sarah_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+        url: '/videos/sample1.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 420
       }
@@ -314,7 +305,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_kai_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        url: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 734
       }
@@ -340,8 +331,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_kai_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        url: '/videos/sample3.mp4',
+        previewUrl: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 1200
       }
@@ -400,7 +391,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_maya_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
+        url: '/videos/sample1.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 580
       }
@@ -426,8 +417,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_maya_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+        url: '/videos/sample2.mp4',
+        previewUrl: '/videos/sample3.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 2100
       }
@@ -486,7 +477,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_leo_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        url: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 910
       }
@@ -512,8 +503,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_leo_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyblazes.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyblazes.mp4',
+        url: '/videos/sample1.mp4',
+        previewUrl: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 1540
       }
@@ -572,7 +563,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_chloe_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
+        url: '/videos/sample3.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 640
       }
@@ -598,8 +589,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_chloe_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+        url: '/videos/sample4.mp4',
+        previewUrl: '/videos/sample1.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 2400
       }
@@ -658,7 +649,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_alex_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        url: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 1120
       }
@@ -684,8 +675,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_alex_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        url: '/videos/sample3.mp4',
+        previewUrl: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 5400
       }
@@ -744,7 +735,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_zara_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+        url: '/videos/sample1.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 380
       }
@@ -770,8 +761,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_zara_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        url: '/videos/sample2.mp4',
+        previewUrl: '/videos/sample3.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1518834107812-67b0b7c58434?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 1650
       }
@@ -830,7 +821,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_david_v1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+        url: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 600
       }
@@ -856,8 +847,8 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_david_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        previewUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        url: '/videos/sample1.mp4',
+        previewUrl: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 3600
       }
@@ -947,7 +938,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_marcus_jam',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+        url: '/videos/sample3.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 450
       }
@@ -973,7 +964,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_sarah_ankles',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
+        url: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 320
       }
@@ -1024,7 +1015,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_leo_clip_video',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyblazes.mp4',
+        url: '/videos/sample1.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 45
       }
@@ -1050,7 +1041,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_sarah_free_f1',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        url: '/videos/sample2.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 720
       }
@@ -1138,7 +1129,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_chloe_pub_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+        url: '/videos/sample3.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 490
       }
@@ -1164,7 +1155,7 @@ export const DEMO_POSTS: Post[] = [
       {
         id: 'media_alex_pub_v2',
         type: 'video',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        url: '/videos/sample4.mp4',
         thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
         durationSeconds: 960
       }
@@ -1229,7 +1220,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 640.00,
     startedAt: '35 minutes ago',
     expectedDurationMinutes: 90,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    videoStreamUrl: '/videos/sample1.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1295,7 +1286,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 380.00,
     startedAt: '18 minutes ago',
     expectedDurationMinutes: 60,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    videoStreamUrl: '/videos/sample2.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1342,7 +1333,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 4017.32,
     startedAt: '40 minutes ago',
     expectedDurationMinutes: 75,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    videoStreamUrl: '/videos/sample3.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1391,7 +1382,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 0,
     scheduledFor: 'Tomorrow, 7:00 PM EST',
     expectedDurationMinutes: 90,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4',
+    videoStreamUrl: '/videos/sample4.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1434,7 +1425,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 520.00,
     startedAt: '15 minutes ago',
     expectedDurationMinutes: 120,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    videoStreamUrl: '/videos/sample1.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1472,7 +1463,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 0,
     scheduledFor: 'Friday, 10:00 AM CET',
     expectedDurationMinutes: 120,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
+    videoStreamUrl: '/videos/sample2.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1513,7 +1504,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 410.00,
     startedAt: '50 minutes ago',
     expectedDurationMinutes: 120,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    videoStreamUrl: '/videos/sample3.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1554,7 +1545,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     totalRevenue: 0,
     scheduledFor: 'Sunday, 6:30 PM SAST',
     expectedDurationMinutes: 60,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    videoStreamUrl: '/videos/sample4.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1598,7 +1589,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     startedAt: '2 days ago',
     endedAt: '2026-11-01',
     expectedDurationMinutes: 85,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    videoStreamUrl: '/videos/sample1.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1651,7 +1642,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     startedAt: '5 days ago',
     endedAt: '2026-10-29',
     expectedDurationMinutes: 70,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    videoStreamUrl: '/videos/sample2.mp4',
     isDemo: true,
     settings: {
       enableTips: true,
@@ -1703,7 +1694,7 @@ export const DEMO_LIVESTREAMS: Livestream[] = [
     startedAt: '4 days ago',
     endedAt: '2026-10-30',
     expectedDurationMinutes: 65,
-    videoStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    videoStreamUrl: '/videos/sample3.mp4',
     isDemo: true,
     settings: {
       enableTips: true,

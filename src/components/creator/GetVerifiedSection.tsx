@@ -310,19 +310,14 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
                 alt={creator.name}
                 className="w-16 h-16 rounded-full object-cover border-2 border-neutral-700"
               />
-              {badgeActive && (
-                <div className="absolute -bottom-1 -right-1 bg-neutral-950 rounded-full p-0.5">
-                  <VerifiedBadge creatorId={creator.id} size="md" />
-                </div>
-              )}
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-lg font-bold text-white">{creator.name}</h2>
-                <VerifiedBadge creatorId={creator.id} size="md" />
-              </div>
+              <h2 className="text-lg font-bold text-white">{creator.name}</h2>
               <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
-                <span>@{creator.username}</span>
+                <span className="inline-flex items-center gap-1 font-medium text-neutral-200">
+                  @{creator.username}
+                  <VerifiedBadge creatorId={creator.id} size="xs" />
+                </span>
                 <span aria-hidden="true">·</span>
                 <span>Creator ID: {creator.id}</span>
               </div>
@@ -474,14 +469,16 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
                   className="w-11 h-11 rounded-full object-cover"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-white truncate">{creator.name}</span>
-                    <VerifiedBadge forceShow size="sm" />
+                  <div className="text-sm font-bold text-white truncate">
+                    {creator.name}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-neutral-400 truncate">
-                    <span>@{creator.username}</span>
+                    <span className="inline-flex items-center gap-1 font-medium text-neutral-200">
+                      @{creator.username}
+                      <VerifiedBadge forceShow size="xs" />
+                    </span>
                     <span aria-hidden="true">·</span>
-                    <span className="text-sky-400">Verified Creator</span>
+                    <span className="text-neutral-400">Verified Creator</span>
                   </div>
                 </div>
               </div>

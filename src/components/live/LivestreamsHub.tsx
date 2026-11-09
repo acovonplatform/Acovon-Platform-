@@ -335,9 +335,12 @@ export const LivestreamsHub: React.FC = () => {
                           alt={stream.creatorName}
                           className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
                         />
-                        <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1">
-                          {stream.creatorName}
-                          <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                        <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                          <span className="truncate">{stream.creatorName}</span>
+                          <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
+                            @{stream.creatorUsername}
+                            <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                          </span>
                         </span>
                         <span className="text-[11px] text-zinc-500 font-mono ml-auto">
                           {stream.startedAt || 'Active'}
@@ -415,8 +418,11 @@ export const LivestreamsHub: React.FC = () => {
                   </h4>
                   <div className="flex items-center gap-1.5 mt-1 text-[11px] text-zinc-400">
                     <span className="inline-flex items-center gap-1 text-zinc-200 font-medium">
-                      {stream.creatorName}
-                      <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                      <span>{stream.creatorName}</span>
+                      <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
+                        @{stream.creatorUsername}
+                        <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                      </span>
                     </span>
                     <span>·</span>
                     <span>{stream.expectedDurationMinutes} min duration</span>
@@ -569,9 +575,12 @@ export const LivestreamsHub: React.FC = () => {
                           alt={stream.creatorName}
                           className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
                         />
-                        <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1">
-                          {stream.creatorName}
-                          <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                        <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                          <span className="truncate">{stream.creatorName}</span>
+                          <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
+                            @{stream.creatorUsername}
+                            <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                          </span>
                         </span>
                         <span className="text-[10px] text-zinc-500 font-mono ml-auto">
                           {stream.endedAt || stream.startedAt}
