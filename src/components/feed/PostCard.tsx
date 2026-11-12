@@ -33,7 +33,10 @@ import {
   ThumbsDown,
   EyeOff,
   UserX,
-  RotateCcw
+  RotateCcw,
+  Edit3,
+  Trash2,
+  MapPin
 } from 'lucide-react';
 
 interface PostCardProps {
@@ -63,6 +66,11 @@ export const PostCard: React.FC<PostCardProps> = ({
 }) => {
   const { 
     currentUser, 
+    isAuthenticated,
+    isCurrentUserApprovedCreator,
+    activeRole,
+    setEditingPost,
+    setDeletingPost,
     toggleLikePost, 
     unlockPPVPost, 
     isPostPurchased, 
@@ -120,6 +128,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   const hasLoggedWatch50Ref = useRef(false);
 
   const isAuthor = currentUser.id === post.creatorId;
+  const isCreatorOwner =
+    isAuthenticated &&
+    currentUser.id === post.creatorId &&
+    (currentUser.role === 'creator' || isCurrentUserApprovedCreator || activeRole === 'creator');
   const isPurchased = isPostPurchased(post.id);
   const isSubscribed = isSubscribedTo(post.creatorId);
   const isFollowingCreator = isFollowing(post.creatorId);
@@ -683,6 +695,43 @@ export const PostCard: React.FC<PostCardProps> = ({
 
               {showOptionsMenu && (
                 <div className="absolute right-0 top-9 z-40 w-60 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c36] rounded-2xl shadow-2xl p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
+                  {isCreatorOwner && (
+                    <>
+                      <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#d4af37] border-b border-[#23232c]">
+                        Creator Post Controls
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOptionsMenu(false);
+                          setEditingPost(post);
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-100 hover:bg-[#1f1f29] hover:text-[#fce7b0] transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                        <div>
+                          <div className="font-semibold">Edit Post</div>
+                          <div className="text-[10px] text-neutral-400">Caption, tags, category, country &amp; media</div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOptionsMenu(false);
+                          setDeletingPost(post);
+                        }}
+                        className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <div>
+                          <div className="font-semibold">Delete Post</div>
+                          <div className="text-[10px] text-rose-300/80">Remove from profile &amp; feed</div>
+                        </div>
+                      </button>
+                      <div className="border-t border-[#23232c] my-1" />
+                    </>
+                  )}
+
                   <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400 border-b border-[#23232c]">
                     Feed Personalization
                   </div>
@@ -796,6 +845,40 @@ export const PostCard: React.FC<PostCardProps> = ({
 
             {showOptionsMenu && (
               <div className="absolute right-0 top-9 z-40 w-56 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c36] rounded-2xl shadow-2xl p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
+                {isCreatorOwner && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        setEditingPost(post);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-neutral-100 hover:bg-[#1f1f29] hover:text-[#fce7b0] transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                      <div>
+                        <div className="font-semibold">Edit Post</div>
+                        <div className="text-[10px] text-neutral-400">Update post details &amp; media</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        setDeletingPost(post);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Delete Post</div>
+                        <div className="text-[10px] text-rose-300/80">Remove from profile &amp; feed</div>
+                      </div>
+                    </button>
+                    <div className="border-t border-[#23232c] my-1" />
+                  </>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -823,13 +906,19 @@ export const PostCard: React.FC<PostCardProps> = ({
         </p>
         <TranslateContentButton text={post.content} contentType="post" className="mt-2" />
         
-        {post.categories && post.categories.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {post.categories.map(cat => (
+        {((post.categories && post.categories.length > 0) || post.country) && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {post.categories?.map(cat => (
               <span key={cat} className="px-2.5 py-0.5 rounded-lg text-[10px] font-semibold bg-[#1a1a22] text-[#fce7b0] border border-[#2e2e38]">
                 {cat}
               </span>
             ))}
+            {post.country && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-[#16161d] text-neutral-300 border border-[#272732]">
+                <MapPin className="w-2.5 h-2.5 text-[#d4af37]" />
+                {post.country}
+              </span>
+            )}
           </div>
         )}
 

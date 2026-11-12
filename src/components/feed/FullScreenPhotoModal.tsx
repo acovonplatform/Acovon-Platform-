@@ -42,16 +42,25 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
   const { 
     posts, 
     currentUser, 
+    isAuthenticated,
     toggleLikePost, 
     isFollowing, 
     toggleFollowCreator, 
     isPostSaved, 
     toggleSavePost, 
-    isSubscribedTo 
+    isSubscribedTo,
+    setEditingPost,
+    setDeletingPost
   } = useApp();
 
-  // Find posts with images
-  const photoPosts = posts.filter(p => p.media && p.media.some(m => m.type === 'image'));
+  // Find active posts with images
+  const photoPosts = posts.filter(
+    p =>
+      !p.isDeletedByCreator &&
+      p.moderationStatus !== 'removed' &&
+      p.media &&
+      p.media.some(m => m.type === 'image')
+  );
   const initialPostIndex = photoPosts.findIndex(p => p.id === initialPostId);
   const [currentPostIndex, setCurrentPostIndex] = useState(initialPostIndex >= 0 ? initialPostIndex : 0);
   
@@ -466,6 +475,31 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
               <Share2 className="w-4 h-4" />
               <span>Share</span>
             </button>
+
+            {isAuthenticated && isAuthor && currentUser.role === 'creator' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    setEditingPost(currentPost);
+                  }}
+                  className="px-3 py-1.5 bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#fce7b0] hover:bg-[#d4af37]/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <span>Edit Post</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    setDeletingPost(currentPost);
+                  }}
+                  className="px-3 py-1.5 bg-red-950/50 border border-red-500/40 text-red-400 hover:bg-red-900/50 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <span>Delete Post</span>
+                </button>
+              </>
+            )}
           </div>
 
         </div>

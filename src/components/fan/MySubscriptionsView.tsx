@@ -50,7 +50,14 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
   const subscribedCreatorIds = activeSubs.map(s => s.creatorId);
 
   // Filtered posts from subscribed creators
-  const subscribedPosts = posts.filter(p => subscribedCreatorIds.includes(p.creatorId));
+  const subscribedPosts = posts.filter(
+    p =>
+      subscribedCreatorIds.includes(p.creatorId) &&
+      !p.isDeletedByCreator &&
+      p.moderationStatus !== 'removed' &&
+      !p.isDraft &&
+      p.visibility !== 'private'
+  );
 
   // Filtered subscriptions based on search query
   const filteredSubs = subscriptions.filter(sub => {

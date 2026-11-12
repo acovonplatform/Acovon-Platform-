@@ -28,7 +28,10 @@ import {
   List,
   Play,
   Heart,
-  Crown
+  Crown,
+  MoreHorizontal,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 interface CreatorProfilePageProps {
@@ -54,6 +57,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     creators, 
     posts, 
     currentUser, 
+    isAuthenticated,
+    isCurrentUserApprovedCreator,
+    activeRole,
+    setEditingPost,
+    setDeletingPost,
     initiateVideoCall, 
     subscribeToCreator, 
     isSubscribedTo, 
@@ -66,6 +74,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
   const [activeTab, setActiveTab] = useState<'posts' | 'highlights' | 'vault' | 'tiers' | 'settings'>('posts');
   const [contentViewMode, setContentViewMode] = useState<'grid' | 'feed'>('grid');
+  const [openGridMenuPostId, setOpenGridMenuPostId] = useState<string | null>(null);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   const [showCallLimitModal, setShowCallLimitModal] = useState(false);
   const [showCustomReqModal, setShowCustomReqModal] = useState(false);
@@ -87,10 +96,20 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
   const creator = creators.find(c => c.id === creatorId) || creators[0];
   const isOwner = currentUser.id === creator.id;
+  const isCreatorOwner =
+    isAuthenticated &&
+    currentUser.id === creator.id &&
+    (currentUser.role === 'creator' || isCurrentUserApprovedCreator || activeRole === 'creator');
   const isSubscribed = isSubscribedTo(creator.id);
   const activeSub = getSubscriptionTier(creator.id);
 
-  const creatorPosts = posts.filter(p => p.creatorId === creator.id);
+  const creatorPosts = posts.filter(
+    p =>
+      p.creatorId === creator.id &&
+      !p.isDeletedByCreator &&
+      p.moderationStatus !== 'removed' &&
+      (isCreatorOwner || (!p.isDraft && p.visibility !== 'private'))
+  );
   const highlightPosts = creatorPosts.filter(p => p.isHighlight || p.tags?.includes('Highlight'));
   const ppvPosts = creatorPosts.filter(p => p.visibility === 'pay_per_view');
 
@@ -442,13 +461,61 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                             )}
                           </div>
 
-                          <span className="p-1 rounded-md bg-black/60 text-white/90 backdrop-blur-xs border border-white/10 shrink-0">
-                            {isVideo ? (
-                              <Video className="w-3 h-3 text-[#d4af37]" />
-                            ) : (
-                              <Film className="w-3 h-3 text-neutral-300" />
+                          <div className="flex items-center gap-1 pointer-events-auto">
+                            <span className="p-1 rounded-md bg-black/60 text-white/90 backdrop-blur-xs border border-white/10 shrink-0 pointer-events-none">
+                              {isVideo ? (
+                                <Video className="w-3 h-3 text-[#d4af37]" />
+                              ) : (
+                                <Film className="w-3 h-3 text-neutral-300" />
+                              )}
+                            </span>
+
+                            {isCreatorOwner && (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setOpenGridMenuPostId(prev => (prev === post.id ? null : post.id));
+                                  }}
+                                  className="p-1 rounded-md bg-black/80 hover:bg-black text-white border border-white/20 cursor-pointer shadow-md"
+                                  title="Manage Post"
+                                >
+                                  <MoreHorizontal className="w-3.5 h-3.5" />
+                                </button>
+
+                                {openGridMenuPostId === post.id && (
+                                  <div
+                                    onClick={e => e.stopPropagation()}
+                                    className="absolute right-0 top-7 w-40 bg-[#14141a] border border-[#2c2c38] rounded-xl shadow-2xl p-1 text-xs space-y-0.5 z-30"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenGridMenuPostId(null);
+                                        setEditingPost(post);
+                                      }}
+                                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 text-left text-neutral-100 hover:bg-[#20202b] hover:text-[#fce7b0] font-semibold cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5 text-[#d4af37]" />
+                                      <span>Edit Post</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenGridMenuPostId(null);
+                                        setDeletingPost(post);
+                                      }}
+                                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 text-left text-rose-400 hover:bg-rose-950/40 font-semibold cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <span>Delete Post</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             )}
-                          </span>
+                          </div>
                         </div>
 
                         {/* Centered Play Button on Hover */}

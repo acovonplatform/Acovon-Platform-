@@ -16,6 +16,8 @@ import { AdminSetupPage } from './components/admin/AdminSetupPage';
 import { AdminAccessDenied } from './components/admin/AdminAccessDenied';
 import { WalletModal } from './components/wallet/WalletModal';
 import { CreatePostModal } from './components/feed/CreatePostModal';
+import { EditPostModal } from './components/feed/EditPostModal';
+import { DeletePostModal } from './components/feed/DeletePostModal';
 import { VideoCallModal } from './components/videocall/VideoCallModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { AdFreeModal } from './components/ads/AdFreeModal';
@@ -560,6 +562,10 @@ function AppContent() {
       {showWallet && <WalletModal onClose={() => setShowWallet(false)} />}
       
       {showCreatePost && isCreator && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
+
+      {/* Creator Post Editing & Deletion Modals */}
+      <EditPostModal />
+      <DeletePostModal />
 
       {showBecomeCreator && (
         <BecomeCreatorModal

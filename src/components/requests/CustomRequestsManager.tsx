@@ -29,6 +29,7 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
   onNavigateToMessages
 }) => {
   const { 
+    creators,
     customRequests, 
     currentUser, 
     activeRole, 

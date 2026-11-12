@@ -4,6 +4,8 @@ import {
   CreatorProfile,
   CreatorTier,
   Post,
+  PostEditAuditRecord,
+  UpdatePostPayload,
   Subscription,
   ContentPurchase,
   CustomVideoRequest,
@@ -239,6 +241,15 @@ interface AppContextType {
   // Actions
   toggleLikePost: (postId: string) => void;
   createPost: (newPost: Omit<Post, 'id' | 'likesCount' | 'commentsCount' | 'createdAt'>) => void;
+  updateCreatorPost: (postId: string, updates: UpdatePostPayload) => Promise<{ success: boolean; error?: string; requiresPurchaseWarning?: boolean; updatedPost?: Post }>;
+  deleteCreatorPost: (postId: string, reason?: string) => Promise<{ success: boolean; error?: string; hadPurchases?: boolean; purchaseCount?: number }>;
+  getPostPurchaseCount: (postId: string) => number;
+  getPostPurchases: (postId: string) => ContentPurchase[];
+  postAuditLogs: PostEditAuditRecord[];
+  editingPost: Post | null;
+  setEditingPost: (post: Post | null) => void;
+  deletingPost: Post | null;
+  setDeletingPost: (post: Post | null) => void;
   unlockPPVPost: (postId: string) => { success: boolean; error?: string };
   subscribeToCreator: (creatorId: string, tierId: string) => { success: boolean; error?: string };
   cancelSubscription: (subscriptionId: string) => void;
@@ -1447,7 +1458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_posts');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 25) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
@@ -1456,6 +1467,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return MOCK_POSTS;
   });
+  const [postAuditLogs, setPostAuditLogs] = useState<PostEditAuditRecord[]>([]);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [deletingPost, setDeletingPost] = useState<Post | null>(null);
+
+  // Sync persisted creator post edits & deletions from backend on mount
+  useEffect(() => {
+    let active = true;
+    fetch('/api/posts/state')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!active || !data || !data.success) return;
+        const updatedMap = data.updatedPosts || {};
+        const deletedIds: string[] = Array.isArray(data.deletedPostIds) ? data.deletedPostIds : [];
+        if (Array.isArray(data.postAuditLogs)) {
+          setPostAuditLogs(data.postAuditLogs);
+        }
+        if (Object.keys(updatedMap).length > 0 || deletedIds.length > 0) {
+          setPosts(prev => {
+            const merged = prev.map(p => {
+              const override = updatedMap[p.id];
+              const isDel = deletedIds.includes(p.id) || override?.isDeletedByCreator;
+              if (override) {
+                return {
+                  ...p,
+                  ...override,
+                  isDeletedByCreator: Boolean(isDel),
+                  moderationStatus: isDel ? ('removed' as ContentModerationStatus) : (override.moderationStatus || p.moderationStatus)
+                };
+              }
+              if (isDel) {
+                return {
+                  ...p,
+                  isDeletedByCreator: true,
+                  moderationStatus: 'removed' as ContentModerationStatus
+                };
+              }
+              return p;
+            });
+            return merged;
+          });
+        }
+      })
+      .catch(() => {
+        // ignore offline fallback
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const resetDemoContent = () => {
     try {
@@ -3215,15 +3275,193 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       likesCount: 0,
       commentsCount: 0,
       createdAt: 'Just now',
-      isLiked: false
+      isLiked: false,
+      publicationStatus: newPostData.isDraft ? 'draft' : newPostData.scheduledFor ? 'scheduled' : 'published'
     };
     setPosts(prev => [newPost, ...prev]);
+  };
+
+  const getPostPurchases = (postId: string): ContentPurchase[] => {
+    return purchases.filter(p => p.postId === postId);
+  };
+
+  const getPostPurchaseCount = (postId: string): number => {
+    return purchases.filter(p => p.postId === postId).length;
+  };
+
+  const updateCreatorPost = async (
+    postId: string,
+    updates: UpdatePostPayload
+  ): Promise<{ success: boolean; error?: string; requiresPurchaseWarning?: boolean; updatedPost?: Post }> => {
+    const existingPost = posts.find(p => p.id === postId);
+    if (!existingPost) {
+      return { success: false, error: 'Post not found.' };
+    }
+
+    const isCreatorAuthorized = currentUser.role === 'creator' || isCurrentUserApprovedCreator || activeRole === 'creator';
+    const isAdminAuthorized = currentUser.role === 'admin' || currentUser.role === 'moderator';
+
+    if (!isAuthenticated || (!isCreatorAuthorized && !isAdminAuthorized)) {
+      return { success: false, error: 'Forbidden: Only authenticated creators can edit posts.' };
+    }
+
+    if (currentUser.id !== existingPost.creatorId && !isAdminAuthorized) {
+      return { success: false, error: 'Forbidden: You can only edit posts owned by your creator account.' };
+    }
+
+    if (existingPost.isDeletedByCreator) {
+      return { success: false, error: 'This post has been deleted and cannot be edited.' };
+    }
+
+    const purchaseCount = getPostPurchaseCount(postId);
+
+    try {
+      const response = await fetch(`/api/posts/${encodeURIComponent(postId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          isApprovedCreator: isCreatorAuthorized,
+          postOwnerId: existingPost.creatorId,
+          existingPost,
+          updates,
+          purchaseCount
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          requiresPurchaseWarning: data?.requiresPurchaseWarning,
+          error: data?.error || 'Failed to save post changes.'
+        };
+      }
+
+      const serverUpdatedPost: Post = data.updatedPost;
+      setPosts(prev => prev.map(p => (p.id === postId ? { ...p, ...serverUpdatedPost } : p)));
+      if (data.auditEntry) {
+        setPostAuditLogs(prev => [data.auditEntry, ...prev]);
+      }
+
+      logAdminAction({
+        category: 'content_moderation',
+        action: 'Creator Edited Published Post',
+        targetType: 'Post',
+        targetId: postId,
+        targetLabel: `${serverUpdatedPost.creatorName}: "${serverUpdatedPost.content.slice(0, 42)}..."`,
+        details: data.auditEntry?.summary || 'Updated post details',
+        severity: 'info'
+      });
+
+      return { success: true, updatedPost: serverUpdatedPost };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error while updating post.';
+      return { success: false, error: msg };
+    }
+  };
+
+  const deleteCreatorPost = async (
+    postId: string,
+    reason = 'Creator deleted post'
+  ): Promise<{ success: boolean; error?: string; hadPurchases?: boolean; purchaseCount?: number }> => {
+    const existingPost = posts.find(p => p.id === postId);
+    if (!existingPost) {
+      return { success: false, error: 'Post not found.' };
+    }
+
+    const isCreatorAuthorized = currentUser.role === 'creator' || isCurrentUserApprovedCreator || activeRole === 'creator';
+    const isAdminAuthorized = currentUser.role === 'admin' || currentUser.role === 'moderator';
+
+    if (!isAuthenticated || (!isCreatorAuthorized && !isAdminAuthorized)) {
+      return { success: false, error: 'Forbidden: Only authenticated creators can delete posts.' };
+    }
+
+    if (currentUser.id !== existingPost.creatorId && !isAdminAuthorized) {
+      return { success: false, error: 'Forbidden: You can only delete posts owned by your creator account.' };
+    }
+
+    if (existingPost.isDeletedByCreator) {
+      return { success: false, error: 'This post has already been deleted.' };
+    }
+
+    const purchaseCount = getPostPurchaseCount(postId);
+
+    try {
+      const response = await fetch(`/api/posts/${encodeURIComponent(postId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          isApprovedCreator: isCreatorAuthorized,
+          postOwnerId: existingPost.creatorId,
+          existingPost,
+          purchaseCount,
+          reason
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data?.error || 'Failed to delete post.'
+        };
+      }
+
+      const hadPurchases = Boolean(data.hadPurchases);
+      setPosts(prev =>
+        prev.map(p =>
+          p.id === postId
+            ? {
+                ...p,
+                isDeletedByCreator: true,
+                deletedAt: data.deletedPost?.deletedAt || new Date().toISOString().replace('T', ' ').slice(0, 16),
+                deletedByCreatorId: currentUser.id,
+                deletionReason: reason,
+                publicationStatus: hadPurchases ? 'archived_for_purchasers' : 'deleted',
+                moderationStatus: 'removed'
+              }
+            : p
+        )
+      );
+
+      if (data.auditEntry) {
+        setPostAuditLogs(prev => [data.auditEntry, ...prev]);
+      }
+
+      logAdminAction({
+        category: 'content_moderation',
+        action: hadPurchases ? 'Creator Deleted Post (Safe Purchaser Archive)' : 'Creator Deleted Post',
+        targetType: 'Post',
+        targetId: postId,
+        targetLabel: `${existingPost.creatorName}: "${existingPost.content.slice(0, 42)}..."`,
+        details: data.auditEntry?.summary || reason,
+        severity: 'warning'
+      });
+
+      return {
+        success: true,
+        hadPurchases,
+        purchaseCount
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error while deleting post.';
+      return { success: false, error: msg };
+    }
   };
 
   // Pay-per-view unlock with genuine server/wallet simulation & commission splitting
   const unlockPPVPost = (postId: string) => {
     const post = posts.find(p => p.id === postId);
     if (!post || !post.ppvPrice) return { success: false, error: 'Post or price not found' };
+    if (post.isDeletedByCreator || post.moderationStatus === 'removed') {
+      return { success: false, error: 'This post is no longer available for purchase.' };
+    }
 
     const price = post.ppvPrice;
     if (currentUser.walletBalance < price) {
@@ -8347,7 +8585,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const profile = fanInterestProfiles[targetFanId] || activeFanInterestProfile;
 
     // Moderation & account status checks
-    if (post.moderationStatus === 'removed' || post.isDraft) return false;
+    if (post.isDeletedByCreator || post.moderationStatus === 'removed' || post.isDraft || post.visibility === 'private') return false;
     const creator = creators.find(c => c.id === post.creatorId);
     if (creator && (creator.accountStatus === 'suspended' || creator.accountStatus === 'banned')) {
       return false;
@@ -8732,7 +8970,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Step 1: Candidate Eligibility & Strict Access Filtering
     const candidates = posts.filter(post => {
-      if (post.moderationStatus === 'removed' || post.isDraft) return false;
+      if (post.isDeletedByCreator || post.moderationStatus === 'removed' || post.isDraft || post.visibility === 'private') return false;
       if (suspendedCreatorIds.has(post.creatorId)) return false;
 
       // Never show posts from hidden creators or posts explicitly marked Not Interested
@@ -10651,6 +10889,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         incrementReplayView,
         toggleLikePost,
         createPost,
+        updateCreatorPost,
+        deleteCreatorPost,
+        getPostPurchaseCount,
+        getPostPurchases,
+        postAuditLogs,
+        editingPost,
+        setEditingPost,
+        deletingPost,
+        setDeletingPost,
         unlockPPVPost,
         subscribeToCreator,
         cancelSubscription,

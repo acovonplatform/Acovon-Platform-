@@ -45,8 +45,8 @@ import { MonetizationRatesSection } from './MonetizationRatesSection';
 import { ProfilePreviewSection } from './ProfilePreviewSection';
 import { MyStatusSection } from './MyStatusSection';
 import { GetVerifiedSection } from './GetVerifiedSection';
+import { MyPostsManagementSection } from './MyPostsManagementSection';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { RoleTargetedAnnouncementBanners } from '../common/AnnouncementExperience';
 
 export type StudioCategory = 'PROFILE' | 'VERIFICATION' | 'CONTENT' | 'MONETIZATION' | 'AUDIENCE' | 'LIVE' | 'PROMOTION' | 'ANALYTICS';
 
@@ -142,7 +142,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   }
 
   const creator = currentUser as CreatorProfile;
-  const myPosts = posts.filter(p => p.creatorId === creator.id);
+  const myPosts = posts.filter(p => p.creatorId === creator.id && !p.isDeletedByCreator && p.moderationStatus !== 'removed');
   const highlightClips = myPosts.filter(p => p.isHighlight);
   const mySubscribersCount = creator.subscribersCount || 0;
   const myEarnings = creator.totalEarnings || 0;
@@ -284,23 +284,14 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6 overflow-x-hidden">
 
-      {/* Creator-Targeted & Platform-Wide Announcement Banners / Persistent Notices */}
-      <RoleTargetedAnnouncementBanners
-        onNavigate={(tab) => {
-          if (tab === 'requests') onNavigateToRequests();
-          else if (tab === 'wallet') onOpenWallet();
-        }}
-        onOpenWallet={onOpenWallet}
-      />
-
       {/* Top Banner & Quick Metrics */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#26262b]">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-bold font-brand tracking-wide text-white">Creator Studio</h1>
-            <span className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
-              · {creator.name}
-              <VerifiedBadge creatorId={creator.id} size="sm" showLabel />
+            <span className="text-xs font-medium text-neutral-300 inline-flex items-center gap-1">
+              · @{creator.username}
+              <VerifiedBadge creatorId={creator.id} size="xs" />
             </span>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
@@ -520,96 +511,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: My Posts */}
           {activeSubItem === 'my_posts' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-white">My Published Content</h3>
-                  <p className="text-xs text-neutral-400">Manage visibility, likes, pay-per-view prices, and adaptive streaming ladders.</p>
-                </div>
-                <button
-                  onClick={onOpenCreatePost}
-                  className="px-4 py-2 bg-[#d4af37] text-black text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Upload New</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {myPosts.map(p => {
-                  const firstMedia = p.media[0];
-                  return (
-                    <div key={p.id} className="bg-[#121215] border border-[#27272a] rounded-2xl overflow-hidden flex flex-col justify-between">
-                      <div className="relative aspect-video bg-black">
-                        {firstMedia && (
-                          firstMedia.type === 'video' ? (
-                            <video
-                              src={
-                                firstMedia.url &&
-                                !firstMedia.url.includes('cdn.acovon.media') &&
-                                !firstMedia.url.endsWith('.m3u8')
-                                  ? firstMedia.url
-                                  : firstMedia.previewUrl && !firstMedia.previewUrl.includes('cdn.acovon.media') && !firstMedia.previewUrl.endsWith('.m3u8')
-                                  ? firstMedia.previewUrl
-                                  : '/videos/sample1.mp4'
-                              }
-                              poster={firstMedia.thumbnailUrl !== firstMedia.url ? firstMedia.thumbnailUrl : undefined}
-                              controls
-                              playsInline
-                              preload="metadata"
-                              onError={(e) => {
-                                const el = e.currentTarget;
-                                if (!el.src.includes('/videos/sample1.mp4')) {
-                                  el.src = '/videos/sample1.mp4';
-                                  el.load();
-                                }
-                              }}
-                              className="w-full h-full object-contain"
-                            />
-                          ) : (
-                            <img 
-                              src={firstMedia.thumbnailUrl || firstMedia.url} 
-                              alt="" 
-                              className="w-full h-full object-cover" 
-                            />
-                          )
-                        )}
-                        <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap pointer-events-none">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/70 backdrop-blur-md text-white border border-white/20 capitalize">
-                            {p.visibility}
-                          </span>
-                          {p.ppvPrice && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#d4af37] text-black font-mono">
-                              ${p.ppvPrice.toFixed(2)} PPV
-                            </span>
-                          )}
-                          {p.isHighlight && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white flex items-center gap-1">
-                              <Scissors className="w-2.5 h-2.5" />
-                              <span>Highlight</span>
-                            </span>
-                          )}
-                        </div>
-                        {firstMedia?.type === 'video' && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1 pointer-events-none">
-                            <span className="px-2 py-0.5 rounded bg-black/80 border border-emerald-500/40 text-[9px] font-mono text-emerald-300">
-                              HLS • {firstMedia.availableCodecs?.[0] || 'AV1'} • -{firstMedia.compressionRatio || 64}% size
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4 space-y-2">
-                        <p className="text-xs text-neutral-200 line-clamp-2">{p.content}</p>
-                        <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-2 border-t border-[#26262b]">
-                          <span>{p.likesCount} Likes · {p.commentsCount} Comments</span>
-                          <span>{p.createdAt}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <MyPostsManagementSection onOpenCreatePost={onOpenCreatePost} />
           )}
 
           {/* Sub-item: Upload Content & Background Video Compression Queue */}

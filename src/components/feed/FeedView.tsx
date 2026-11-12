@@ -104,13 +104,17 @@ export const FeedView: React.FC<FeedViewProps> = ({
         post.content.toLowerCase().includes(q) ||
         post.creatorName.toLowerCase().includes(q) ||
         post.creatorUsername.toLowerCase().includes(q) ||
+        (post.country && post.country.toLowerCase().includes(q)) ||
         (post.tags && post.tags.some(t => t.toLowerCase().includes(q.replace(/^#/, '')))) ||
         (post.categories && post.categories.some(c => c.toLowerCase().includes(q)))
       );
     };
 
     if (feedFilter === 'for_you' || feedFilter === 'free_posts') {
-      return recommendedResults.map(r => r.post).filter(matchesQuery);
+      return recommendedResults
+        .map(r => r.post)
+        .filter(p => !p.isDeletedByCreator && p.moderationStatus !== 'removed' && (p.creatorId === currentUser.id || p.visibility !== 'private'))
+        .filter(matchesQuery);
     }
 
     const hiddenCreators = new Set(activeFanInterestProfile?.hiddenCreatorIds || []);
@@ -120,7 +124,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
     ]);
 
     return posts.filter(post => {
-      if (post.moderationStatus === 'removed') return false;
+      if (post.isDeletedByCreator || post.moderationStatus === 'removed') return false;
+      if (post.isDraft && post.creatorId !== currentUser.id) return false;
+      if (post.visibility === 'private' && post.creatorId !== currentUser.id) return false;
       if (suspendedCreatorIds.has(post.creatorId)) return false;
       if (hiddenPosts.has(post.id)) return false;
       if (hiddenCreators.has(post.creatorId) && post.creatorId !== currentUser.id) return false;
@@ -278,10 +284,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-[#09090b]" />
                 )}
               </div>
-              <span className={`text-[11px] font-medium truncate max-w-[76px] inline-flex items-center gap-1 transition-colors ${
+              <span className={`text-[11px] font-medium truncate max-w-[84px] inline-flex items-center gap-0.5 transition-colors ${
                 isUnseen ? 'text-amber-200 font-semibold' : 'text-neutral-300 group-hover:text-white'
               }`}>
-                <span className="truncate">{c.name.split(' ')[0]}</span>
+                <span className="truncate">@{c.username}</span>
                 <VerifiedBadge creatorId={c.id} size="xs" />
               </span>
             </button>

@@ -1363,10 +1363,11 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-1.5">
                     <span>{inspectedCreatorRow.creator.name}</span>
-                    <VerifiedBadge creatorId={inspectedCreatorRow.creator.id} size="sm" />
                   </h3>
-                  <div className="text-xs text-neutral-400">
-                    @{inspectedCreatorRow.creator.username} · ID: {inspectedCreatorRow.creator.id}
+                  <div className="text-xs text-neutral-400 inline-flex items-center gap-1">
+                    <span>@{inspectedCreatorRow.creator.username}</span>
+                    <VerifiedBadge creatorId={inspectedCreatorRow.creator.id} size="xs" />
+                    <span>· ID: {inspectedCreatorRow.creator.id}</span>
                   </div>
                 </div>
               </div>

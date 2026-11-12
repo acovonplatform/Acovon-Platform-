@@ -111,7 +111,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   });
 
   const filteredPosts = posts.filter(p => {
-    if (p.moderationStatus === 'removed') return false;
+    if (p.isDeletedByCreator || p.moderationStatus === 'removed' || p.isDraft || p.visibility === 'private') return false;
     if ((activeFanInterestProfile?.notInterestedPostIds || []).includes(p.id)) return false;
     if ((activeFanInterestProfile?.hiddenCreatorIds || []).includes(p.creatorId)) return false;
 
@@ -119,6 +119,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
       p.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.creatorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.creatorUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.country && p.country.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.tags && p.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))) ||
       (p.categories && p.categories.some(c => c.toLowerCase().includes(searchQuery.toLowerCase())));
 
@@ -159,54 +160,6 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
       
       {/* Title & Search */}
       <div className="max-w-3xl mb-6 space-y-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-bold font-brand tracking-wide text-white">
-              Explore Acovon
-            </h1>
-            {showDemoBadges && (
-              <span className="text-[10px] font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[#fce7b0]">
-                DEMO LIBRARY: {DEMO_STATS.totalCreators} CREATORS · {DEMO_STATS.totalVideos} PLAYABLE VIDEOS · {DEMO_STATS.totalPhotos}+ PHOTOS
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-neutral-400">
-            Browse verified demonstration creators, playable masterclasses, high-definition photography galleries, and personalized recommendations.
-          </p>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex items-center gap-2 border-b border-[#26262b] pb-2">
-          <button
-            onClick={() => setActiveTab('creators')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'creators'
-                ? 'bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20 font-bold'
-                : 'bg-[#141418] border border-[#27272a] text-neutral-400 hover:text-white'
-            }`}
-          >
-            <span>Creators Directory</span>
-            <span className="px-1.5 py-0.2 rounded-md bg-black/20 text-[10px]">
-              {creators.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('media_library')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'media_library'
-                ? 'bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20 font-bold'
-                : 'bg-[#141418] border border-[#27272a] text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Film className="w-3.5 h-3.5" />
-            <span>Demonstration Media Library</span>
-            <span className="px-1.5 py-0.2 rounded-md bg-black/20 text-[10px]">
-              {posts.length} posts
-            </span>
-          </button>
-        </div>
-
         {/* Search bar */}
         <form onSubmit={handleSearchSubmit} className="relative">
           <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
@@ -231,184 +184,6 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
             className="w-full bg-[#121215] border border-[#27272a] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
           />
         </form>
-
-        {/* Personalized Hashtags Strip */}
-        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-          <span className="text-neutral-400 font-mono text-[10px] uppercase tracking-wider mr-1">
-            Trending Tags For You:
-          </span>
-          {personalizedHashtags.map(tag => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => {
-                setSearchQuery(tag);
-                trackEngagementEvent({
-                  eventType: 'hashtag_clicked',
-                  tags: [tag],
-                  surface: 'explore'
-                });
-              }}
-              className={`px-2 py-0.5 rounded-lg border transition-colors cursor-pointer ${
-                searchQuery.toLowerCase() === tag
-                  ? 'bg-[#d4af37]/20 border-[#d4af37] text-[#fce7b0] font-semibold'
-                  : 'bg-[#141418] border-[#27272a] text-neutral-400 hover:text-[#fce7b0]'
-              }`}
-            >
-              #{tag}
-            </button>
-          ))}
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="text-[10px] text-neutral-400 hover:text-white underline ml-1 cursor-pointer"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Personalized Discovery Spotlight Section */}
-      {!searchQuery && selectedCategory === 'All Categories' && (
-        <div className="mb-8 p-5 rounded-3xl bg-[#121216] border border-[#272730] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#22222b] pb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#d4af37]" />
-              <h2 className="text-sm font-bold text-white">
-                Personalized Discovery For {activeFanInterestProfile.fanName.split(' (')[0]}
-              </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#d4af37]/15 border border-[#d4af37]/30 text-[#fce7b0]">
-                {activeFanInterestProfile.personaLabel}
-              </span>
-            </div>
-            <span className="text-[11px] text-neutral-400">
-              Curated creators, high-completion videos &amp; rising talent matched to your interest graph
-            </span>
-          </div>
-
-          {activeTab === 'creators' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {recommendedCreatorsForYou.map(({ creator, score, reason, isRisingNewCreator }) => (
-                <div
-                  key={creator.id}
-                  onClick={() => {
-                    trackEngagementEvent({
-                      eventType: 'creator_profile_opened',
-                      creatorId: creator.id,
-                      category: creator.category,
-                      surface: 'explore'
-                    });
-                    onSelectCreator(creator.id);
-                  }}
-                  className="p-3.5 rounded-2xl bg-[#17171e] hover:bg-[#1e1e28] border border-[#2a2a35] hover:border-[#d4af37]/50 cursor-pointer transition-all flex flex-col justify-between gap-2.5"
-                >
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={creator.avatar}
-                      alt={creator.name}
-                      className="w-11 h-11 rounded-xl object-cover border border-[#d4af37]/40 shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white truncate">
-                        {creator.name}
-                      </div>
-                      <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
-                        <span>@{creator.username}</span>
-                        <VerifiedBadge creatorId={creator.id} size="xs" />
-                        <span>· {creator.category}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1 pt-1 border-t border-[#24242f]">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-mono font-bold text-[#fce7b0]">{score}% Match</span>
-                      {isRisingNewCreator && (
-                        <span className="px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 font-mono text-[9px]">
-                          Rising Talent
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-neutral-400 truncate">{reason}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              {recommendedMediaForYou.map(({ post, totalScore, primaryReason }) => {
-                const media = post.media[0];
-                const isVid = media?.type === 'video';
-                return (
-                  <div
-                    key={post.id}
-                    onClick={() => {
-                      if (isVid && onOpenVideoPlayer) {
-                        onOpenVideoPlayer(post.id, 0);
-                      } else if (!isVid && onOpenPhotoViewer) {
-                        onOpenPhotoViewer(post.id, 0);
-                      } else {
-                        setActivePreviewPost(post);
-                      }
-                    }}
-                    className="p-3 rounded-2xl bg-[#17171e] hover:bg-[#1e1e28] border border-[#2a2a35] hover:border-[#d4af37]/50 cursor-pointer transition-all flex items-center gap-3"
-                  >
-                    <div className="relative w-20 h-16 rounded-xl overflow-hidden bg-black shrink-0">
-                      <img
-                        src={media?.thumbnailUrl || media?.url}
-                        alt={post.content}
-                        className="w-full h-full object-cover"
-                      />
-                      {isVid && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <Play className="w-4 h-4 text-[#d4af37] fill-[#d4af37]" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-white truncate">{post.creatorName}</span>
-                        <span className="text-[10px] font-mono text-[#fce7b0] shrink-0">{Math.round(totalScore)}%</span>
-                      </div>
-                      <p className="text-[11px] text-neutral-300 line-clamp-1">{post.content}</p>
-                      <div className="text-[10px] text-[#d4af37] truncate">{primaryReason}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Category Filter Horizontal Scroll */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 text-xs no-scrollbar">
-        {CATEGORIES.map(cat => {
-          const isSelected = selectedCategory === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => {
-                setSelectedCategory(cat);
-                if (cat !== 'All Categories') {
-                  trackEngagementEvent({
-                    eventType: 'category_selected',
-                    category: cat,
-                    surface: 'explore'
-                  });
-                }
-              }}
-              className={`px-3.5 py-1.5 rounded-xl whitespace-nowrap transition-colors cursor-pointer ${
-                isSelected
-                  ? 'bg-[#d4af37] text-black font-semibold shadow-md shadow-[#d4af37]/20'
-                  : 'bg-[#141418] border border-[#27272a] text-neutral-400 hover:text-white'
-              }`}
-            >
-              {cat}
-            </button>
-          );
-        })}
       </div>
 
       {/* Fast Filter Toggles for Creators Tab */}

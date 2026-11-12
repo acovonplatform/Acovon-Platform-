@@ -516,39 +516,97 @@ export const SubscriptionManagementModal: React.FC<{
 };
 
 export const PurchaseHistoryModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { purchases, transactions } = useApp();
+  const { purchases, transactions, posts, currentUser } = useApp();
+  const myPurchases = purchases.filter(p => p.userId === currentUser.id);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0">
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Purchase & Transaction History</h3>
+            <h3 className="font-brand text-lg font-bold text-white">Purchase &amp; Transaction History</h3>
           </div>
           <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-2.5 max-h-80 overflow-y-auto">
-          {transactions.map(t => (
-            <div key={t.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
-              <div>
-                <div className="font-semibold text-white capitalize">{t.description || t.type.replace('_', ' ')}</div>
-                <div className="text-[10px] text-neutral-500">{t.createdAt} · ID: {t.id}</div>
+        <div className="space-y-4 overflow-y-auto pr-1">
+          {myPurchases.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-[#fce7b0] flex items-center justify-between">
+                <span>Unlocked PPV Content ({myPurchases.length})</span>
+                <span className="text-[10px] text-emerald-400 font-normal">Lifetime Buyer Protection Active</span>
               </div>
-              <div className="text-right">
-                <div className={`font-mono font-bold ${t.type.includes('tip_received') || t.type.includes('deposit') ? 'text-emerald-400' : 'text-neutral-200'}`}>
-                  {t.type.includes('tip_received') || t.type.includes('deposit') ? '+' : '-'}${t.amount.toFixed(2)}
-                </div>
-                <span className="text-[10px] text-emerald-400 capitalize">{t.status}</span>
-              </div>
+              {myPurchases.map(purchase => {
+                const post = posts.find(p => p.id === purchase.postId);
+                const mediaList =
+                  post?.preservedMediaForPurchasers && post.preservedMediaForPurchasers.length > 0
+                    ? post.preservedMediaForPurchasers
+                    : post?.media || [];
+                const firstMedia = mediaList[0];
+
+                return (
+                  <div
+                    key={purchase.id}
+                    className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {firstMedia && (
+                        <img
+                          src={firstMedia.thumbnailUrl || firstMedia.url}
+                          alt="Purchased media"
+                          className="w-11 h-11 rounded-lg object-cover border border-[#2e2e38] shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-white truncate">
+                          {post ? post.content : `Unlocked Post #${purchase.postId}`}
+                        </div>
+                        <div className="text-[10px] text-neutral-400 flex items-center gap-2 flex-wrap mt-0.5">
+                          <span>Paid ${purchase.amount.toFixed(2)}</span>
+                          <span>·</span>
+                          <span>{purchase.purchasedAt}</span>
+                          {post?.isDeletedByCreator && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-500/30 text-amber-300 text-[9px] font-semibold">
+                              Archived by Creator · Buyer Vault Preserved
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-emerald-400 shrink-0">
+                      Unlocked
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
+
+          <div className="space-y-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+              Ledger Transactions ({transactions.length})
+            </div>
+            {transactions.map(t => (
+              <div key={t.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+                <div>
+                  <div className="font-semibold text-white capitalize">{t.description || t.type.replace('_', ' ')}</div>
+                  <div className="text-[10px] text-neutral-500">{t.createdAt} · ID: {t.id}</div>
+                </div>
+                <div className="text-right">
+                  <div className={`font-mono font-bold ${t.type.includes('tip_received') || t.type.includes('deposit') ? 'text-emerald-400' : 'text-neutral-200'}`}>
+                    {t.type.includes('tip_received') || t.type.includes('deposit') ? '+' : '-'}${t.amount.toFixed(2)}
+                  </div>
+                  <span className="text-[10px] text-emerald-400 capitalize">{t.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="pt-3 border-t border-[#27272a] text-right">
+        <div className="pt-3 border-t border-[#27272a] text-right shrink-0">
           <button onClick={onClose} className="px-4 py-1.5 text-xs bg-[#22222a] hover:bg-[#2b2b35] text-white rounded-lg transition-colors cursor-pointer">
             Close
           </button>

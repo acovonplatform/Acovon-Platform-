@@ -19,6 +19,7 @@ import {
 
 export const VideoCallModal: React.FC = () => {
   const { 
+    creators,
     videoCallSession, 
     endVideoCall, 
     updateCallDuration, 
@@ -241,7 +242,7 @@ export const VideoCallModal: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>{videoCallSession.creatorName}</span>
                 <span className="text-neutral-400 text-[11px] inline-flex items-center gap-0.5">
-                  @{videoCallSession.creatorUsername || videoCallSession.creatorName.toLowerCase().replace(/\s+/g, '')}
+                  @{creators.find(c => c.id === videoCallSession.creatorId)?.username || videoCallSession.creatorName.toLowerCase().replace(/\s+/g, '')}
                   <VerifiedBadge creatorId={videoCallSession.creatorId} size="xs" />
                 </span>
                 <span className="text-neutral-400">(Live 1080p WebRTC)</span>

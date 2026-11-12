@@ -162,6 +162,37 @@ export interface MediaAsset {
   previewFrames?: string[];
 }
 
+export interface PostEditAuditRecord {
+  id: string;
+  postId: string;
+  creatorId: string;
+  creatorName: string;
+  action: 'edited' | 'media_replaced' | 'deleted' | 'archived_with_purchases';
+  changedFields: string[];
+  hadExistingPurchases: boolean;
+  purchaseCount: number;
+  summary: string;
+  timestamp: string;
+}
+
+export interface UpdatePostPayload {
+  content?: string;
+  tags?: string[];
+  categories?: string[];
+  country?: string;
+  visibility?: PostVisibility;
+  ppvPrice?: number;
+  ppvPreviewDuration?: 10 | 15 | 30;
+  thumbnailUrl?: string;
+  media?: MediaAsset[];
+  commentsDisabled?: boolean;
+  downloadsDisabled?: boolean;
+  isPinned?: boolean;
+  isDraft?: boolean;
+  scheduledFor?: string;
+  confirmMediaReplacementForPurchasers?: boolean;
+}
+
 export interface Post {
   id: string;
   creatorId: string;
@@ -176,15 +207,26 @@ export interface Post {
   previewDurationSeconds?: number;
   likesCount: number;
   commentsCount: number;
+  viewsCount?: number;
+  sharesCount?: number;
   isLiked?: boolean;
   isPinned?: boolean;
   createdAt: string;
+  updatedAt?: string;
   tags?: string[];
   categories?: string[];
+  country?: string;
   fileName?: string;
   fileSize?: number;
   scheduledFor?: string;
   isDraft?: boolean;
+  publicationStatus?: 'published' | 'scheduled' | 'draft' | 'archived_for_purchasers' | 'deleted';
+  isDeletedByCreator?: boolean;
+  deletedAt?: string;
+  deletedByCreatorId?: string;
+  deletionReason?: string;
+  preservedMediaForPurchasers?: MediaAsset[];
+  editHistory?: PostEditAuditRecord[];
   commentsDisabled?: boolean;
   downloadsDisabled?: boolean;
   isPromoted?: boolean;

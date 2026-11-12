@@ -17,6 +17,61 @@ if (!fs.existsSync(DATA_DIR)) {
 const ADMIN_SETUP_FILE = path.join(DATA_DIR, 'admin_setup.json');
 const ADMIN_USERS_FILE = path.join(DATA_DIR, 'admin_users.json');
 const ADMIN_AUDIT_FILE = path.join(DATA_DIR, 'admin_audit_logs.json');
+const CREATOR_POSTS_FILE = path.join(DATA_DIR, 'creator_posts_overrides.json');
+const POST_AUDIT_FILE = path.join(DATA_DIR, 'post_audit_logs.json');
+
+interface StoredPostsState {
+  updatedPosts: Record<string, any>;
+  deletedPostIds: string[];
+  archivedPostsForPurchasers: Record<string, any>;
+}
+
+function readPostsState(): StoredPostsState {
+  try {
+    if (fs.existsSync(CREATOR_POSTS_FILE)) {
+      const raw = fs.readFileSync(CREATOR_POSTS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          updatedPosts: parsed.updatedPosts || {},
+          deletedPostIds: Array.isArray(parsed.deletedPostIds) ? parsed.deletedPostIds : [],
+          archivedPostsForPurchasers: parsed.archivedPostsForPurchasers || {}
+        };
+      }
+    }
+  } catch (err) {
+    console.error('Error reading creator_posts_overrides.json:', err);
+  }
+  return { updatedPosts: {}, deletedPostIds: [], archivedPostsForPurchasers: {} };
+}
+
+function writePostsState(state: StoredPostsState): void {
+  fs.writeFileSync(CREATOR_POSTS_FILE, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+function readPostAuditLogs(): any[] {
+  try {
+    if (fs.existsSync(POST_AUDIT_FILE)) {
+      const raw = fs.readFileSync(POST_AUDIT_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error('Error reading post_audit_logs.json:', err);
+  }
+  return [];
+}
+
+function appendPostAuditLog(entry: any): void {
+  try {
+    let logs = readPostAuditLogs();
+    logs.unshift(entry);
+    if (logs.length > 1000) logs = logs.slice(0, 1000);
+    fs.writeFileSync(POST_AUDIT_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error appending post audit log:', err);
+  }
+}
 
 // Supabase credentials if available
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://jggfwquxgrkbuvwnkmgv.supabase.co';
@@ -136,7 +191,7 @@ function appendAuditLog(entry: AuditLogRecord): void {
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '25mb' }));
 
   const publicDir = path.resolve(__dirname, 'public');
   if (fs.existsSync(publicDir)) {
@@ -492,6 +547,408 @@ async function startServer() {
       return res.json([]);
     } catch {
       return res.json([]);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Get Persisted Creator Posts State & Audit History
+  // --------------------------------------------------------------------------
+  app.get('/api/posts/state', (_req, res) => {
+    try {
+      const state = readPostsState();
+      const postAuditLogs = readPostAuditLogs();
+      return res.json({
+        success: true,
+        ...state,
+        postAuditLogs
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load post state';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Creator Edit Post (Strict Ownership Verification & Purchaser Protection)
+  // --------------------------------------------------------------------------
+  app.put('/api/posts/:postId', async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const {
+        actorId,
+        actorName,
+        actorRole,
+        isApprovedCreator,
+        postOwnerId,
+        existingPost,
+        updates,
+        purchaseCount = 0
+      } = req.body || {};
+
+      if (!postId || !existingPost) {
+        return res.status(400).json({
+          success: false,
+          error: 'Bad Request: Missing postId or post record.'
+        });
+      }
+
+      // 1. Strict Authentication & Role Verification
+      if (!actorId || typeof actorId !== 'string') {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: You must be signed in as an approved creator to edit posts.'
+        });
+      }
+
+      const isCreatorAuthorized = actorRole === 'creator' || Boolean(isApprovedCreator);
+      const isAdminAuthorized = actorRole === 'admin' || actorRole === 'moderator';
+
+      if (!isCreatorAuthorized && !isAdminAuthorized) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Fans and guests are not permitted to edit creator posts.'
+        });
+      }
+
+      // 2. Strict Post Ownership Verification (Never trust postId without checking creator ownership)
+      const state = readPostsState();
+      const storedPost = state.updatedPosts[postId] || existingPost;
+      const authoritativeOwnerId = storedPost?.creatorId || postOwnerId;
+
+      if (!authoritativeOwnerId || (actorId !== authoritativeOwnerId && !isAdminAuthorized)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only edit posts that belong to your own creator account.'
+        });
+      }
+
+      if (state.deletedPostIds.includes(postId) || storedPost?.isDeletedByCreator) {
+        return res.status(409).json({
+          success: false,
+          error: 'Conflict: This post has already been deleted and cannot be edited.'
+        });
+      }
+
+      // 3. Field Validation
+      if (!updates || typeof updates !== 'object') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid update payload.'
+        });
+      }
+
+      if (updates.content !== undefined && (typeof updates.content !== 'string' || updates.content.trim().length === 0)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Post description/caption cannot be empty.'
+        });
+      }
+
+      const allowedVisibilities = ['public', 'followers', 'subscribers', 'pay_per_view', 'private'];
+      if (updates.visibility !== undefined && !allowedVisibilities.includes(updates.visibility)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid post visibility option.'
+        });
+      }
+
+      if (updates.visibility === 'pay_per_view' || (updates.visibility === undefined && storedPost.visibility === 'pay_per_view')) {
+        const nextPrice = updates.ppvPrice !== undefined ? Number(updates.ppvPrice) : Number(storedPost.ppvPrice || 9.99);
+        if (!Number.isFinite(nextPrice) || nextPrice < 0.99 || nextPrice > 1000) {
+          return res.status(400).json({
+            success: false,
+            error: 'Pay-To-View price must be between $0.99 and $1,000.00.'
+          });
+        }
+      }
+
+      // 4. Existing Purchaser Protection Check when replacing media
+      const isMediaReplaced =
+        Array.isArray(updates.media) &&
+        updates.media.length > 0 &&
+        JSON.stringify(updates.media.map((m: any) => m.url)) !==
+          JSON.stringify((storedPost.media || []).map((m: any) => m.url));
+
+      if (isMediaReplaced && Number(purchaseCount) > 0 && !updates.confirmMediaReplacementForPurchasers) {
+        return res.status(409).json({
+          success: false,
+          requiresPurchaseWarning: true,
+          error: `This post has already been unlocked by ${purchaseCount} fan(s). Replacing attached media requires confirming that original purchased media will be preserved for existing buyers.`
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const changedFields: string[] = [];
+
+      if (updates.content !== undefined && updates.content.trim() !== storedPost.content) changedFields.push('content');
+      if (updates.tags !== undefined) changedFields.push('tags');
+      if (updates.categories !== undefined) changedFields.push('categories');
+      if (updates.country !== undefined && updates.country !== storedPost.country) changedFields.push('country');
+      if (updates.visibility !== undefined && updates.visibility !== storedPost.visibility) changedFields.push('visibility');
+      if (updates.ppvPrice !== undefined && Number(updates.ppvPrice) !== Number(storedPost.ppvPrice)) changedFields.push('ppvPrice');
+      if (updates.thumbnailUrl !== undefined) changedFields.push('thumbnailUrl');
+      if (isMediaReplaced) changedFields.push('media');
+      if (updates.commentsDisabled !== undefined) changedFields.push('commentsDisabled');
+      if (updates.downloadsDisabled !== undefined) changedFields.push('downloadsDisabled');
+
+      // Apply thumbnail update to media if provided
+      let nextMedia = Array.isArray(updates.media) && updates.media.length > 0
+        ? updates.media
+        : Array.isArray(storedPost.media)
+        ? [...storedPost.media]
+        : [];
+
+      if (updates.thumbnailUrl && nextMedia.length > 0) {
+        nextMedia = nextMedia.map((m: any, idx: number) =>
+          idx === 0 ? { ...m, thumbnailUrl: updates.thumbnailUrl } : m
+        );
+      }
+
+      // Preserve original media for existing purchasers if media was replaced
+      const preservedMediaForPurchasers =
+        isMediaReplaced && Number(purchaseCount) > 0
+          ? storedPost.preservedMediaForPurchasers || storedPost.media
+          : storedPost.preservedMediaForPurchasers;
+
+      const auditEntry = {
+        id: `post_audit_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
+        postId,
+        creatorId: authoritativeOwnerId,
+        creatorName: actorName || storedPost.creatorName || 'Creator',
+        action: isMediaReplaced ? 'media_replaced' : 'edited',
+        changedFields: changedFields.length > 0 ? changedFields : ['metadata'],
+        hadExistingPurchases: Number(purchaseCount) > 0,
+        purchaseCount: Number(purchaseCount) || 0,
+        summary: `Creator updated post (${(changedFields.length > 0 ? changedFields : ['metadata']).join(', ')}).${
+          Number(purchaseCount) > 0 ? ` Existing ${purchaseCount} purchaser entitlement(s) preserved.` : ''
+        }`,
+        timestamp: nowIso.replace('T', ' ').slice(0, 16)
+      };
+
+      const updatedPost = {
+        ...storedPost,
+        content: updates.content !== undefined ? updates.content.trim() : storedPost.content,
+        tags: Array.isArray(updates.tags)
+          ? updates.tags.map((t: string) => String(t).replace(/^#/, '').trim()).filter(Boolean)
+          : storedPost.tags,
+        categories: Array.isArray(updates.categories) && updates.categories.length > 0
+          ? updates.categories
+          : storedPost.categories,
+        country: updates.country !== undefined ? String(updates.country).trim() : storedPost.country,
+        visibility: updates.visibility !== undefined ? updates.visibility : storedPost.visibility,
+        ppvPrice:
+          (updates.visibility || storedPost.visibility) === 'pay_per_view'
+            ? Number(updates.ppvPrice ?? storedPost.ppvPrice ?? 9.99)
+            : storedPost.ppvPrice,
+        ppvPreviewDuration: updates.ppvPreviewDuration ?? storedPost.ppvPreviewDuration,
+        media: nextMedia,
+        preservedMediaForPurchasers,
+        commentsDisabled: updates.commentsDisabled !== undefined ? Boolean(updates.commentsDisabled) : storedPost.commentsDisabled,
+        downloadsDisabled: updates.downloadsDisabled !== undefined ? Boolean(updates.downloadsDisabled) : storedPost.downloadsDisabled,
+        isPinned: updates.isPinned !== undefined ? Boolean(updates.isPinned) : storedPost.isPinned,
+        isDraft: updates.isDraft !== undefined ? Boolean(updates.isDraft) : storedPost.isDraft,
+        scheduledFor: updates.scheduledFor !== undefined ? updates.scheduledFor : storedPost.scheduledFor,
+        // Preserve engagement & financial records unconditionally
+        likesCount: storedPost.likesCount ?? existingPost.likesCount ?? 0,
+        commentsCount: storedPost.commentsCount ?? existingPost.commentsCount ?? 0,
+        viewsCount: storedPost.viewsCount ?? existingPost.viewsCount,
+        sharesCount: storedPost.sharesCount ?? existingPost.sharesCount,
+        createdAt: storedPost.createdAt || existingPost.createdAt,
+        updatedAt: nowIso.replace('T', ' ').slice(0, 16),
+        editHistory: [auditEntry, ...(Array.isArray(storedPost.editHistory) ? storedPost.editHistory : [])]
+      };
+
+      state.updatedPosts[postId] = updatedPost;
+      writePostsState(state);
+      appendPostAuditLog(auditEntry);
+
+      appendAuditLog({
+        id: `audit_post_edit_${Date.now()}`,
+        adminId: actorId,
+        adminName: actorName || storedPost.creatorName || 'Creator',
+        adminRole: actorRole || 'creator',
+        category: 'content_moderation',
+        action: isMediaReplaced ? 'Creator Replaced Post Media (Purchaser Safe)' : 'Creator Edited Published Post',
+        targetType: 'Post',
+        targetId: postId,
+        targetLabel: `${updatedPost.creatorName}: "${updatedPost.content.slice(0, 42)}..."`,
+        details: auditEntry.summary,
+        severity: 'info',
+        timestamp: auditEntry.timestamp
+      });
+
+      if (supabase) {
+        try {
+          await (supabase as any)
+            .from('posts')
+            .update({
+              caption: updatedPost.content,
+              visibility: updatedPost.visibility,
+              ppv_price: updatedPost.ppvPrice || 0,
+              updated_at: nowIso
+            })
+            .eq('id', postId)
+            .eq('creator_id', authoritativeOwnerId);
+        } catch {
+          // ignore optional remote sync error
+        }
+      }
+
+      return res.json({
+        success: true,
+        updatedPost,
+        auditEntry
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update post';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Creator Delete Post (Strict Ownership Verification & Safe Archival)
+  // --------------------------------------------------------------------------
+  app.delete('/api/posts/:postId', async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const {
+        actorId,
+        actorName,
+        actorRole,
+        isApprovedCreator,
+        postOwnerId,
+        existingPost,
+        purchaseCount = 0,
+        reason = 'Creator deleted post'
+      } = req.body || {};
+
+      if (!postId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Bad Request: Missing postId.'
+        });
+      }
+
+      // 1. Strict Authentication & Role Verification
+      if (!actorId || typeof actorId !== 'string') {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: You must be signed in as an approved creator to delete posts.'
+        });
+      }
+
+      const isCreatorAuthorized = actorRole === 'creator' || Boolean(isApprovedCreator);
+      const isAdminAuthorized = actorRole === 'admin' || actorRole === 'moderator';
+
+      if (!isCreatorAuthorized && !isAdminAuthorized) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Fans and guests are not permitted to delete creator posts.'
+        });
+      }
+
+      const state = readPostsState();
+      const storedPost = state.updatedPosts[postId] || existingPost;
+      const authoritativeOwnerId = storedPost?.creatorId || postOwnerId;
+
+      // 2. Strict Post Ownership Verification
+      if (!authoritativeOwnerId || (actorId !== authoritativeOwnerId && !isAdminAuthorized)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You can only delete posts that belong to your own creator account.'
+        });
+      }
+
+      // 3. Prevent Duplicate Deletion Requests
+      if (state.deletedPostIds.includes(postId) || storedPost?.isDeletedByCreator) {
+        return res.status(409).json({
+          success: false,
+          error: 'Conflict: This post has already been deleted.'
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const hadPurchases = Number(purchaseCount) > 0;
+
+      const auditEntry = {
+        id: `post_audit_del_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
+        postId,
+        creatorId: authoritativeOwnerId,
+        creatorName: actorName || storedPost?.creatorName || 'Creator',
+        action: hadPurchases ? 'archived_with_purchases' : 'deleted',
+        changedFields: ['isDeletedByCreator', 'publicationStatus', 'moderationStatus'],
+        hadExistingPurchases: hadPurchases,
+        purchaseCount: Number(purchaseCount) || 0,
+        summary: hadPurchases
+          ? `Creator deleted post from public profile, feed, and discovery. Archived safely for ${purchaseCount} existing purchaser(s); financial & transaction records preserved.`
+          : `Creator permanently deleted post from profile, feed, and discovery.`,
+        timestamp: nowIso.replace('T', ' ').slice(0, 16)
+      };
+
+      const deletedPostRecord = {
+        ...(storedPost || {}),
+        id: postId,
+        creatorId: authoritativeOwnerId,
+        isDeletedByCreator: true,
+        deletedAt: nowIso.replace('T', ' ').slice(0, 16),
+        deletedByCreatorId: actorId,
+        deletionReason: reason,
+        publicationStatus: hadPurchases ? 'archived_for_purchasers' : 'deleted',
+        moderationStatus: 'removed'
+      };
+
+      if (!state.deletedPostIds.includes(postId)) {
+        state.deletedPostIds.push(postId);
+      }
+      state.updatedPosts[postId] = deletedPostRecord;
+      if (hadPurchases) {
+        state.archivedPostsForPurchasers[postId] = deletedPostRecord;
+      }
+
+      writePostsState(state);
+      appendPostAuditLog(auditEntry);
+
+      appendAuditLog({
+        id: `audit_post_delete_${Date.now()}`,
+        adminId: actorId,
+        adminName: actorName || storedPost?.creatorName || 'Creator',
+        adminRole: actorRole || 'creator',
+        category: 'content_moderation',
+        action: hadPurchases ? 'Creator Deleted Post (Safe Purchaser Archive)' : 'Creator Deleted Post',
+        targetType: 'Post',
+        targetId: postId,
+        targetLabel: `${storedPost?.creatorName || 'Creator'}: "${(storedPost?.content || postId).slice(0, 42)}..."`,
+        details: auditEntry.summary,
+        severity: 'warning',
+        timestamp: auditEntry.timestamp
+      });
+
+      if (supabase) {
+        try {
+          await (supabase as any)
+            .from('posts')
+            .update({
+              moderation_status: 'removed',
+              updated_at: nowIso
+            })
+            .eq('id', postId)
+            .eq('creator_id', authoritativeOwnerId);
+        } catch {
+          // ignore optional remote sync error
+        }
+      }
+
+      return res.json({
+        success: true,
+        postId,
+        hadPurchases,
+        purchaseCount: Number(purchaseCount) || 0,
+        deletedPost: deletedPostRecord,
+        auditEntry
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete post';
+      return res.status(500).json({ success: false, error: msg });
     }
   });
 
