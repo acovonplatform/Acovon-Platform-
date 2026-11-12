@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PostVisibility, MediaAsset } from '../../types';
 import { CATEGORIES } from '../../data/mockData';
+import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { uploadUserFileToSupabase } from '../../services/supabase';
 import {
   X,
@@ -125,7 +126,7 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
   onClose,
   onSave
 }) => {
-  const { platformConfig } = useApp();
+  const { platformConfig, activeCategories } = useApp();
   const firstMedia = post.media?.[0];
   const initialIsVideo = firstMedia?.type === 'video';
 
@@ -139,6 +140,7 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
 
   const availableCategories = Array.from(
     new Set([
+      ...(activeCategories && activeCategories.length > 0 ? activeCategories.map(c => c.name) : []),
       ...(platformConfig?.contentCategories || []),
       ...CATEGORIES.filter(c => c !== 'All Categories')
     ])
@@ -552,25 +554,17 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
               </div>
             </div>
 
-            {/* Video Country / Content Country */}
+            {/* Video Country / Content Country (Searchable ISO 3166-1 Country Selector) */}
             <div className="space-y-2">
-              <label className="block font-semibold text-neutral-200 text-xs flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#d4af37]" />
-                <span>Video Country / Content Country</span>
-              </label>
-              <select
+              <SearchableCountrySelector
                 value={country}
-                onChange={e => setCountry(e.target.value)}
-                className="w-full bg-[#18181f] border border-[#2b2b36] focus:border-[#d4af37] rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none"
-              >
-                {SUPPORTED_CONTENT_COUNTRIES.map(c => (
-                  <option key={c} value={c} className="bg-[#141418] text-white">
-                    {c}
-                  </option>
-                ))}
-              </select>
+                onChange={setCountry}
+                label="Video Country / Content Country"
+                required
+                placeholder="Search and select video country..."
+              />
               <p className="text-[11px] text-neutral-400">
-                Used for regional discovery, country classification, and audience localization.
+                Independent from your Creator Profile country. Used for regional discovery and video country filtering.
               </p>
             </div>
           </div>

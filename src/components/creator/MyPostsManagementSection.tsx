@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, PostVisibility } from '../../types';
 import { CATEGORIES } from '../../data/mockData';
+import { matchesCategoryIdentifier, matchesCountryIdentifier } from '../../data/globalTaxonomy';
 import {
   Search,
   PlusCircle,
@@ -41,6 +42,11 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
   const {
     currentUser,
     posts,
+    categories,
+    activeCategories,
+    countries,
+    activeCountries,
+    getCountryFlagAndName,
     platformConfig,
     setEditingPost,
     setDeletingPost,
@@ -52,6 +58,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaFilter, setMediaFilter] = useState<'all' | 'video' | 'photo'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('All Categories');
+  const [countryFilter, setCountryFilter] = useState<string>('All Countries');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | PostVisibility>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'scheduled' | 'draft'>('all');
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
@@ -74,10 +81,11 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
 
   const availableCategories = useMemo(() => {
     const set = new Set<string>(['All Categories']);
+    (activeCategories || []).forEach(c => set.add(c.name));
     (platformConfig?.contentCategories || []).forEach(c => set.add(c));
     CATEGORIES.forEach(c => set.add(c));
     return Array.from(set);
-  }, [platformConfig?.contentCategories]);
+  }, [activeCategories, platformConfig?.contentCategories]);
 
   // All non-deleted posts owned by the logged-in creator
   const creatorOwnedPosts = useMemo(() => {
@@ -96,8 +104,16 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
 
       // Category filter
       if (categoryFilter !== 'All Categories') {
-        const cats = p.categories || [];
-        if (!cats.includes(categoryFilter)) return false;
+        if (!matchesCategoryIdentifier(p.categories, p.category_ids, [categoryFilter], categories)) {
+          return false;
+        }
+      }
+
+      // Video Country filter
+      if (countryFilter !== 'All Countries') {
+        if (!matchesCountryIdentifier(p.country, p.video_country_id, [countryFilter], countries)) {
+          return false;
+        }
       }
 
       // Visibility filter
@@ -123,7 +139,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
 
       return true;
     });
-  }, [creatorOwnedPosts, mediaFilter, categoryFilter, visibilityFilter, statusFilter, searchQuery]);
+  }, [creatorOwnedPosts, mediaFilter, categoryFilter, countryFilter, visibilityFilter, statusFilter, searchQuery, categories, countries]);
 
   if (!isCreatorAuthorized) {
     return null;
@@ -231,8 +247,8 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
           )}
         </div>
 
-        {/* Filter Row: Media Type, Visibility, Category, Publication Status */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        {/* Filter Row: Media Type, Visibility, Category, Video Country, Publication Status */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
           {/* 1. Media Type Filter */}
           <div>
             <label className="block text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-1">
@@ -299,7 +315,26 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
             </select>
           </div>
 
-          {/* 4. Publication Status Filter */}
+          {/* 4. Video Country Filter */}
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-1">
+              Video Country
+            </label>
+            <select
+              value={countryFilter}
+              onChange={e => setCountryFilter(e.target.value)}
+              className="w-full bg-[#18181f] border border-[#2b2b36] focus:border-[#d4af37] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+            >
+              <option value="All Countries">All Countries</option>
+              {(activeCountries || []).map(c => (
+                <option key={c.id} value={c.name}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 5. Publication Status Filter */}
           <div>
             <label className="block text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-1">
               Publication Status
@@ -487,9 +522,9 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
                       {p.country && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-0.5 text-neutral-300">
-                            <MapPin className="w-3 h-3 text-[#d4af37]" />
-                            {p.country}
+                          <span className="inline-flex items-center gap-1 text-neutral-200">
+                            <span>{getCountryFlagAndName(p.country).flag}</span>
+                            <span>{getCountryFlagAndName(p.country).name}</span>
                           </span>
                         </>
                       )}

@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { CreatorStatus } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
+import { TranslateContentButton } from '../common/TranslateContentButton';
 
 interface StatusViewerModalProps {
   initialCreatorId: string;
@@ -484,8 +485,17 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
                 background: currentStatus.backgroundColor || 'linear-gradient(135deg, #1f1205 0%, #997819 100%)'
               }}
             >
-              <div className="max-w-xs text-white font-serif text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words">
-                "{currentStatus.textOverlay || currentStatus.caption}"
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="max-w-xs flex flex-col items-center gap-3 z-20"
+              >
+                <TranslateContentButton
+                  text={currentStatus.textOverlay || currentStatus.caption || ''}
+                  contentType="status"
+                  contentRef={`status_${currentStatus.id}`}
+                  renderPrimaryText
+                  textClassName="text-white font-serif text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words"
+                />
               </div>
               <div className="mt-6 text-xs text-amber-200/80 font-mono uppercase tracking-widest">
                 ACOVON MOMENTS
@@ -524,8 +534,18 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
 
           {/* Optional Caption Overlay */}
           {currentStatus.caption && currentStatus.type !== 'text' && (
-            <div className="absolute bottom-20 inset-x-0 z-20 px-4 py-3 bg-gradient-to-t from-black/85 via-black/50 to-transparent pointer-events-none text-white text-sm text-center leading-relaxed">
-              <p className="drop-shadow-md font-medium max-w-sm mx-auto">{currentStatus.caption}</p>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-20 inset-x-0 z-20 px-4 py-3 bg-gradient-to-t from-black/85 via-black/50 to-transparent text-white text-sm text-center leading-relaxed flex flex-col items-center"
+            >
+              <TranslateContentButton
+                text={currentStatus.caption}
+                contentType="status"
+                contentRef={`status_caption_${currentStatus.id}`}
+                renderPrimaryText
+                textClassName="drop-shadow-md font-medium max-w-sm mx-auto text-white"
+                compact
+              />
             </div>
           )}
 

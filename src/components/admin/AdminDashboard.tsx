@@ -82,6 +82,7 @@ import { AdminRecommendationEngineSection } from './AdminRecommendationEngineSec
 import { AdminAnnouncementManagementSection } from './AdminAnnouncementManagementSection';
 import { AdminBrandingStudioSection } from './AdminBrandingStudioSection';
 import { AdminLanguageManagementSection } from './AdminLanguageManagementSection';
+import { AdminCategoriesCountriesSection } from './AdminCategoriesCountriesSection';
 
 const ADMIN_ROLE_LABELS: Record<AdminPermissionLevel, { label: string; badgeClass: string; description: string }> = {
   super_admin: {
@@ -3683,6 +3684,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   Apply Commission Matrix
                 </button>
               </div>
+
+              {/* Official ACOVON Category & ISO 3166-1 Country Database Management */}
+              <AdminCategoriesCountriesSection />
 
               {/* Content, Video & Livestream Categories Management */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 text-xs">

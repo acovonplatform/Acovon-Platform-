@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Compass, Radio, MessageSquare, LayoutDashboard, Sparkles } from 'lucide-react';
+import { Home, Compass, Grid, Radio, MessageSquare, LayoutDashboard } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MobileBottomNavProps {
@@ -21,6 +21,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const navItems = isCreator ? [
     { id: 'feed', label: t('nav.feed', 'Feed'), icon: Home },
     { id: 'explore', label: t('nav.explore', 'Explore'), icon: Compass },
+    { id: 'categories', label: t('nav.categories', 'Categories'), icon: Grid },
     { 
       id: 'live', 
       label: t('nav.live', 'Live'), 
@@ -43,6 +44,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   ] : [
     { id: 'feed', label: t('nav.feed', 'Feed'), icon: Home },
     { id: 'explore', label: t('nav.explore', 'Explore'), icon: Compass },
+    { id: 'categories', label: t('nav.categories', 'Categories'), icon: Grid },
     { 
       id: 'live', 
       label: t('nav.live', 'Live'), 
@@ -56,11 +58,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       icon: MessageSquare,
       badge: unreadMessageCount > 0 ? unreadMessageCount : undefined,
       badgeColor: 'bg-[#d4af37] text-black font-bold'
-    },
-    { 
-      id: 'subscriptions', 
-      label: t('nav.subscriptions_short', 'Subs'), 
-      icon: Sparkles 
     }
   ];
 

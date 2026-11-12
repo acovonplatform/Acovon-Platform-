@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile } from '../../types';
 import { OFFICIAL_CATEGORIES } from '../../data/officialCategories';
+import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { 
   CheckCircle2, 
   ShieldCheck, 
@@ -31,13 +32,14 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
   onOpenPreview,
   onNavigateToBranding
 }) => {
-  const { currentUser, creators, updateCreatorProfile } = useApp();
+  const { currentUser, creators, activeCategories, updateCreatorProfile } = useApp();
   const creator = currentUser as CreatorProfile;
 
   // Local form state initialized with creator values
   const [name, setName] = useState(creator.name || '');
   const [username, setUsername] = useState(creator.username || '');
   const [bio, setBio] = useState(creator.bio || '');
+  const [creatorCountry, setCreatorCountry] = useState(creator.country || 'United States');
   const [location, setLocation] = useState(creator.location || creator.country || '');
   const [category, setCategory] = useState(creator.category || 'Fashion & Luxury');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
@@ -53,6 +55,9 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
   // Status feedback
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const categoryOptions =
+    activeCategories && activeCategories.length > 0 ? activeCategories : OFFICIAL_CATEGORIES;
 
   // Toggle category in multiselect
   const handleToggleCategory = (catName: string) => {
@@ -73,6 +78,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
     setName(creator.name || '');
     setUsername(creator.username || '');
     setBio(creator.bio || '');
+    setCreatorCountry(creator.country || 'United States');
     setLocation(creator.location || creator.country || '');
     setCategory(creator.category || 'Fashion & Luxury');
     setSelectedCategories(creator.categories || [creator.category || 'Amateur']);
@@ -119,6 +125,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
       name: name.trim(),
       username: sanitizedUsername,
       bio: bio.trim(),
+      country: creatorCountry.trim() || creator.country,
       location: location.trim(),
       category: selectedCategories[0] || category,
       categories: selectedCategories,
@@ -263,17 +270,29 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div>
+              <SearchableCountrySelector
+                value={creatorCountry}
+                onChange={setCreatorCountry}
+                label="Creator Country (Official Profile Country)"
+                placeholder="Select your profile country..."
+              />
+              <span className="text-[11px] text-neutral-500 mt-1 block">
+                Identifies your profile country. Remains independent from individual Video Countries.
+              </span>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Location (Optional)</span>
+                <span>City / Studio Location (Optional)</span>
               </label>
               <input
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Paris, France or Los Angeles, CA"
+                placeholder="e.g. Dubai, Paris, or Los Angeles"
                 className="w-full bg-[#18181c] border border-[#27272a] focus:border-[#d4af37] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors"
               />
             </div>
@@ -311,7 +330,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
           </p>
 
           <div className="flex flex-wrap gap-2 pt-1">
-            {OFFICIAL_CATEGORIES.map(cat => {
+            {categoryOptions.map(cat => {
               const isSelected = selectedCategories.includes(cat.name);
               return (
                 <button

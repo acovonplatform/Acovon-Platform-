@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile, Post } from '../../types';
 import { PostCard } from '../feed/PostCard';
+import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { CustomRequestModal } from '../requests/CustomRequestModal';
 import { SubscribeModal } from '../common/SubscribeModal';
 import { VerifiedBadge } from '../common/VerifiedBadge';
@@ -69,7 +70,8 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     updateCreatorProfile,
     isFollowing,
     toggleFollowCreator,
-    showDemoBadges
+    showDemoBadges,
+    getCountryFlagAndName
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'posts' | 'highlights' | 'vault' | 'tiers' | 'settings'>('posts');
@@ -179,7 +181,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 )}
               </div>
 
-              {/* Zero-Pill Clean Metadata */}
+              {/* Zero-Pill Clean Metadata with Creator Country Flag */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
                 <span className="inline-flex items-center gap-1">
                   <span>@{creator.username}</span>
@@ -187,8 +189,15 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 </span>
                 <span aria-hidden="true">·</span>
                 <span>{creator.category}</span>
-                <span aria-hidden="true">·</span>
-                <span>{creator.country}</span>
+                {creator.country && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="text-neutral-200 inline-flex items-center gap-1" title="Creator Profile Country">
+                      <span>{getCountryFlagAndName(creator.country).flag}</span>
+                      <span>{getCountryFlagAndName(creator.country).name}</span>
+                    </span>
+                  </>
+                )}
                 <span aria-hidden="true">·</span>
                 <span className="font-mono text-neutral-200 tabular-nums">
                   {(creator.followersCount / 1000).toFixed(1)}k followers
@@ -199,10 +208,14 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 </span>
               </div>
 
-              <p data-ugc="true" className="text-xs sm:text-sm text-neutral-300 max-w-xl leading-relaxed pt-1 break-words">
-                {creator.bio}
-              </p>
-              <TranslateContentButton text={creator.bio || ''} contentType="bio" className="pt-1" />
+              <TranslateContentButton
+                text={creator.bio || ''}
+                contentType="bio"
+                contentRef={`bio_${creator.id}`}
+                renderPrimaryText
+                textClassName="text-xs sm:text-sm text-neutral-300 max-w-xl leading-relaxed pt-1 break-words"
+                className="pt-1"
+              />
             </div>
           </div>
 
@@ -709,6 +722,18 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
               <h3 className="font-bold text-white text-base">Creator Rates & Discovery Controls</h3>
 
               <div className="space-y-4 text-xs">
+                <div className="p-3.5 bg-[#18181c] rounded-xl border border-[#27272a] space-y-2">
+                  <SearchableCountrySelector
+                    value={creator.country || 'United States'}
+                    onChange={(nextCountry) => updateCreatorProfile(creator.id, { country: nextCountry })}
+                    label="Creator Country (Official Profile Country)"
+                    placeholder="Select your profile country..."
+                  />
+                  <p className="text-[11px] text-neutral-400">
+                    Displayed on your public Creator Profile. Remains strictly separate from individual Video Countries.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-neutral-300 mb-1 font-medium">Video Call Rate ($ / minute)</label>
                   <input

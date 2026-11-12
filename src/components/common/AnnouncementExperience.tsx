@@ -161,15 +161,20 @@ export const RoleTargetedAnnouncementBanners: React.FC<
                     )}
                   </div>
 
-                  <h4 data-ugc="true" className="text-xs sm:text-sm font-bold text-white leading-snug">
-                    {ann.title}
-                  </h4>
-                  <p data-ugc="true" className="text-xs text-neutral-300 mt-0.5 leading-relaxed">
-                    {ann.summary}
-                  </p>
                   <TranslateContentButton
-                    text={`${ann.title}: ${ann.summary}`}
+                    text={ann.title}
                     contentType="announcement"
+                    contentRef={`ann_title_${ann.id}`}
+                    renderPrimaryText
+                    textClassName="text-xs sm:text-sm font-bold text-white leading-snug"
+                    compact
+                  />
+                  <TranslateContentButton
+                    text={ann.summary}
+                    contentType="announcement"
+                    contentRef={`ann_summary_${ann.id}`}
+                    renderPrimaryText
+                    textClassName="text-xs text-neutral-300 mt-0.5 leading-relaxed"
                     compact
                     className="mt-1"
                   />
@@ -339,15 +344,27 @@ export const ImportantAnnouncementPopupModal: React.FC<AnnouncementActionProps> 
             )}
           </div>
 
-          <h3 className="text-base font-bold font-brand text-white leading-snug">
-            {activePopupAnnouncement.title}
-          </h3>
+          <TranslateContentButton
+            text={activePopupAnnouncement.title}
+            contentType="announcement"
+            contentRef={`ann_popup_title_${activePopupAnnouncement.id}`}
+            renderPrimaryText
+            textClassName="text-base font-bold font-brand text-white leading-snug"
+            compact
+          />
 
           <div
             className="text-neutral-300 space-y-2 leading-relaxed max-h-60 overflow-y-auto pr-1"
             dangerouslySetInnerHTML={{
               __html: sanitizeAnnouncementHtml(activePopupAnnouncement.bodyHtml)
             }}
+          />
+
+          <TranslateContentButton
+            text={activePopupAnnouncement.summary}
+            contentType="announcement"
+            contentRef={`ann_popup_summary_${activePopupAnnouncement.id}`}
+            compact
           />
 
           <div className="pt-4 border-t border-[#252530] flex flex-wrap items-center justify-between gap-2.5">
@@ -702,15 +719,27 @@ export const AnnouncementCenterModal: React.FC<
                       </span>
                     </div>
 
-                    <h2 className="text-lg font-bold font-brand text-white leading-snug">
-                      {activeAnnouncement.title}
-                    </h2>
+                    <TranslateContentButton
+                      text={activeAnnouncement.title}
+                      contentType="announcement"
+                      contentRef={`ann_center_title_${activeAnnouncement.id}`}
+                      renderPrimaryText
+                      textClassName="text-lg font-bold font-brand text-white leading-snug"
+                      compact
+                    />
 
                     <div
                       className="p-4 rounded-2xl bg-[#16161e] border border-[#262632] text-neutral-200 space-y-2.5 leading-relaxed text-xs"
                       dangerouslySetInnerHTML={{
                         __html: sanitizeAnnouncementHtml(activeAnnouncement.bodyHtml)
                       }}
+                    />
+
+                    <TranslateContentButton
+                      text={activeAnnouncement.summary}
+                      contentType="announcement"
+                      contentRef={`ann_center_summary_${activeAnnouncement.id}`}
+                      compact
                     />
 
                     <div className="pt-4 border-t border-[#252530] flex flex-wrap items-center justify-between gap-3">

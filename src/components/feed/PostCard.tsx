@@ -88,7 +88,8 @@ export const PostCard: React.FC<PostCardProps> = ({
     getAuthorizedPlaybackUrl,
     trackEngagementEvent,
     submitPostRecommendationFeedback,
-    getUpNextVideoRecommendations
+    getUpNextVideoRecommendations,
+    getCountryFlagAndName
   } = useApp();
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -901,10 +902,13 @@ export const PostCard: React.FC<PostCardProps> = ({
 
       {/* Post Text Caption */}
       <div className="px-3.5 sm:px-5 pt-3.5 sm:pt-4 pb-3">
-        <p data-ugc="true" className="text-neutral-200 text-sm sm:text-base leading-relaxed whitespace-pre-line break-words">
-          {post.content}
-        </p>
-        <TranslateContentButton text={post.content} contentType="post" className="mt-2" />
+        <TranslateContentButton
+          text={post.content}
+          contentType="post"
+          contentRef={`post_${post.id}`}
+          renderPrimaryText
+          textClassName="text-neutral-200 text-sm sm:text-base leading-relaxed whitespace-pre-line break-words"
+        />
         
         {((post.categories && post.categories.length > 0) || post.country) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -914,9 +918,9 @@ export const PostCard: React.FC<PostCardProps> = ({
               </span>
             ))}
             {post.country && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-[#16161d] text-neutral-300 border border-[#272732]">
-                <MapPin className="w-2.5 h-2.5 text-[#d4af37]" />
-                {post.country}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-[#16161d] text-neutral-200 border border-[#272732]">
+                <span>{getCountryFlagAndName(post.country).flag}</span>
+                <span>{getCountryFlagAndName(post.country).name}</span>
               </span>
             )}
           </div>
@@ -1497,17 +1501,25 @@ export const PostCard: React.FC<PostCardProps> = ({
                   <span>· Creator</span>
                 </span>
               </div>
-              <p data-ugc="true" className="text-neutral-300">Thank you everyone for tuning into this release! Drop your questions below.</p>
               <TranslateContentButton
                 text="Thank you everyone for tuning into this release! Drop your questions below."
                 contentType="comment"
+                contentRef={`comment_pinned_${post.id}`}
+                renderPrimaryText
+                textClassName="text-neutral-300"
                 compact
               />
             </div>
             {localComments.map((comment, i) => (
               <div key={i} className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-[#222228] space-y-1">
-                <div data-ugc="true">{comment}</div>
-                <TranslateContentButton text={comment} contentType="comment" compact />
+                <TranslateContentButton
+                  text={comment}
+                  contentType="comment"
+                  contentRef={`comment_${post.id}_${i}`}
+                  renderPrimaryText
+                  textClassName="text-neutral-200"
+                  compact
+                />
               </div>
             ))}
           </div>

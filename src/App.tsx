@@ -6,6 +6,7 @@ import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { LandingPage } from './components/public/LandingPage';
 import { FeedView } from './components/feed/FeedView';
 import { ExplorePage } from './components/explore/ExplorePage';
+import { CategoriesDiscoveryPage } from './components/discovery/CategoriesDiscoveryPage';
 import { CreatorProfilePage } from './components/creator/CreatorProfilePage';
 import { CustomRequestsManager } from './components/requests/CustomRequestsManager';
 import { ChatView } from './components/messages/ChatView';
@@ -62,6 +63,7 @@ function AppContent() {
     return isAuthenticated ? 'feed' : 'landing';
   });
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>('creator_elena');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   
   // Modals state
   const [showWallet, setShowWallet] = useState<boolean>(false);
@@ -125,7 +127,8 @@ function AppContent() {
           return;
         }
 
-        if (currentTab !== 'landing') {
+        const isPublicGuestTab = ['landing', 'categories', 'countries', 'explore', 'creator-profile'].includes(currentTab);
+        if (!isPublicGuestTab) {
           window.history.pushState({}, '', '/login');
           setCurrentTab('landing');
           setAuthMode('login');
@@ -214,10 +217,11 @@ function AppContent() {
       return;
     }
 
-    // Protect private pages with supabase.auth.getSession() — if no session, redirect to /login
-    if (tab !== 'landing') {
+    // Protect private pages with supabase.auth.getSession() — allow public guest discovery pages (landing, categories, countries, explore, creator-profile)
+    const isPublicGuestTab = ['landing', 'categories', 'countries', 'explore', 'creator-profile'].includes(tab);
+    if (!isPublicGuestTab) {
       const { data } = await supabase.auth.getSession();
-      if (!data.session) {
+      if (!data.session && !isAuthenticated) {
         window.history.pushState({}, '', '/login');
         setCurrentTab('landing');
         setAuthMode('login');
@@ -312,6 +316,8 @@ function AppContent() {
         onOpenHelpCenter={() => setShowHelpCenter(true)}
         onOpenBecomeCreator={() => setShowBecomeCreator(true)}
         onOpenFanProfile={() => setShowFanProfile(true)}
+        searchQuery={globalSearchQuery}
+        onSearchChange={setGlobalSearchQuery}
       />
 
       {/* RBAC Access Denied Notification Banner */}
@@ -345,7 +351,7 @@ function AppContent() {
 
       {/* Main Viewport */}
       <main className="flex-1 pb-16 md:pb-0">
-        {!isAuthenticated && !['admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab) && (
+        {!isAuthenticated && currentTab === 'landing' && (
           <LandingPage
             onNavigate={handleNavigate}
             onOpenAuth={(mode = 'register') => {
@@ -385,6 +391,27 @@ function AppContent() {
             onOpenWallet={() => setShowWallet(true)}
             onOpenPrivacy={() => setShowPrivacy(true)}
             onOpenHelpCenter={() => setShowHelpCenter(true)}
+            searchQuery={globalSearchQuery}
+            onClearSearch={() => setGlobalSearchQuery('')}
+          />
+        )}
+
+        {(currentTab === 'categories' || currentTab === 'countries') && (
+          <CategoriesDiscoveryPage
+            initialMode={currentTab === 'countries' ? 'countries' : 'categories'}
+            onSelectCreator={(id) => handleNavigate('creator-profile', id)}
+            onNavigate={handleNavigate}
+            onOpenTipModal={handleOpenTipModal}
+            onOpenSubscribeModal={(creatorId) => setSubscribeTargetCreatorId(creatorId)}
+            onOpenShareModal={(post) => setShareTargetPost(post)}
+            onOpenVideoPlayer={(postId, time) => {
+              setFullScreenVideoPostId(postId);
+              setFullScreenVideoTime(time || 0);
+            }}
+            onOpenPhotoViewer={(postId, mediaIdx) => {
+              setFullScreenPhotoPostId(postId);
+              setFullScreenPhotoIndex(mediaIdx || 0);
+            }}
           />
         )}
 

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, MediaAsset } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
+import { TranslateContentButton } from '../common/TranslateContentButton';
 import { 
   X, 
   ZoomIn, 
@@ -371,6 +372,18 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
       <div className={`absolute bottom-0 left-0 right-0 pt-4 px-3 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/85 to-transparent z-30 transition-opacity duration-300 ${
         showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}>
+        {currentPost?.content && (
+          <div className="max-w-4xl mx-auto mb-2.5">
+            <TranslateContentButton
+              text={currentPost.content}
+              contentType="post"
+              contentRef={`photo_viewer_${currentPost.id}`}
+              renderPrimaryText
+              textClassName="text-xs sm:text-sm text-neutral-200 leading-relaxed line-clamp-2"
+              compact
+            />
+          </div>
+        )}
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           
           {/* Creator Profile Row */}

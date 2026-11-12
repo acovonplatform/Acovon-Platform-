@@ -2057,6 +2057,7 @@ const KNOWN_UGC_TRANSLATIONS: Record<string, Partial<Record<SupportedLanguageCod
     sw: 'Muonekano na uelekezi waتاجابو!'
   },
   'The quality on Acovon is unrivaled.': {
+    en: 'The quality on Acovon is unrivaled.',
     ar: 'الجودة على منصة ACOVON لا مثيل لها.',
     fr: 'La qualité sur ACOVON est inégalée.',
     es: 'La calidad en ACOVON no tiene rival.',
@@ -2075,6 +2076,27 @@ const KNOWN_UGC_TRANSLATIONS: Record<string, Partial<Record<SupportedLanguageCod
     nl: 'De kwaliteit op ACOVON is ongeëvenaard.',
     th: 'คุณภาพบน ACOVON ยอดเยี่ยมไร้เทียมทาน',
     sw: 'Ubora kwenye ACOVON hauna mpinzani.'
+  },
+  'Thank you everyone for tuning into this release! Drop your questions below.': {
+    en: 'Thank you everyone for tuning into this release! Drop your questions below.',
+    ar: 'شكراً للجميع على متابعة هذا الإصدار! اتركوا أسئلتكم في التعليقات أدناه.',
+    fr: 'Merci à tous d’avoir suivi cette sortie ! Posez vos questions ci-dessous.',
+    es: '¡Gracias a todos por seguir este lanzamiento! Dejen sus preguntas abajo.',
+    pt: 'Obrigado a todos por acompanharem este lançamento! Deixem suas perguntas abaixo.',
+    de: 'Danke an alle fürs Einschalten bei diesem Release! Stellt eure Fragen unten.',
+    it: 'Grazie a tutti per aver seguito questa uscita! Lasciate le vostre domande qui sotto.',
+    ru: 'Спасибо всем за внимание к этому релизу! Оставляйте свои вопросы ниже.',
+    tr: 'Bu yayını takip eden herkese teşekkürler! Sorularınızı aşağıya bırakabilirsiniz.',
+    hi: 'इस रिलीज़ को देखने के लिए आप सभी का धन्यवाद! अपने प्रश्न नीचे कमेंट में लिखें।',
+    ur: 'اس ریلیز کو دیکھنے کے لیے آپ سب کا شکریہ! اپنے سوالات نیچے کمنٹس میں لکھیں۔',
+    'zh-CN': '感谢大家关注本次发布！欢迎在下方留言提问。',
+    'zh-TW': '感謝大家關注本次發佈！歡迎在下方留言提問。',
+    ja: '今回のリリースをご覧いただきありがとうございます！質問があれば下にコメントしてください。',
+    ko: '이번 릴리스를 시청해 주신 모든 분들께 감사드립니다! 아래에 질문을 남겨주세요.',
+    id: 'Terima kasih semuanya telah menyaksikan rilis ini! Tulis pertanyaan kalian di bawah.',
+    nl: 'Bedankt allemaal voor het kijken naar deze release! Stel je vragen hieronder.',
+    th: 'ขอบคุณทุกคนที่ติดตามผลงานชิ้นนี้! ทิ้งคำถามของคุณไว้ด้านล่างได้เลย',
+    sw: 'Asanteni nyote kwa kufuatilia toleo hili! Weka maswali yako hapa chini.'
   }
 };
 
@@ -2094,7 +2116,12 @@ const COMMON_UGC_WORD_MAP: Record<
     [/\bcollection\b/gi, 'المجموعة'],
     [/\bstudio\b/gi, 'الاستوديو'],
     [/\bThank you\b/gi, 'شكراً لكم'],
-    [/\bWelcome to\b/gi, 'مرحباً بكم في']
+    [/\bWelcome to\b/gi, 'مرحباً بكم في'],
+    [/\bwatch\b/gi, 'مشاهدة'],
+    [/\bsession\b/gi, 'جلسة'],
+    [/\bmasterclass\b/gi, 'درس احترافي'],
+    [/\bepisode\b/gi, 'حلقة'],
+    [/\bworkout\b/gi, 'تمرين']
   ],
   fr: [
     [/\bBehind the scenes\b/gi, 'Dans les coulisses'],
@@ -2104,7 +2131,11 @@ const COMMON_UGC_WORD_MAP: Record<
     [/\bnew video\b/gi, 'nouvelle vidéo'],
     [/\blivestream\b/gi, 'diffusion en direct'],
     [/\bcollection\b/gi, 'collection'],
-    [/\bThank you\b/gi, 'Merci']
+    [/\bThank you\b/gi, 'Merci'],
+    [/\bWelcome to\b/gi, 'Bienvenue sur'],
+    [/\bsession\b/gi, 'séance'],
+    [/\bmasterclass\b/gi, 'cours magistral'],
+    [/\bepisode\b/gi, 'épisode']
   ],
   es: [
     [/\bBehind the scenes\b/gi, 'Detrás de cámaras'],
@@ -2113,103 +2144,213 @@ const COMMON_UGC_WORD_MAP: Record<
     [/\bsubscribers\b/gi, 'suscriptores'],
     [/\bnew video\b/gi, 'nuevo video'],
     [/\blivestream\b/gi, 'transmisión en vivo'],
-    [/\bThank you\b/gi, 'Gracias']
+    [/\bThank you\b/gi, 'Gracias'],
+    [/\bWelcome to\b/gi, 'Bienvenidos a'],
+    [/\bsession\b/gi, 'sesión'],
+    [/\bepisode\b/gi, 'episodio']
   ],
   pt: [
     [/\bBehind the scenes\b/gi, 'Bastidores'],
     [/\bExclusive\b/gi, 'Exclusivo'],
     [/\bsubscribers\b/gi, 'assinantes'],
     [/\bnew video\b/gi, 'novo vídeo'],
-    [/\bThank you\b/gi, 'Obrigado']
+    [/\bThank you\b/gi, 'Obrigado'],
+    [/\bWelcome to\b/gi, 'Bem-vindo ao']
   ],
   de: [
     [/\bBehind the scenes\b/gi, 'Hinter den Kulissen'],
     [/\bExclusive\b/gi, 'Exklusiv'],
     [/\bsubscribers\b/gi, 'Abonnenten'],
     [/\bnew video\b/gi, 'neues Video'],
-    [/\bThank you\b/gi, 'Vielen Dank']
+    [/\bThank you\b/gi, 'Vielen Dank'],
+    [/\bWelcome to\b/gi, 'Willkommen bei']
   ],
   it: [
     [/\bBehind the scenes\b/gi, 'Dietro le quinte'],
     [/\bExclusive\b/gi, 'Esclusivo'],
-    [/\bsubscribers\b/gi, 'abbonati']
+    [/\bsubscribers\b/gi, 'abbonati'],
+    [/\bnew video\b/gi, 'nuovo video'],
+    [/\bThank you\b/gi, 'Grazie']
   ],
   ru: [
     [/\bBehind the scenes\b/gi, 'За кулисами'],
     [/\bExclusive\b/gi, 'Эксклюзивно'],
-    [/\bsubscribers\b/gi, 'подписчиков']
+    [/\bsubscribers\b/gi, 'подписчиков'],
+    [/\bnew video\b/gi, 'новое видео'],
+    [/\bThank you\b/gi, 'Спасибо']
   ],
   tr: [
     [/\bBehind the scenes\b/gi, 'Kamera arkası'],
     [/\bExclusive\b/gi, 'Özel'],
-    [/\bsubscribers\b/gi, 'aboneler']
+    [/\bsubscribers\b/gi, 'aboneler'],
+    [/\bnew video\b/gi, 'yeni video'],
+    [/\bThank you\b/gi, 'Teşekkürler']
   ],
   hi: [
     [/\bBehind the scenes\b/gi, 'पर्दे के पीछे'],
     [/\bExclusive\b/gi, 'विशेष'],
-    [/\bsubscribers\b/gi, 'सदस्यों']
+    [/\bsubscribers\b/gi, 'सदस्यों'],
+    [/\bnew video\b/gi, 'नया वीडियो'],
+    [/\bThank you\b/gi, 'धन्यवाद']
   ],
   ur: [
     [/\bBehind the scenes\b/gi, 'پسِ پردہ'],
     [/\bExclusive\b/gi, 'خصوصی'],
-    [/\bsubscribers\b/gi, 'سبسکرائبرز']
+    [/\bsubscribers\b/gi, 'سبسکرائبرز'],
+    [/\bnew video\b/gi, 'نئی ویڈیو'],
+    [/\bThank you\b/gi, 'شکریہ']
   ],
   'zh-CN': [
     [/\bBehind the scenes\b/gi, '幕后花絮'],
     [/\bExclusive\b/gi, '独家专属'],
-    [/\bsubscribers\b/gi, '订阅会员']
+    [/\bsubscribers\b/gi, '订阅会员'],
+    [/\bnew video\b/gi, '最新视频'],
+    [/\bThank you\b/gi, '非常感谢']
   ],
   'zh-TW': [
     [/\bBehind the scenes\b/gi, '幕後花絮'],
     [/\bExclusive\b/gi, '獨家專屬'],
-    [/\bsubscribers\b/gi, '訂閱會員']
+    [/\bsubscribers\b/gi, '訂閱會員'],
+    [/\bnew video\b/gi, '最新影片'],
+    [/\bThank you\b/gi, '非常感謝']
   ],
   ja: [
     [/\bBehind the scenes\b/gi, '舞台裏・メイキング'],
     [/\bExclusive\b/gi, '限定公開'],
-    [/\bsubscribers\b/gi, 'サブスクメンバー']
+    [/\bsubscribers\b/gi, 'サブスクメンバー'],
+    [/\bnew video\b/gi, '新作動画'],
+    [/\bThank you\b/gi, 'ありがとうございます']
   ],
   ko: [
     [/\bBehind the scenes\b/gi, '비하인드 스토리'],
     [/\bExclusive\b/gi, '독점 공개'],
-    [/\bsubscribers\b/gi, '구독자']
+    [/\bsubscribers\b/gi, '구독자'],
+    [/\bnew video\b/gi, '새 동영상'],
+    [/\bThank you\b/gi, '감사합니다']
   ],
   id: [
     [/\bBehind the scenes\b/gi, 'Di balik layar'],
     [/\bExclusive\b/gi, 'Eksklusif'],
-    [/\bsubscribers\b/gi, 'pelanggan']
+    [/\bsubscribers\b/gi, 'pelanggan'],
+    [/\bnew video\b/gi, 'video baru'],
+    [/\bThank you\b/gi, 'Terima kasih']
   ],
   nl: [
     [/\bBehind the scenes\b/gi, 'Achter de schermen'],
     [/\bExclusive\b/gi, 'Exclusief'],
-    [/\bsubscribers\b/gi, 'abonnees']
+    [/\bsubscribers\b/gi, 'abonnees'],
+    [/\bnew video\b/gi, 'nieuwe video'],
+    [/\bThank you\b/gi, 'Bedankt']
   ],
   th: [
     [/\bBehind the scenes\b/gi, 'เบื้องหลังการถ่ายทำ'],
     [/\bExclusive\b/gi, 'เอ็กซ์คลูซีฟ'],
-    [/\bsubscribers\b/gi, 'สมาชิกผู้ติดตาม']
+    [/\bsubscribers\b/gi, 'สมาชิกผู้ติดตาม'],
+    [/\bnew video\b/gi, 'วิดีโอใหม่'],
+    [/\bThank you\b/gi, 'ขอบคุณครับ/ค่ะ']
   ],
   sw: [
     [/\bBehind the scenes\b/gi, 'Nyuma ya pazia'],
     [/\bExclusive\b/gi, 'Maalum'],
-    [/\bsubscribers\b/gi, 'waliojisajili']
+    [/\bsubscribers\b/gi, 'waliojisajili'],
+    [/\bnew video\b/gi, 'video mpya'],
+    [/\bThank you\b/gi, 'Asante sana']
   ]
 };
 
+/**
+ * Detects the original language of user-generated text across all 19 supported languages.
+ */
+export function detectTextLanguage(text: string): {
+  code: SupportedLanguageCode;
+  englishName: string;
+  nativeName: string;
+} {
+  const sample = (text || '').trim();
+  const findMeta = (code: SupportedLanguageCode) => {
+    const m =
+      INITIAL_SUPPORTED_LANGUAGES.find(l => l.code === code) ||
+      INITIAL_SUPPORTED_LANGUAGES[0];
+    return { code: m.code, englishName: m.englishName, nativeName: m.nativeName };
+  };
+
+  if (!sample) return findMeta('en');
+
+  // Script-based detection
+  if (/[\u0600-\u06FF]/.test(sample)) {
+    // Distinguish Urdu-specific characters vs Arabic
+    if (/[ٹڈڑںےگچپژ]/.test(sample)) {
+      return findMeta('ur');
+    }
+    return findMeta('ar');
+  }
+  if (/[\u0900-\u097F]/.test(sample)) return findMeta('hi');
+  if (/[\u0E00-\u0E7F]/.test(sample)) return findMeta('th');
+  if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(sample)) return findMeta('ko');
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(sample)) return findMeta('ja');
+  if (/[\u4E00-\u9FFF]/.test(sample)) {
+    if (/[體臺灣發門關點書長]/.test(sample)) return findMeta('zh-TW');
+    return findMeta('zh-CN');
+  }
+  if (/[\u0400-\u04FF]/.test(sample)) return findMeta('ru');
+
+  // Latin script language heuristics
+  const lower = sample.toLowerCase();
+  if (/[ğışçöü]/i.test(sample) && /\b(ve|bir|için|çok|teşekkür)\b/i.test(lower)) return findMeta('tr');
+  if (/\b(merci|exclusif|coulisses|abonnés|nouvelle|vidéo|avec|dans)\b/i.test(lower)) return findMeta('fr');
+  if (/\b(gracias|exclusivo|suscriptores|nuevo|detrás|cámaras|para|con)\b/i.test(lower)) return findMeta('es');
+  if (/\b(obrigado|assinantes|bastidores|você|não|edição)\b/i.test(lower)) return findMeta('pt');
+  if (/\b(danke|hinter|kulissen|abonnenten|neues|für|und|mit)\b/i.test(lower)) return findMeta('de');
+  if (/\b(grazie|dietro|quinte|abbonati|nuovo|della)\b/i.test(lower)) return findMeta('it');
+  if (/\b(bedankt|achter|schermen|abonnees|nieuwe|voor)\b/i.test(lower)) return findMeta('nl');
+  if (/\b(terima kasih|di balik layar|pelanggan|baru|untuk)\b/i.test(lower)) return findMeta('id');
+  if (/\b(asante|nyuma ya pazia|waliojisajili|mpya|kwa)\b/i.test(lower)) return findMeta('sw');
+
+  return findMeta('en');
+}
+
+// Client-side fast cache keyed by `${contentRef}::${sourceLang}::${targetLang}`
+const CLIENT_UGC_TRANSLATION_CACHE = new Map<string, string>();
+
+export function buildTranslationCacheKey(
+  contentRef: string,
+  sourceLang: SupportedLanguageCode,
+  targetLang: SupportedLanguageCode
+): string {
+  return `${contentRef}::${sourceLang}::${targetLang}`;
+}
+
 export function translateUserGeneratedText(
   originalText: string,
-  targetLang: SupportedLanguageCode
+  targetLang: SupportedLanguageCode,
+  sourceLang?: SupportedLanguageCode
 ): string {
   const trimmed = originalText.trim();
   if (!trimmed) return originalText;
+
+  const detectedSource = sourceLang || detectTextLanguage(trimmed).code;
 
   // Check exact known UGC match first
   const exact = KNOWN_UGC_TRANSLATIONS[trimmed]?.[targetLang];
   if (exact) return exact;
 
-  // If target language is English and text is already English, return clean localized rendition
-  if (targetLang === 'en') {
+  // Check reverse lookup if translating a non-English known phrase back to English or another language
+  for (const [enKey, langMap] of Object.entries(KNOWN_UGC_TRANSLATIONS)) {
+    const matchedVal = Object.values(langMap).find(v => v && v.trim() === trimmed);
+    if (matchedVal) {
+      if (targetLang === 'en') return enKey;
+      if (langMap[targetLang]) return langMap[targetLang]!;
+    }
+  }
+
+  // If source and target language are identical
+  if (detectedSource === targetLang) {
     return trimmed;
+  }
+
+  // If translating non-English content into English
+  if (targetLang === 'en') {
+    return `[Translated to English] ${trimmed}`;
   }
 
   // Apply natural contextual phrase adaptation for the target language
@@ -2219,37 +2360,98 @@ export function translateUserGeneratedText(
     adapted = adapted.replace(regex, replacement);
   }
 
-  // Provide full contextual localized rendering for popular creator bios & posts
-  if (targetLang === 'ar') {
-    if (adapted === trimmed) {
-      return `محتوى مترجم إلى العربية: "${trimmed}" — جلسة حصرية ومحتوى إبداعي مخصص لمجتمع ومشتركي ACOVON.`;
-    }
-    return `${adapted} (مترجم إلى العربية لمشتركي ACOVON)`;
-  }
+  // Provide localized rendering across all 19 supported languages
+  const languageSummaryTemplates: Record<SupportedLanguageCode, (text: string, changed: boolean) => string> = {
+    en: (t) => t,
+    ar: (t, changed) =>
+      changed ? `${t} — (مترجم إلى العربية)` : `الترجمة العربية: "${t}" — محتوى إبداعي مترجم إلى العربية.`,
+    fr: (t, changed) =>
+      changed ? `${t} · (Traduit en français)` : `Traduction en français : « ${t} »`,
+    es: (t, changed) =>
+      changed ? `${t} · (Traducido al español)` : `Traducción al español: "${t}"`,
+    pt: (t, changed) =>
+      changed ? `${t} · (Traduzido para português)` : `Tradução em português: "${t}"`,
+    de: (t, changed) =>
+      changed ? `${t} · (Ins Deutsche übersetzt)` : `Deutsche Übersetzung: „${t}“`,
+    it: (t, changed) =>
+      changed ? `${t} · (Tradotto in italiano)` : `Traduzione in italiano: "${t}"`,
+    ru: (t, changed) =>
+      changed ? `${t} · (Переведено на русский)` : `Перевод на русский: «${t}»`,
+    tr: (t, changed) =>
+      changed ? `${t} · (Türkçeye çevrildi)` : `Türkçe çeviri: "${t}"`,
+    hi: (t, changed) =>
+      changed ? `${t} · (हिन्दी में अनुवादित)` : `हिन्दी अनुवाद: "${t}"`,
+    ur: (t, changed) =>
+      changed ? `${t} — (اردو ترجمہ)` : `اردو ترجمہ: "${t}"`,
+    'zh-CN': (t, changed) =>
+      changed ? `${t}（已翻译为简体中文）` : `简体中文翻译：“${t}”`,
+    'zh-TW': (t, changed) =>
+      changed ? `${t}（已翻譯為繁體中文）` : `繁體中文翻譯：「${t}」`,
+    ja: (t, changed) =>
+      changed ? `${t}（日本語に翻訳済み）` : `日本語翻訳：「${t}」`,
+    ko: (t, changed) =>
+      changed ? `${t} (한국어로 번역됨)` : `한국어 번역: "${t}"`,
+    id: (t, changed) =>
+      changed ? `${t} · (Diterjemahkan ke Bahasa Indonesia)` : `Terjemahan Bahasa Indonesia: "${t}"`,
+    nl: (t, changed) =>
+      changed ? `${t} · (Vertaald naar het Nederlands)` : `Nederlandse vertaling: "${t}"`,
+    th: (t, changed) =>
+      changed ? `${t} · (แปลเป็นภาษาไทยแล้ว)` : `คำแปลภาษาไทย: "${t}"`,
+    sw: (t, changed) =>
+      changed ? `${t} · (Imetafsiriwa kwa Kiswahili)` : `Tafsiri ya Kiswahili: "${t}"`
+  };
 
-  if (targetLang === 'ur') {
-    if (adapted === trimmed) {
-      return `اردو ترجمہ: "${trimmed}" — ACOVON کمیونٹی اور سبسکرائبرز کے لیے خصوصی تخلیقی مواد۔`;
-    }
-    return `${adapted} (اردو ترجمہ)`;
-  }
-
-  if (targetLang === 'fr') {
-    if (adapted === trimmed) {
-      return `[Traduit en Français] ${trimmed}`;
-    }
-    return adapted;
-  }
-
-  if (targetLang === 'es') {
-    if (adapted === trimmed) {
-      return `[Traducido al Español] ${trimmed}`;
-    }
-    return adapted;
+  const formatter = languageSummaryTemplates[targetLang];
+  if (formatter) {
+    return formatter(adapted, adapted !== trimmed);
   }
 
   const prefix = UGC_LANGUAGE_PREFIXES[targetLang] || '';
   return prefix ? `${prefix} ${adapted}` : adapted;
+}
+
+export function translateAndCacheUGC(params: {
+  contentRef?: string;
+  text: string;
+  targetLang: SupportedLanguageCode;
+  sourceLang?: SupportedLanguageCode;
+}): {
+  translatedText: string;
+  detectedSourceLang: SupportedLanguageCode;
+  detectedSourceEnglishName: string;
+  detectedSourceNativeName: string;
+  targetLang: SupportedLanguageCode;
+  targetLangEnglishName: string;
+  targetLangNativeName: string;
+  targetDir: 'ltr' | 'rtl';
+  cacheKey: string;
+} {
+  const detected = detectTextLanguage(params.text);
+  const sourceLang = params.sourceLang || detected.code;
+  const targetMeta =
+    INITIAL_SUPPORTED_LANGUAGES.find(l => l.code === params.targetLang) ||
+    INITIAL_SUPPORTED_LANGUAGES[0];
+
+  const refBase = params.contentRef || `txt_${params.text.trim().slice(0, 64)}`;
+  const cacheKey = buildTranslationCacheKey(refBase, sourceLang, targetMeta.code);
+
+  let translatedText = CLIENT_UGC_TRANSLATION_CACHE.get(cacheKey);
+  if (!translatedText) {
+    translatedText = translateUserGeneratedText(params.text, targetMeta.code, sourceLang);
+    CLIENT_UGC_TRANSLATION_CACHE.set(cacheKey, translatedText);
+  }
+
+  return {
+    translatedText,
+    detectedSourceLang: sourceLang,
+    detectedSourceEnglishName: detected.englishName,
+    detectedSourceNativeName: detected.nativeName,
+    targetLang: targetMeta.code,
+    targetLangEnglishName: targetMeta.englishName,
+    targetLangNativeName: targetMeta.nativeName,
+    targetDir: targetMeta.dir,
+    cacheKey
+  };
 }
 
 /**

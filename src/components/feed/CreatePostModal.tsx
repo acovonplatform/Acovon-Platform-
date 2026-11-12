@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PostVisibility, MediaAsset, VideoResolution, VideoCodec } from '../../types';
 import { CATEGORIES } from '../../data/mockData';
+import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import {
   uploadUserFileToSupabase,
   deleteSupabaseFileByPath
@@ -78,6 +79,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const {
     createPost,
     currentUser,
+    creators,
+    activeCategories,
     activeRole,
     isCurrentUserApprovedCreator,
     videoProcessingJobs,
@@ -88,6 +91,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   } = useApp();
   const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator';
   if (!isCreator) return null;
+
+  const currentCreatorProfile = creators.find(c => c.id === currentUser.id);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraCaptureInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +105,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const [previewDuration, setPreviewDuration] = useState<10 | 15 | 30>(15);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['Fashion & Luxury']);
   const [categorySearch, setCategorySearch] = useState('');
+  const [selectedVideoCountry, setSelectedVideoCountry] = useState<string>(
+    currentCreatorProfile?.country || currentUser.country || 'United States'
+  );
   const [hashtags, setHashtags] = useState<string[]>(['Acovon', 'CreatorVault']);
   const [hashtagInput, setHashtagInput] = useState('');
   const [disableComments, setDisableComments] = useState(false);
@@ -117,8 +125,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [backgroundQueuedNotice, setBackgroundQueuedNotice] = useState(false);
 
-  // Filterable categories list (exclude 'All Categories')
-  const availableCategories = CATEGORIES.filter(c => c !== 'All Categories');
+  // Filterable categories list from centralized activeCategories database
+  const availableCategories =
+    activeCategories && activeCategories.length > 0
+      ? activeCategories.map(c => c.name)
+      : CATEGORIES.filter(c => c !== 'All Categories');
   const filteredCategories = availableCategories.filter(c => 
     c.toLowerCase().includes(categorySearch.toLowerCase())
   );
@@ -496,12 +507,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     });
   };
 
-  // Add / remove category
+  // Add / remove category (creators can remove categories before publishing; at least 1 is required on submit)
   const toggleCategory = (cat: string) => {
     if (selectedCategories.includes(cat)) {
-      if (selectedCategories.length === 1) {
-        return; // maintain at least one category
-      }
       setSelectedCategories(prev => prev.filter(c => c !== cat));
     } else {
       setSelectedCategories(prev => [...prev, cat]);
@@ -530,7 +538,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     }
 
     if (selectedCategories.length === 0) {
-      setErrorMessage('Please select at least one content category.');
+      setErrorMessage('Please select at least one content category before publishing.');
+      return;
+    }
+
+    if (!selectedVideoCountry || !selectedVideoCountry.trim()) {
+      setErrorMessage('Please select the Video Country for this post before publishing.');
       return;
     }
 
@@ -592,6 +605,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         ppvPreviewDuration: visibility === 'pay_per_view' ? previewDuration : undefined,
         tags: hashtags,
         categories: selectedCategories,
+        country: selectedVideoCountry,
         fileName: selectedFiles[0]?.fileName,
         fileSize: selectedFiles[0]?.fileSizeBytes,
         scheduledFor: isScheduled ? scheduledDate : undefined,
@@ -1048,6 +1062,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                   })}
                 </div>
               </div>
+            </div>
+
+            {/* 3B. VIDEO COUNTRY SELECTION (Independent from Creator Profile Country) */}
+            <div className="space-y-1.5 p-3.5 rounded-xl bg-[#16161d] border border-[#272732]">
+              <SearchableCountrySelector
+                value={selectedVideoCountry}
+                onChange={setSelectedVideoCountry}
+                label="Video Country (Required • Independent from Creator Profile Country)"
+                required
+                placeholder="Select the country associated with this video..."
+              />
+              <p className="text-[11px] text-neutral-400">
+                Select the country associated with this specific video or post. Selecting a Video Country never changes your Creator Profile country ({currentCreatorProfile?.country || 'Unset'}).
+              </p>
             </div>
 
             {/* 4. HASHTAGS INPUT */}

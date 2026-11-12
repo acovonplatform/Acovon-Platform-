@@ -1395,7 +1395,20 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                     </div>
 
                     {/* Message Caption / Description */}
-                    {msg.content && <p className="text-xs text-neutral-200 leading-relaxed">{msg.content}</p>}
+                    {msg.content && (
+                      isMine ? (
+                        <p className="text-xs text-neutral-200 leading-relaxed">{msg.content}</p>
+                      ) : (
+                        <TranslateContentButton
+                          text={msg.content}
+                          contentType="message"
+                          contentRef={`msg_att_${msg.id}`}
+                          renderPrimaryText
+                          textClassName="text-xs text-neutral-200 leading-relaxed"
+                          compact
+                        />
+                      )
+                    )}
 
                     {/* Attachment Cards Grid */}
                     <div className="space-y-2.5">
@@ -1605,9 +1618,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                       className="w-full rounded-lg mb-1.5 object-cover max-h-52 cursor-pointer"
                     />
                   )}
-                  <p data-ugc="true" className="leading-relaxed whitespace-pre-line">{msg.content}</p>
-                  {!isMine && msg.content && (
-                    <TranslateContentButton text={msg.content} contentType="message" compact />
+                  {isMine ? (
+                    <p data-ugc="true" className="leading-relaxed whitespace-pre-line">{msg.content}</p>
+                  ) : (
+                    msg.content && (
+                      <TranslateContentButton
+                        text={msg.content}
+                        contentType="message"
+                        contentRef={`msg_${msg.id}`}
+                        renderPrimaryText
+                        textClassName="leading-relaxed whitespace-pre-line"
+                        compact
+                      />
+                    )
                   )}
                   <div
                     className={`text-[10px] text-right flex items-center justify-end gap-1 ${

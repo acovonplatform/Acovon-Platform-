@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile, Post } from '../../types';
 import { CATEGORIES, DEMO_STATS } from '../../data/mockData';
+import { matchesCategoryIdentifier, matchesCountryIdentifier } from '../../data/globalTaxonomy';
+import { DiscoveryFilterBar } from '../discovery/DiscoveryFilterBar';
 import { AdBanner } from '../ads/AdBanner';
 import { VerifiedBadge } from '../common/VerifiedBadge';
+import { TranslateContentButton } from '../common/TranslateContentButton';
 import { 
   Search, 
   Video, 
@@ -45,6 +48,9 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   const {
     creators,
     posts,
+    categories,
+    countries,
+    getCountryFlagAndName,
     promotions,
     activeRole,
     showDemoBadges,
@@ -57,7 +63,15 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
   const [activeTab, setActiveTab] = useState<'creators' | 'media_library'>('creators');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All Categories');
+  const [appliedFilters, setAppliedFilters] = useState<{
+    categories: string[];
+    videoCountries: string[];
+    creatorCountries: string[];
+  }>({
+    categories: [],
+    videoCountries: [],
+    creatorCountries: []
+  });
   const [filterLiveCalls, setFilterLiveCalls] = useState(false);
   const [filterCustomReqs, setFilterCustomReqs] = useState(false);
   const [filterVerifiedOnly, setFilterVerifiedOnly] = useState(false);
@@ -65,21 +79,6 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   // Media library filter
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'videos' | 'photos' | 'ppv'>('all');
   const [activePreviewPost, setActivePreviewPost] = useState<Post | null>(null);
-
-  const recommendedCreatorsForYou = getRecommendedCreators(4);
-  const recommendedMediaForYou = getRecommendedPosts('for_you', { limit: 3 });
-
-  // Personalized trending hashtags
-  const personalizedHashtags = [
-    'hypertrophy',
-    'cinematography',
-    'michelin',
-    'typescript',
-    'couture',
-    'masterclass',
-    '35mm',
-    'systemdesign'
-  ];
 
   // Check if creator is currently promoted
   const boostedCreatorIds = new Set(
@@ -95,12 +94,39 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.bio?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (c.country?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       c.category.toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchSearch) return false;
 
-    // Category
-    if (selectedCategory !== 'All Categories' && c.category !== selectedCategory) return false;
+    // Category filter (multi-select)
+    if (appliedFilters.categories.length > 0) {
+      const creatorCats = c.categories && c.categories.length > 0 ? c.categories : [c.category];
+      if (!matchesCategoryIdentifier(creatorCats, undefined, appliedFilters.categories, categories)) {
+        return false;
+      }
+    }
+
+    // Creator Country filter
+    if (appliedFilters.creatorCountries.length > 0) {
+      if (!matchesCountryIdentifier(c.country, c.creator_country_id, appliedFilters.creatorCountries, countries)) {
+        return false;
+      }
+    }
+
+    // Video Country filter on Creators tab: matches creators who have published at least one public/visible post in that video country
+    if (appliedFilters.videoCountries.length > 0) {
+      const hasVideoInCountry = posts.some(
+        p =>
+          p.creatorId === c.id &&
+          !p.isDeletedByCreator &&
+          p.moderationStatus !== 'removed' &&
+          !p.isDraft &&
+          p.visibility !== 'private' &&
+          matchesCountryIdentifier(p.country, p.video_country_id, appliedFilters.videoCountries, countries)
+      );
+      if (!hasVideoInCountry) return false;
+    }
 
     // Filters
     if (filterLiveCalls && !c.isLiveForCalls) return false;
@@ -125,9 +151,31 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
     if (!matchSearch) return false;
 
-    if (selectedCategory !== 'All Categories') {
-      const matchCat = p.categories?.includes(selectedCategory);
-      if (!matchCat) return false;
+    if (appliedFilters.categories.length > 0) {
+      if (!matchesCategoryIdentifier(p.categories, p.category_ids, appliedFilters.categories, categories)) {
+        return false;
+      }
+    }
+
+    if (appliedFilters.videoCountries.length > 0) {
+      if (!matchesCountryIdentifier(p.country, p.video_country_id, appliedFilters.videoCountries, countries)) {
+        return false;
+      }
+    }
+
+    if (appliedFilters.creatorCountries.length > 0) {
+      const postCreator = creators.find(c => c.id === p.creatorId);
+      if (
+        !postCreator ||
+        !matchesCountryIdentifier(
+          postCreator.country,
+          postCreator.creator_country_id,
+          appliedFilters.creatorCountries,
+          countries
+        )
+      ) {
+        return false;
+      }
     }
 
     if (mediaTypeFilter === 'videos') {
@@ -149,7 +197,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
       trackEngagementEvent({
         eventType: 'search_performed',
         searchQuery: searchQuery.trim(),
-        category: selectedCategory !== 'All Categories' ? selectedCategory : undefined,
+        category: appliedFilters.categories[0],
         surface: 'explore'
       });
     }
@@ -158,32 +206,67 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       
-      {/* Title & Search */}
-      <div className="max-w-3xl mb-6 space-y-4">
-        {/* Search bar */}
-        <form onSubmit={handleSearchSubmit} className="relative">
-          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onBlur={() => {
-              if (searchQuery.trim().length >= 3) {
-                trackEngagementEvent({
-                  eventType: 'search_performed',
-                  searchQuery: searchQuery.trim(),
-                  surface: 'explore'
-                });
+      {/* Title, Tab Switcher, Search & Combined Category/Country Filter Bar */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 bg-[#121215] border border-[#27272a] rounded-xl p-1 self-start">
+            <button
+              type="button"
+              onClick={() => setActiveTab('creators')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                activeTab === 'creators'
+                  ? 'bg-[#d4af37] text-black font-bold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Creators ({filteredCreators.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('media_library')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                activeTab === 'media_library'
+                  ? 'bg-[#d4af37] text-black font-bold'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Videos &amp; Media ({filteredPosts.length})
+            </button>
+          </div>
+
+          {/* Search bar */}
+          <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-xl">
+            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onBlur={() => {
+                if (searchQuery.trim().length >= 3) {
+                  trackEngagementEvent({
+                    eventType: 'search_performed',
+                    searchQuery: searchQuery.trim(),
+                    surface: 'explore'
+                  });
+                }
+              }}
+              placeholder={
+                activeTab === 'creators'
+                  ? "Search creators by name, country, discipline, or keywords..."
+                  : "Search videos, photography sets, countries, topics, or hashtags..."
               }
-            }}
-            placeholder={
-              activeTab === 'creators'
-                ? "Search creators by name, discipline, or keywords..."
-                : "Search demonstration videos, photography sets, topics, or hashtags..."
-            }
-            className="w-full bg-[#121215] border border-[#27272a] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
-          />
-        </form>
+              className="w-full bg-[#121215] border border-[#27272a] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
+            />
+          </form>
+        </div>
+
+        {/* Combined Category, Video Country & Creator Country Filter Bar */}
+        <DiscoveryFilterBar
+          appliedFilters={appliedFilters}
+          onApplyFilters={setAppliedFilters}
+          totalMatchingCount={activeTab === 'creators' ? filteredCreators.length : filteredPosts.length}
+          resultUnitLabel={activeTab === 'creators' ? 'creators' : 'posts'}
+        />
       </div>
 
       {/* Fast Filter Toggles for Creators Tab */}
@@ -359,14 +442,22 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                             )}
                           </div>
 
-                          {/* Unboxed Metadata */}
-                          <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+                          {/* Unboxed Metadata with Creator Country Flag */}
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-400">
                             <span className="inline-flex items-center gap-1">
                               <span>@{creator.username}</span>
                               <VerifiedBadge creatorId={creator.id} size="xs" />
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>{creator.category}</span>
+                            {creator.country && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-neutral-300">
+                                  {getCountryFlagAndName(creator.country).flag} {getCountryFlagAndName(creator.country).name}
+                                </span>
+                              </>
+                            )}
                             <span aria-hidden="true">·</span>
                             <span className="font-mono text-neutral-300">
                               {(creator.followersCount / 1000).toFixed(1)}k followers
@@ -525,13 +616,18 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                           {post.content}
                         </p>
 
-                        {/* Categories & Tags */}
+                        {/* Categories, Video Country & Tags */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {post.categories?.map(cat => (
                             <span key={cat} className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#1c1c22] text-[#fce7b0] border border-[#2e2e38]">
                               {cat}
                             </span>
                           ))}
+                          {post.country && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#16161d] text-neutral-300 border border-[#272732]">
+                              {getCountryFlagAndName(post.country).flag} {getCountryFlagAndName(post.country).name}
+                            </span>
+                          )}
                           {post.tags?.slice(0, 2).map(tag => (
                             <span key={tag} className="text-[10px] text-neutral-400">
                               #{tag}
@@ -642,9 +738,13 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
             {/* Caption & Metadata */}
             <div className="p-5 space-y-3">
-              <p className="text-sm text-neutral-200 leading-relaxed">
-                {activePreviewPost.content}
-              </p>
+              <TranslateContentButton
+                text={activePreviewPost.content}
+                contentType="post"
+                contentRef={`explore_preview_${activePreviewPost.id}`}
+                renderPrimaryText
+                textClassName="text-sm text-neutral-200 leading-relaxed"
+              />
 
               <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#1f1f23] justify-between">
                 <div className="flex flex-wrap gap-1.5">

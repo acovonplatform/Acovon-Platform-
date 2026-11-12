@@ -35,7 +35,13 @@ import {
   AnnouncementRecipientRecord
 } from '../types';
 import { DEMO_POSTS, DEMO_LIVESTREAMS, DEMO_STATS } from './demoContent';
-export { DEMO_STATS };
+import {
+  OFFICIAL_CATEGORIES,
+  OFFICIAL_COUNTRIES,
+  resolveCategoryRecord,
+  resolveCountryRecord
+} from './globalTaxonomy';
+export { DEMO_STATS, OFFICIAL_CATEGORIES, OFFICIAL_COUNTRIES };
 
 export const INITIAL_COMMISSION_SETTINGS: CommissionSettings = {
   subscriptionsRate: 0.20,
@@ -487,7 +493,9 @@ export const MOCK_CREATORS: CreatorProfile[] = [
     isVerified: true,
     is18PlusConfirmed: true,
     dateJoined: '2024-09-14',
-    country: 'United States',
+    country: 'United Arab Emirates',
+    creator_country_id: 'country_ae',
+    countryIsoCode: 'AE',
     isLiveForCalls: true,
     callRatePerMinute: 5.50,
     instantCallsEnabled: true,
@@ -765,9 +773,76 @@ export const MOCK_CREATORS: CreatorProfile[] = [
       website: 'https://sanctuarymind.com'
     }
   }
-];
+].map((creator): CreatorProfile => {
+  const resolvedCountry = resolveCountryRecord(creator.country);
+  return {
+    ...(creator as CreatorProfile),
+    role: 'creator',
+    creator_country_id: (creator as CreatorProfile).creator_country_id || resolvedCountry?.id || 'country_us',
+    countryIsoCode: (creator as CreatorProfile).countryIsoCode || resolvedCountry?.iso_code || 'US'
+  };
+});
 
-export const MOCK_POSTS: Post[] = DEMO_POSTS.map((post, idx) => {
+// Explicit independent Video Country assignments for existing posts (independent from Creator Country)
+const POST_VIDEO_COUNTRY_OVERRIDES: Record<string, string> = {
+  post_ppv_elena_1: 'France',
+  post_clip_elena_highlight: 'France',
+  post_elena_subs_1: 'Italy',
+  post_elena_photo_public: 'France',
+  post_marcus_free_1: 'United States',
+  post_marcus_ppv_1: 'United Kingdom',
+  post_marcus_subs_photo: 'United States',
+  post_sarah_ppv_1: 'Canada',
+  post_sarah_public_v1: 'Canada',
+  post_sarah_photo_subs: 'United States',
+  post_kai_public_1: 'Japan',
+  post_kai_ppv_1: 'Japan',
+  post_kai_render_gallery: 'Japan',
+  // Maya Lin has Creator Country = United Arab Emirates, while her videos have France, Japan, and UAE as Video Country
+  post_maya_public_v1: 'France',
+  post_maya_ppv_1: 'Japan',
+  post_maya_photo_subs: 'United Arab Emirates',
+  post_leo_public_v1: 'Sweden',
+  post_leo_ppv_1: 'Germany',
+  post_leo_photo_battlestation: 'Sweden',
+  post_chloe_public_v1: 'France',
+  post_chloe_ppv_1: 'Switzerland'
+};
+
+export const MOCK_POSTS: Post[] = DEMO_POSTS.map((rawPost, idx) => {
+  const creator = MOCK_CREATORS.find(c => c.id === rawPost.creatorId);
+  const videoCountryName =
+    rawPost.country ||
+    POST_VIDEO_COUNTRY_OVERRIDES[rawPost.id] ||
+    creator?.country ||
+    'United States';
+  const resolvedVideoCountry = resolveCountryRecord(videoCountryName);
+
+  // Accurate category migration to official category records
+  const rawCategories =
+    rawPost.id === 'post_maya_public_v1'
+      ? Array.from(new Set([...(rawPost.categories || ['Photography & Cinematography']), 'Amateur']))
+      : rawPost.categories && rawPost.categories.length > 0
+      ? rawPost.categories
+      : creator?.category
+      ? [creator.category]
+      : ['Fashion & Luxury'];
+
+  const matchedCategoryRecords = rawCategories
+    .map(catName => resolveCategoryRecord(catName))
+    .filter((rec): rec is NonNullable<typeof rec> => Boolean(rec));
+
+  const post: Post = {
+    ...rawPost,
+    country: resolvedVideoCountry?.name || videoCountryName,
+    video_country_id: resolvedVideoCountry?.id || 'country_us',
+    categories:
+      matchedCategoryRecords.length > 0
+        ? matchedCategoryRecords.map(r => r.name)
+        : rawCategories,
+    category_ids: matchedCategoryRecords.map(r => r.id)
+  };
+
   const hasVideo = post.media.some(m => m.type === 'video');
   if (!hasVideo) return post;
 
@@ -1491,19 +1566,9 @@ export const MOCK_NOTIFICATIONS: AppNotification[] = [
 
 export const CATEGORIES = [
   'All Categories',
-  'Fashion & Luxury',
-  'Music & Audio Production',
-  'Fitness & Bodybuilding',
-  'Digital Art & 3D Design',
-  'Photography & Cinematography',
-  'Gaming & Esports',
-  'Education & Tutorials',
-  'Culinary Arts & Gourmet',
-  'Tech & Software Development',
-  'Coaching & Business',
-  'Dance & Choreography',
-  'Animation & Motion Design',
-  'Wellness & Meditation'
+  ...OFFICIAL_CATEGORIES.filter(c => c.is_active)
+    .sort((a, b) => a.display_order - b.display_order)
+    .map(c => c.name)
 ];
 
 export const MOCK_GIFTS: VirtualGift[] = [

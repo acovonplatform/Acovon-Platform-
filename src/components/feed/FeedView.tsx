@@ -5,7 +5,12 @@ import { CATEGORIES } from '../../data/mockData';
 import { PostCard } from './PostCard';
 import { AdBanner } from '../ads/AdBanner';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { PlusCircle, Sparkles, Sliders, RotateCcw, EyeOff, Check, Unlock, Flame, Search, X } from 'lucide-react';
+import { DiscoveryFilterBar, DiscoveryFilterState } from '../discovery/DiscoveryFilterBar';
+import {
+  matchesCategoryIdentifier,
+  matchesCountryIdentifier
+} from '../../data/globalTaxonomy';
+import { PlusCircle, Sparkles, Sliders, RotateCcw, EyeOff, Check, Unlock, Flame, Search, X, Grid } from 'lucide-react';
 
 interface FeedViewProps {
   onNavigateToCreator: (creatorId: string) => void;
@@ -24,6 +29,8 @@ interface FeedViewProps {
   onOpenWallet?: () => void;
   onOpenPrivacy?: () => void;
   onOpenHelpCenter?: () => void;
+  searchQuery?: string;
+  onClearSearch?: () => void;
 }
 
 export const FeedView: React.FC<FeedViewProps> = ({
@@ -40,7 +47,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onNavigate,
   onOpenWallet,
   onOpenPrivacy,
-  onOpenHelpCenter
+  onOpenHelpCenter,
+  searchQuery = '',
+  onClearSearch
 }) => {
   const { 
     posts, 
@@ -62,12 +71,26 @@ export const FeedView: React.FC<FeedViewProps> = ({
     setFanOnboardingCategories,
     unhideCreatorForFan,
     resetFanRecommendations,
-    trackEngagementEvent
+    trackEngagementEvent,
+    activeCategories,
+    activeCountries
   } = useApp();
 
   const [feedFilter, setFeedFilter] = useState<FeedActivityFilterType>('all');
-  const [feedSearchQuery, setFeedSearchQuery] = useState<string>('');
+  const feedSearchQuery = searchQuery;
   const [showPersonalizationInspector, setShowPersonalizationInspector] = useState(false);
+  const [showCategoriesFilterPanel, setShowCategoriesFilterPanel] = useState(false);
+  const [discoveryFilters, setDiscoveryFilters] = useState<DiscoveryFilterState>({
+    categories: [],
+    videoCountries: [],
+    creatorCountries: []
+  });
+
+  const creatorLookup = useMemo(() => {
+    const map = new Map<string, (typeof creators)[number]>();
+    creators.forEach(c => map.set(c.id, c));
+    return map;
+  }, [creators]);
 
   const suspendedCreatorIds = useMemo(
     () =>
@@ -98,7 +121,45 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const filteredPosts = useMemo<Post[]>(() => {
     const q = feedSearchQuery.trim().toLowerCase();
-    const matchesQuery = (post: Post) => {
+    const matchesQueryAndTaxonomy = (post: Post) => {
+      if (
+        discoveryFilters.categories.length > 0 &&
+        !matchesCategoryIdentifier(
+          post.categories,
+          post.category_ids,
+          discoveryFilters.categories,
+          activeCategories
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        discoveryFilters.videoCountries.length > 0 &&
+        !matchesCountryIdentifier(
+          post.country,
+          post.video_country_id,
+          discoveryFilters.videoCountries,
+          activeCountries
+        )
+      ) {
+        return false;
+      }
+
+      if (discoveryFilters.creatorCountries.length > 0) {
+        const postCreator = creatorLookup.get(post.creatorId);
+        if (
+          !matchesCountryIdentifier(
+            postCreator?.country,
+            postCreator?.creator_country_id,
+            discoveryFilters.creatorCountries,
+            activeCountries
+          )
+        ) {
+          return false;
+        }
+      }
+
       if (!q) return true;
       return (
         post.content.toLowerCase().includes(q) ||
@@ -114,7 +175,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return recommendedResults
         .map(r => r.post)
         .filter(p => !p.isDeletedByCreator && p.moderationStatus !== 'removed' && (p.creatorId === currentUser.id || p.visibility !== 'private'))
-        .filter(matchesQuery);
+        .filter(matchesQueryAndTaxonomy);
     }
 
     const hiddenCreators = new Set(activeFanInterestProfile?.hiddenCreatorIds || []);
@@ -130,7 +191,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
       if (suspendedCreatorIds.has(post.creatorId)) return false;
       if (hiddenPosts.has(post.id)) return false;
       if (hiddenCreators.has(post.creatorId) && post.creatorId !== currentUser.id) return false;
-      if (!matchesQuery(post)) return false;
+      if (!matchesQueryAndTaxonomy(post)) return false;
 
       if (feedFilter === 'all') return true;
       if (feedFilter === 'following') return following.includes(post.creatorId) || post.creatorId === currentUser.id;
@@ -141,6 +202,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
   }, [
     feedFilter,
     feedSearchQuery,
+    discoveryFilters,
+    activeCategories,
+    activeCountries,
+    creatorLookup,
     recommendedResults,
     posts,
     suspendedCreatorIds,
@@ -295,83 +360,26 @@ export const FeedView: React.FC<FeedViewProps> = ({
         })}
       </div>
 
-      {/* Feed Search Bar (replaces Recommended Creators) */}
-      <div className="mb-6 p-3.5 rounded-2xl bg-[#121215] border border-[#26262b] space-y-3">
-        <div className="relative flex items-center">
-          <Search className="w-4 h-4 text-[#d4af37] absolute left-3.5 pointer-events-none" />
-          <input
-            type="text"
-            value={feedSearchQuery}
-            onChange={(e) => {
-              const val = e.target.value;
-              setFeedSearchQuery(val);
-              if (val.trim().length >= 3) {
-                trackEngagementEvent({
-                  eventType: 'search_performed',
-                  contentType: 'search',
-                  searchQuery: val.trim(),
-                  sourceSurface: feedFilter === 'free_posts' ? 'free_posts' : 'for_you'
-                });
-              }
-            }}
-            placeholder="Search feed posts, creators, @usernames, #hashtags, or categories..."
-            className="w-full bg-[#18181c] border border-[#27272a] focus:border-[#d4af37] rounded-xl pl-10 pr-9 py-2.5 text-xs text-[#f4f4f5] placeholder-neutral-400 focus:outline-none transition-colors"
-          />
-          {feedSearchQuery && (
+      {feedSearchQuery.trim().length > 0 && (
+        <div className="mb-4 px-3.5 py-2 rounded-xl bg-[#141418] border border-[#27272a] flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <Search className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span>
+              Filtering feed by <strong className="text-[#fce7b0]">&ldquo;{feedSearchQuery}&rdquo;</strong> ({filteredPosts.length} {filteredPosts.length === 1 ? 'post' : 'posts'})
+            </span>
+          </div>
+          {onClearSearch && (
             <button
               type="button"
-              onClick={() => setFeedSearchQuery('')}
-              aria-label="Clear search"
-              className="absolute right-3 p-1 text-neutral-400 hover:text-white rounded-lg cursor-pointer transition-colors"
+              onClick={onClearSearch}
+              className="px-2 py-0.5 rounded-lg bg-[#1f1f26] hover:bg-[#2a2a34] text-neutral-300 hover:text-white flex items-center gap-1 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
+              <span>Clear</span>
             </button>
           )}
         </div>
-
-        {matchingSearchCreators.length > 0 && (
-          <div className="pt-1 space-y-2">
-            <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 px-1">
-              Matching Creators ({matchingSearchCreators.length})
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {matchingSearchCreators.map(creator => (
-                <button
-                  key={creator.id}
-                  type="button"
-                  onClick={() => {
-                    trackEngagementEvent({
-                      eventType: 'creator_profile_opened',
-                      contentType: 'creator',
-                      creatorId: creator.id,
-                      category: creator.category,
-                      sourceSurface: feedFilter === 'free_posts' ? 'free_posts' : 'for_you'
-                    });
-                    onNavigateToCreator(creator.id);
-                  }}
-                  className="p-2 rounded-xl bg-[#16161b] hover:bg-[#1c1c24] border border-[#27272a] hover:border-[#d4af37]/40 flex items-center gap-2.5 text-left transition-all cursor-pointer"
-                >
-                  <img
-                    src={creator.avatar}
-                    alt={creator.name}
-                    className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#d4af37]/30"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-[#f4f4f5] truncate">
-                      {creator.name}
-                    </div>
-                    <div className="text-[10px] text-neutral-400 truncate flex items-center gap-1">
-                      <span>@{creator.username}</span>
-                      <VerifiedBadge creatorId={creator.id} size="xs" />
-                      <span>· {creator.category}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Activity-Filter Bar — Exact 6 Filters in Required Order */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-5">
@@ -435,22 +443,37 @@ export const FeedView: React.FC<FeedViewProps> = ({
         <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setShowPersonalizationInspector(prev => !prev)}
+            onClick={() => setShowCategoriesFilterPanel(prev => !prev)}
+            aria-expanded={showCategoriesFilterPanel}
             className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
-              showPersonalizationInspector || feedFilter === 'for_you' || feedFilter === 'free_posts'
-                ? 'bg-[#1a1812] border-[#d4af37]/40 text-[#fce7b0]'
-                : 'bg-[#141418] border-[#27272a] text-neutral-400 hover:text-white'
+              showCategoriesFilterPanel ||
+              discoveryFilters.categories.length > 0 ||
+              discoveryFilters.videoCountries.length > 0 ||
+              discoveryFilters.creatorCountries.length > 0
+                ? 'bg-[#d4af37] border-[#d4af37] text-black font-bold shadow-sm'
+                : 'bg-[#1a1812] border-[#d4af37]/40 text-[#fce7b0] hover:bg-[#d4af37] hover:text-black'
             }`}
-            title="Inspect or switch Fan Personalization Profile & Test Cases"
+            title="Open or close Category & Country filters"
           >
-            <Sliders className="w-3 h-3 text-[#d4af37]" />
-            <span>Personalize</span>
+            <Grid className="w-3 h-3 text-current" />
+            <span>Categories</span>
           </button>
           <span className="text-xs text-neutral-500 font-mono">
             {filteredPosts.length} posts
           </span>
         </div>
       </div>
+
+      {/* Combined Category, Video Country & Creator Country Discovery Filter Bar (Opens & Closes via Categories button) */}
+      {showCategoriesFilterPanel && (
+        <DiscoveryFilterBar
+          appliedFilters={discoveryFilters}
+          onApplyFilters={setDiscoveryFilters}
+          totalMatchingCount={filteredPosts.length}
+          resultUnitLabel="posts"
+          onNavigateToCategoriesHub={onNavigate ? () => onNavigate('categories') : undefined}
+        />
+      )}
 
       {/* Contextual Smart Feed Header & Persona Switcher for For You / Free Posts / Inspector */}
       {(feedFilter === 'for_you' || feedFilter === 'free_posts' || showPersonalizationInspector) && (

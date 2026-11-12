@@ -84,8 +84,17 @@ import {
   PlatformAnnouncement,
   BrandingDesignTokens,
   PlatformBrandingTheme,
-  BrandingHistoryRecord
+  BrandingHistoryRecord,
+  CategoryRecord,
+  CountryRecord,
+  UserTranslationPreferences
 } from '../types';
+import {
+  OFFICIAL_CATEGORIES,
+  OFFICIAL_COUNTRIES,
+  resolveCategoryRecord,
+  resolveCountryRecord
+} from '../data/globalTaxonomy';
 import {
   PRESET_BRANDING_THEMES,
   DEFAULT_BRANDING_THEME,
@@ -99,7 +108,9 @@ import {
   INITIAL_SUPPORTED_LANGUAGES,
   INITIAL_TRANSLATION_RECORDS,
   EXTENDED_UI_PHRASE_DICTIONARY,
-  detectSupportedBrowserLanguage
+  detectSupportedBrowserLanguage,
+  detectTextLanguage,
+  translateAndCacheUGC
 } from '../data/i18nData';
 import { PLATFORM_WIDE_PHRASE_TRANSLATIONS } from '../data/i18nExtendedPhrases';
 import {
@@ -725,7 +736,7 @@ interface AppContextType {
     error?: string;
   };
 
-  // Multilingual Platform & Automatic Language Detection (19 Languages + RTL/LTR + Admin i18n Management)
+  // Multilingual Platform & Independent Content Translation System (19 Languages + RTL/LTR + Admin i18n Management)
   supportedLanguages: LanguageMetadata[];
   activeLanguageCode: SupportedLanguageCode;
   activeLanguageMeta: LanguageMetadata;
@@ -742,6 +753,34 @@ interface AppContextType {
     mode: LanguagePreferenceMode,
     manualCode?: SupportedLanguageCode
   ) => void;
+  // Independent User Content Translation Settings (Default: Platform Translation DISABLED)
+  preferredTranslationLanguage: SupportedLanguageCode;
+  preferredTranslationLanguageMeta: LanguageMetadata;
+  platformTranslationEnabled: boolean;
+  setPreferredTranslationLanguage: (langCode: SupportedLanguageCode) => void;
+  setPlatformTranslationEnabled: (enabled: boolean) => void;
+  saveUserTranslationSettings: (input: {
+    preferredTranslationLanguage?: SupportedLanguageCode;
+    platformTranslationEnabled?: boolean;
+    appLanguage?: SupportedLanguageCode;
+    appLanguageMode?: LanguagePreferenceMode;
+  }) => Promise<{ success: boolean }>;
+  translateContentItem: (params: {
+    contentRef?: string;
+    text: string;
+    targetLang?: SupportedLanguageCode;
+    sourceLang?: SupportedLanguageCode;
+  }) => {
+    translatedText: string;
+    detectedSourceLang: SupportedLanguageCode;
+    detectedSourceEnglishName: string;
+    detectedSourceNativeName: string;
+    targetLang: SupportedLanguageCode;
+    targetLangEnglishName: string;
+    targetLangNativeName: string;
+    targetDir: 'ltr' | 'rtl';
+    cacheKey: string;
+  };
   t: (keyOrPhrase: string, fallbackText?: string) => string;
   translatePhrase: (englishPhrase: string) => string;
   translationRecords: TranslationKeyRecord[];
@@ -758,6 +797,31 @@ interface AppContextType {
     initialTranslations?: Partial<Record<SupportedLanguageCode, string>>;
   }) => { success: boolean; error?: string };
   adminPublishTranslations: (notes?: string) => { success: boolean; error?: string };
+
+  // Global Categories & Countries Discovery System
+  categories: CategoryRecord[];
+  activeCategories: CategoryRecord[];
+  countries: CountryRecord[];
+  activeCountries: CountryRecord[];
+  getCountryFlagAndName: (countryNameOrId?: string) => { flag: string; name: string; iso_code: string; id: string };
+  adminAddCategory: (input: {
+    name: string;
+    description?: string;
+    image?: string;
+    display_order?: number;
+  }) => Promise<{ success: boolean; error?: string; category?: CategoryRecord }>;
+  adminUpdateCategory: (
+    categoryId: string,
+    updates: Partial<CategoryRecord>
+  ) => Promise<{ success: boolean; error?: string; category?: CategoryRecord }>;
+  adminToggleCountryActive: (
+    countryId: string,
+    is_active: boolean
+  ) => Promise<{ success: boolean; error?: string; country?: CountryRecord }>;
+  updateCreatorCountry: (
+    creatorId: string,
+    countryNameOrId: string
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1256,15 +1320,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Account-linked & Guest Language Preference Map (persists per user ID across sessions, logouts, logins & devices)
-  const [userLanguageMap, setUserLanguageMap] = useState<
-    Record<string, { mode: LanguagePreferenceMode; code: SupportedLanguageCode }>
+  // Account-linked & Guest Independent Language & Translation Preferences Map
+  // CRITICAL REQUIREMENT: platform_translation_enabled MUST be false by default for every new user,
+  // existing user without an explicit saved preference, and guest session.
+  const [userTranslationSettingsMap, setUserTranslationSettingsMap] = useState<
+    Record<string, UserTranslationPreferences>
   >(() => {
     try {
-      const saved = localStorage.getItem('acovon_user_language_map_v1');
+      const saved = localStorage.getItem('acovon_user_translation_prefs_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return parsed;
+        if (parsed && typeof parsed === 'object') {
+          const sanitized: Record<string, UserTranslationPreferences> = {};
+          for (const [uid, rawRec] of Object.entries(parsed)) {
+            if (uid && rawRec && typeof rawRec === 'object') {
+              const r = rawRec as Partial<UserTranslationPreferences>;
+              sanitized[uid] = {
+                userId: uid,
+                preferred_translation_language: r.preferred_translation_language || 'en',
+                // Never interpret a missing or non-explicit value as enabled
+                platform_translation_enabled:
+                  r.explicitly_saved === true && r.platform_translation_enabled === true
+                    ? true
+                    : false,
+                app_language: r.app_language || 'en',
+                app_language_mode: r.app_language_mode || 'manual',
+                explicitly_saved: Boolean(r.explicitly_saved),
+                updated_at: r.updated_at || new Date().toISOString()
+              };
+            }
+          }
+          return sanitized;
+        }
       }
     } catch {
       // fallback
@@ -1274,34 +1361,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      localStorage.setItem('acovon_user_language_map_v1', JSON.stringify(userLanguageMap));
+      localStorage.setItem(
+        'acovon_user_translation_prefs_v2',
+        JSON.stringify(userTranslationSettingsMap)
+      );
     } catch {
       // ignore
     }
-  }, [userLanguageMap]);
+  }, [userTranslationSettingsMap]);
+
+  // Hydrate per-user translation settings from backend on mount
+  useEffect(() => {
+    let active = true;
+    fetch('/api/translation/settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!active || !data?.success || !data.settingsByUser) return;
+        setUserTranslationSettingsMap(prev => {
+          const merged = { ...prev };
+          for (const [uid, rec] of Object.entries(
+            data.settingsByUser as Record<string, UserTranslationPreferences>
+          )) {
+            if (uid && rec) {
+              merged[uid] = {
+                userId: uid,
+                preferred_translation_language: rec.preferred_translation_language || 'en',
+                platform_translation_enabled:
+                  rec.explicitly_saved === true && rec.platform_translation_enabled === true
+                    ? true
+                    : false,
+                app_language: rec.app_language || 'en',
+                app_language_mode: rec.app_language_mode || 'manual',
+                explicitly_saved: Boolean(rec.explicitly_saved),
+                updated_at: rec.updated_at || new Date().toISOString()
+              };
+            }
+          }
+          return merged;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const detectedDeviceLanguage = detectSupportedBrowserLanguage(
     simulatedBrowserLocale || undefined,
     supportedLanguages
   );
 
-  // Resolve current user's or guest's saved language preference
-  const activeAccountLangSlot = isAuthenticated ? currentUser.id : '__guest__';
-  const savedUserLangPref = userLanguageMap[activeAccountLangSlot] ||
-    (currentUser.languagePreferenceMode && currentUser.preferredLanguageCode
-      ? {
-          mode: currentUser.languagePreferenceMode,
-          code: currentUser.preferredLanguageCode as SupportedLanguageCode
-        }
-      : userLanguageMap['__guest__']) || {
-      mode: 'automatic' as LanguagePreferenceMode,
-      code: detectedDeviceLanguage.matchedLanguageCode
-    };
+  // Resolve current user's or guest's independent settings slot
+  const activeAccountLangSlot = isAuthenticated && currentUser?.id ? currentUser.id : '__guest__';
+  const savedSlotSettings: UserTranslationPreferences = userTranslationSettingsMap[
+    activeAccountLangSlot
+  ] || {
+    userId: activeAccountLangSlot,
+    preferred_translation_language:
+      (currentUser?.preferred_translation_language as SupportedLanguageCode) || 'en',
+    // Strictly false unless explicitly saved as true for this specific user
+    platform_translation_enabled: false,
+    app_language: (currentUser?.app_language as SupportedLanguageCode) || 'en',
+    app_language_mode: currentUser?.languagePreferenceMode || 'manual',
+    explicitly_saved: false,
+    updated_at: new Date().toISOString()
+  };
 
-  const languagePreferenceMode: LanguagePreferenceMode = savedUserLangPref.mode;
-  const manualSelectedLanguageCode: SupportedLanguageCode = savedUserLangPref.code || 'en';
+  const languagePreferenceMode: LanguagePreferenceMode =
+    savedSlotSettings.app_language_mode || 'manual';
+  const manualSelectedLanguageCode: SupportedLanguageCode =
+    (savedSlotSettings.app_language as SupportedLanguageCode) || 'en';
 
-  // Compute effective active language code with English fallback if disabled/unsupported
+  // Compute effective active App Language (interface language) with English fallback
   const rawResolvedLangCode: SupportedLanguageCode =
     languagePreferenceMode === 'english'
       ? 'en'
@@ -1318,7 +1449,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeLanguageMeta: LanguageMetadata = matchedEnabledMeta || englishFallbackMeta;
   const activeLanguageCode: SupportedLanguageCode = activeLanguageMeta.code;
 
-  // Apply dynamic LTR / RTL direction & lang attribute to document root
+  // Independent Preferred Translation Language & Platform Translation Toggle State
+  const rawPreferredTranslationCode =
+    (savedSlotSettings.preferred_translation_language as SupportedLanguageCode) || 'en';
+  const preferredTranslationLanguageMeta: LanguageMetadata =
+    supportedLanguages.find(l => l.code === rawPreferredTranslationCode) || englishFallbackMeta;
+  const preferredTranslationLanguage: SupportedLanguageCode =
+    preferredTranslationLanguageMeta.code;
+
+  // CRITICAL: Default is strictly false; only true if explicitly saved as true for this user/guest
+  const platformTranslationEnabled: boolean =
+    savedSlotSettings.explicitly_saved === true &&
+    savedSlotSettings.platform_translation_enabled === true;
+
+  // Apply dynamic LTR / RTL direction & lang attribute to document root for App Language
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
@@ -1328,28 +1472,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     root.setAttribute('data-dir', activeLanguageMeta.dir);
   }, [activeLanguageMeta]);
 
-  const setUserLanguagePreference = (
-    mode: LanguagePreferenceMode,
-    manualCode?: SupportedLanguageCode
+  const persistUserTranslationRecord = (
+    slotId: string,
+    nextRecord: UserTranslationPreferences
   ) => {
-    const nextCode: SupportedLanguageCode =
-      mode === 'english'
-        ? 'en'
-        : manualCode || manualSelectedLanguageCode || detectedDeviceLanguage.matchedLanguageCode;
-
-    // Persist for both the current account ID and the guest slot so login/logout seamlessly preserves preference
-    setUserLanguageMap(prev => ({
+    setUserTranslationSettingsMap(prev => ({
       ...prev,
-      [activeAccountLangSlot]: { mode, code: nextCode },
-      __guest__: { mode, code: nextCode }
+      [slotId]: nextRecord
     }));
 
-    // Also store directly on the authenticated user's account record in the database
-    if (isAuthenticated && currentUser?.id) {
-      const updatedUser = {
+    // Persist to backend API independently per user ID
+    fetch(`/api/translation/settings/${encodeURIComponent(slotId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preferred_translation_language: nextRecord.preferred_translation_language,
+        platform_translation_enabled: nextRecord.platform_translation_enabled === true,
+        app_language: nextRecord.app_language,
+        app_language_mode: nextRecord.app_language_mode
+      })
+    }).catch(() => {});
+
+    // Also update currentUser & users map if authenticated
+    if (isAuthenticated && currentUser?.id && slotId === currentUser.id) {
+      const updatedUser: User | CreatorProfile = {
         ...currentUser,
-        languagePreferenceMode: mode,
-        preferredLanguageCode: nextCode
+        preferred_translation_language: nextRecord.preferred_translation_language,
+        platform_translation_enabled: nextRecord.platform_translation_enabled === true,
+        app_language: nextRecord.app_language,
+        preferredLanguageCode: nextRecord.app_language,
+        languagePreferenceMode: nextRecord.app_language_mode
       };
       setCurrentUser(updatedUser);
       try {
@@ -1359,17 +1511,151 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setUsers(prev => {
         if (!prev[currentUser.id]) return prev;
-        return {
+        const nextUsers = {
           ...prev,
           [currentUser.id]: {
             ...prev[currentUser.id],
-            languagePreferenceMode: mode,
-            preferredLanguageCode: nextCode
+            preferred_translation_language: nextRecord.preferred_translation_language,
+            platform_translation_enabled: nextRecord.platform_translation_enabled === true,
+            app_language: nextRecord.app_language,
+            preferredLanguageCode: nextRecord.app_language,
+            languagePreferenceMode: nextRecord.app_language_mode
           }
         };
+        try {
+          localStorage.setItem('acovon_users_v2', JSON.stringify(nextUsers));
+        } catch {
+          // ignore
+        }
+        return nextUsers;
       });
     }
   };
+
+  // App Language setter — strictly independent from Preferred Translation Language & Platform Translation!
+  const setUserLanguagePreference = (
+    mode: LanguagePreferenceMode,
+    manualCode?: SupportedLanguageCode
+  ) => {
+    const nextAppLang: SupportedLanguageCode =
+      mode === 'english'
+        ? 'en'
+        : mode === 'automatic'
+        ? detectedDeviceLanguage.matchedLanguageCode
+        : manualCode || manualSelectedLanguageCode || 'en';
+
+    const nextRecord: UserTranslationPreferences = {
+      userId: activeAccountLangSlot,
+      preferred_translation_language: preferredTranslationLanguage,
+      platform_translation_enabled: platformTranslationEnabled,
+      app_language: nextAppLang,
+      app_language_mode: mode,
+      explicitly_saved: true,
+      updated_at: new Date().toISOString()
+    };
+
+    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
+  };
+
+  // Preferred Translation Language setter — strictly independent from App Language and does NOT auto-enable Platform Translation
+  const setPreferredTranslationLanguage = (langCode: SupportedLanguageCode) => {
+    const validMeta =
+      supportedLanguages.find(l => l.code === langCode) || englishFallbackMeta;
+
+    const nextRecord: UserTranslationPreferences = {
+      userId: activeAccountLangSlot,
+      preferred_translation_language: validMeta.code,
+      platform_translation_enabled: platformTranslationEnabled,
+      app_language: activeLanguageCode,
+      app_language_mode: languagePreferenceMode,
+      explicitly_saved: true,
+      updated_at: new Date().toISOString()
+    };
+
+    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
+  };
+
+  // Platform Translation Enable/Disable setter — takes effect immediately across all supported content
+  const setPlatformTranslationEnabled = (enabled: boolean) => {
+    const nextRecord: UserTranslationPreferences = {
+      userId: activeAccountLangSlot,
+      preferred_translation_language: preferredTranslationLanguage,
+      platform_translation_enabled: Boolean(enabled === true),
+      app_language: activeLanguageCode,
+      app_language_mode: languagePreferenceMode,
+      explicitly_saved: true,
+      updated_at: new Date().toISOString()
+    };
+
+    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
+  };
+
+  const saveUserTranslationSettings = async (input: {
+    preferredTranslationLanguage?: SupportedLanguageCode;
+    platformTranslationEnabled?: boolean;
+    appLanguage?: SupportedLanguageCode;
+    appLanguageMode?: LanguagePreferenceMode;
+  }): Promise<{ success: boolean }> => {
+    const nextPrefLang = input.preferredTranslationLanguage || preferredTranslationLanguage;
+    const nextEnabled =
+      typeof input.platformTranslationEnabled === 'boolean'
+        ? input.platformTranslationEnabled
+        : platformTranslationEnabled;
+    const nextAppMode = input.appLanguageMode || languagePreferenceMode;
+    const nextAppLang =
+      nextAppMode === 'english'
+        ? 'en'
+        : nextAppMode === 'automatic'
+        ? detectedDeviceLanguage.matchedLanguageCode
+        : input.appLanguage || activeLanguageCode;
+
+    const nextRecord: UserTranslationPreferences = {
+      userId: activeAccountLangSlot,
+      preferred_translation_language: nextPrefLang,
+      platform_translation_enabled: Boolean(nextEnabled === true),
+      app_language: nextAppLang,
+      app_language_mode: nextAppMode,
+      explicitly_saved: true,
+      updated_at: new Date().toISOString()
+    };
+
+    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
+    return { success: true };
+  };
+
+  const translateContentItem = React.useCallback(
+    (params: {
+      contentRef?: string;
+      text: string;
+      targetLang?: SupportedLanguageCode;
+      sourceLang?: SupportedLanguageCode;
+    }) => {
+      const targetCode = params.targetLang || preferredTranslationLanguage;
+      const result = translateAndCacheUGC({
+        contentRef: params.contentRef,
+        text: params.text,
+        targetLang: targetCode,
+        sourceLang: params.sourceLang
+      });
+
+      // Asynchronously warm backend translation cache without blocking UI rendering
+      if (params.text && params.text.trim()) {
+        fetch('/api/translation/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contentRef: params.contentRef,
+            text: params.text,
+            sourceLang: result.detectedSourceLang,
+            targetLang: result.targetLang
+          })
+        }).catch(() => {});
+      }
+
+      return result;
+    },
+    [preferredTranslationLanguage]
+  );
 
   // Build fast lookup maps for t() and translatePhrase()
   const keyLookupMap = React.useMemo(() => {
@@ -2871,6 +3157,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newUserId = input.id || `user_fan_${Date.now()}`;
 
     // All new registrations automatically receive the default Fan role
+    // CRITICAL REQUIREMENT: Platform Translation MUST be disabled (false) by default for every new user
     const newUser: User = {
       id: newUserId,
       name: fullName,
@@ -2888,8 +3175,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dateJoined: nowDate,
       lastLoginAt: nowTimestamp,
       updatedAt: nowTimestamp,
-      country: 'United States'
+      country: 'United States',
+      preferred_translation_language: 'en',
+      platform_translation_enabled: false,
+      app_language: 'en',
+      preferredLanguageCode: 'en',
+      languagePreferenceMode: 'manual'
     };
+
+    const initialTranslationRecord: UserTranslationPreferences = {
+      userId: newUserId,
+      preferred_translation_language: 'en',
+      platform_translation_enabled: false,
+      app_language: 'en',
+      app_language_mode: 'manual',
+      explicitly_saved: false,
+      updated_at: new Date().toISOString()
+    };
+
+    setUserTranslationSettingsMap(prev => ({
+      ...prev,
+      [newUserId]: initialTranslationRecord
+    }));
+
+    fetch(`/api/translation/settings/${encodeURIComponent(newUserId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preferred_translation_language: 'en',
+        platform_translation_enabled: false,
+        app_language: 'en',
+        app_language_mode: 'manual'
+      })
+    }).catch(() => {});
 
     setUsers(prev => {
       const next = {
@@ -3269,9 +3587,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    const postId = `post_${Date.now()}`;
+    const resolvedVideoCountry =
+      resolveCountryRecord(newPostData.video_country_id, countries) ||
+      resolveCountryRecord(newPostData.country, countries);
+
+    const matchedCategoryRecords = (newPostData.categories || [])
+      .map(cat => resolveCategoryRecord(cat, categories))
+      .filter((r): r is CategoryRecord => Boolean(r));
+
     const newPost: Post = {
       ...newPostData,
-      id: `post_${Date.now()}`,
+      id: postId,
+      country: resolvedVideoCountry?.name || newPostData.country || 'United States',
+      video_country_id: resolvedVideoCountry?.id || newPostData.video_country_id || 'country_us',
+      categories:
+        matchedCategoryRecords.length > 0
+          ? matchedCategoryRecords.map(r => r.name)
+          : newPostData.categories || [],
+      category_ids:
+        matchedCategoryRecords.length > 0
+          ? matchedCategoryRecords.map(r => r.id)
+          : newPostData.category_ids || [],
       likesCount: 0,
       commentsCount: 0,
       createdAt: 'Just now',
@@ -3279,6 +3616,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       publicationStatus: newPostData.isDraft ? 'draft' : newPostData.scheduledFor ? 'scheduled' : 'published'
     };
     setPosts(prev => [newPost, ...prev]);
+
+    // Persist post categories & video country in backend database
+    fetch('/api/posts/register-taxonomy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actorId: currentUser.id,
+        actorRole: currentUser.role,
+        isApprovedCreator: isCurrentUserApprovedCreator,
+        postId,
+        creatorId: currentUser.id,
+        categories: newPost.categories,
+        videoCountry: newPost.country
+      })
+    }).catch(() => {});
   };
 
   const getPostPurchases = (postId: string): ContentPurchase[] => {
@@ -5417,10 +5769,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const updatedTimestamp = new Date().toISOString();
-    const finalUpdates = {
+    const resolvedCreatorCountry = updates.country
+      ? resolveCountryRecord(updates.country, countries)
+      : undefined;
+
+    const finalUpdates: Partial<CreatorProfile> = {
       ...updates,
+      ...(resolvedCreatorCountry
+        ? {
+            country: resolvedCreatorCountry.name,
+            creator_country_id: resolvedCreatorCountry.id,
+            countryIsoCode: resolvedCreatorCountry.iso_code
+          }
+        : {}),
       profileUpdatedAt: updatedTimestamp
     };
+
+    if (updates.country) {
+      fetch(`/api/creators/${encodeURIComponent(creatorId)}/country`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: currentUser.role,
+          isApprovedCreator: isCurrentUserApprovedCreator,
+          country: resolvedCreatorCountry?.name || updates.country
+        })
+      }).catch(() => {});
+    }
 
     setCreators(prev => prev.map(c => {
       if (c.id === creatorId) {
@@ -5437,7 +5814,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...prev[creatorId],
           ...(updates.name ? { name: updates.name } : {}),
           ...(updates.username ? { username: updates.username } : {}),
-          ...(updates.avatar ? { avatar: updates.avatar } : {})
+          ...(updates.avatar ? { avatar: updates.avatar } : {}),
+          ...(finalUpdates.country ? { country: finalUpdates.country } : {})
         }
       };
     });
@@ -5452,7 +5830,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // Also update author info on posts if name, avatar, or username was updated
+    // Also update author info on posts if name, avatar, or username was updated (NEVER overwrite post Video Country!)
     if (updates.name || updates.avatar || updates.username) {
       setPosts(prevPosts => prevPosts.map(p => {
         if (p.creatorId === creatorId) {
@@ -10841,6 +11219,395 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  // ============================================================================
+  // GLOBAL CATEGORIES & COUNTRIES DISCOVERY DATABASE STATE & ACTIONS
+  // ============================================================================
+  const [categories, setCategories] = useState<CategoryRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('acovon_official_categories_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const map = new Map<string, CategoryRecord>();
+          OFFICIAL_CATEGORIES.forEach(c => map.set(c.id, { ...c }));
+          parsed.forEach((c: CategoryRecord) => {
+            if (c && c.id && c.name) map.set(c.id, c);
+          });
+          return Array.from(map.values()).sort((a, b) => a.display_order - b.display_order);
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return [...OFFICIAL_CATEGORIES].sort((a, b) => a.display_order - b.display_order);
+  });
+
+  const [countries, setCountries] = useState<CountryRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('acovon_official_countries_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const map = new Map<string, CountryRecord>();
+          OFFICIAL_COUNTRIES.forEach(c => map.set(c.id, { ...c }));
+          parsed.forEach((c: CountryRecord) => {
+            if (c && c.id && c.iso_code) {
+              const base = map.get(c.id);
+              map.set(c.id, base ? { ...base, ...c } : c);
+            }
+          });
+          return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return [...OFFICIAL_COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('acovon_official_categories_v1', JSON.stringify(categories));
+    } catch {
+      // ignore
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('acovon_official_countries_v1', JSON.stringify(countries));
+    } catch {
+      // ignore
+    }
+  }, [countries]);
+
+  // Sync categories, countries, creator countries, and post countries from backend database on mount
+  useEffect(() => {
+    let active = true;
+    fetch('/api/taxonomy/state')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!active || !data || !data.success) return;
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          setCategories(data.categories);
+        }
+        if (Array.isArray(data.countries) && data.countries.length > 0) {
+          setCountries(data.countries);
+        }
+        if (data.creatorCountries && typeof data.creatorCountries === 'object') {
+          const ccMap = data.creatorCountries as Record<
+            string,
+            { creator_id: string; creator_country_id: string; country_name: string; iso_code: string }
+          >;
+          if (Object.keys(ccMap).length > 0) {
+            setCreators(prev =>
+              prev.map(c => {
+                const entry = ccMap[c.id];
+                if (!entry) return c;
+                return {
+                  ...c,
+                  country: entry.country_name,
+                  creator_country_id: entry.creator_country_id,
+                  countryIsoCode: entry.iso_code
+                };
+              })
+            );
+          }
+        }
+        if (
+          (data.postCountries && Object.keys(data.postCountries).length > 0) ||
+          (data.postCategories && Object.keys(data.postCategories).length > 0)
+        ) {
+          const pcMap = (data.postCountries || {}) as Record<
+            string,
+            { post_id: string; video_country_id: string; country_name: string; iso_code: string }
+          >;
+          const pCatMap = (data.postCategories || {}) as Record<string, string[]>;
+          const catsList: CategoryRecord[] = Array.isArray(data.categories) ? data.categories : OFFICIAL_CATEGORIES;
+
+          setPosts(prev =>
+            prev.map(p => {
+              const countryEntry = pcMap[p.id];
+              const catIds = pCatMap[p.id];
+              let nextPost = p;
+              if (countryEntry) {
+                nextPost = {
+                  ...nextPost,
+                  country: countryEntry.country_name,
+                  video_country_id: countryEntry.video_country_id
+                };
+              }
+              if (Array.isArray(catIds) && catIds.length > 0) {
+                const resolvedNames = catIds
+                  .map(id => catsList.find(c => c.id === id)?.name)
+                  .filter((n): n is string => Boolean(n));
+                if (resolvedNames.length > 0) {
+                  nextPost = {
+                    ...nextPost,
+                    category_ids: catIds,
+                    categories: resolvedNames
+                  };
+                }
+              }
+              return nextPost;
+            })
+          );
+        }
+      })
+      .catch(() => {
+        // fallback to local taxonomy state
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const activeCategories = categories
+    .filter(c => c.is_active)
+    .sort((a, b) => a.display_order - b.display_order);
+
+  const activeCountries = countries
+    .filter(c => c.is_active)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const getCountryFlagAndName = (countryNameOrId?: string) => {
+    if (!countryNameOrId) {
+      return {
+        id: 'country_gl',
+        name: 'Global',
+        iso_code: 'GL',
+        flag: '🌐'
+      };
+    }
+    const rec = resolveCountryRecord(countryNameOrId, countries);
+    if (!rec) {
+      return {
+        id: 'country_gl',
+        name: countryNameOrId,
+        iso_code: 'GL',
+        flag: '🌐'
+      };
+    }
+    return {
+      id: rec.id,
+      name: rec.name,
+      iso_code: rec.iso_code,
+      flag: rec.flag
+    };
+  };
+
+  const adminAddCategory = async (input: {
+    name: string;
+    description?: string;
+    image?: string;
+    display_order?: number;
+  }): Promise<{ success: boolean; error?: string; category?: CategoryRecord }> => {
+    const isAdmin =
+      currentUser.role === 'admin' ||
+      activeRole === 'admin' ||
+      Boolean((currentUser as any)?.adminPermissionLevel);
+    if (!isAdmin) {
+      return { success: false, error: 'Forbidden: Only administrators can add official categories.' };
+    }
+
+    const cleanName = input.name.trim();
+    if (!cleanName || cleanName.length < 2) {
+      return { success: false, error: 'Category name must be at least 2 characters.' };
+    }
+
+    const duplicate = categories.find(c => c.name.toLowerCase() === cleanName.toLowerCase());
+    if (duplicate) {
+      return { success: false, error: `Category "${duplicate.name}" already exists.` };
+    }
+
+    try {
+      const res = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: 'admin',
+          ...input
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data?.error || 'Failed to add category.' };
+      }
+      if (Array.isArray(data.categories)) {
+        setCategories(data.categories);
+      } else if (data.category) {
+        setCategories(prev =>
+          [...prev, data.category].sort((a, b) => a.display_order - b.display_order)
+        );
+      }
+      return { success: true, category: data.category };
+    } catch {
+      const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const fallbackCat: CategoryRecord = {
+        id: `cat_${slug}_${Date.now().toString(36)}`,
+        name: cleanName,
+        slug,
+        description:
+          input.description?.trim() ||
+          `Curated ${cleanName} videos, creators, and exclusive vault releases on ACOVON.`,
+        image:
+          input.image?.trim() ||
+          '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+        is_active: true,
+        display_order: input.display_order || categories.length + 1,
+        created_at: new Date().toISOString().slice(0, 10)
+      };
+      setCategories(prev =>
+        [...prev, fallbackCat].sort((a, b) => a.display_order - b.display_order)
+      );
+      return { success: true, category: fallbackCat };
+    }
+  };
+
+  const adminUpdateCategory = async (
+    categoryId: string,
+    updates: Partial<CategoryRecord>
+  ): Promise<{ success: boolean; error?: string; category?: CategoryRecord }> => {
+    const isAdmin =
+      currentUser.role === 'admin' ||
+      activeRole === 'admin' ||
+      Boolean((currentUser as any)?.adminPermissionLevel);
+    if (!isAdmin) {
+      return { success: false, error: 'Forbidden: Only administrators can edit categories.' };
+    }
+
+    try {
+      const res = await fetch(`/api/admin/categories/${encodeURIComponent(categoryId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: 'admin',
+          updates
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data?.error || 'Failed to update category.' };
+      }
+      if (Array.isArray(data.categories)) {
+        setCategories(data.categories);
+      } else if (data.category) {
+        setCategories(prev =>
+          prev
+            .map(c => (c.id === categoryId ? data.category : c))
+            .sort((a, b) => a.display_order - b.display_order)
+        );
+      }
+
+      // If category name was renamed, update matching post category names in memory so UI stays in sync
+      if (updates.name && data.category) {
+        const oldCat = categories.find(c => c.id === categoryId);
+        if (oldCat && oldCat.name !== data.category.name) {
+          setPosts(prev =>
+            prev.map(p => {
+              if (
+                p.category_ids?.includes(categoryId) ||
+                p.categories?.includes(oldCat.name)
+              ) {
+                return {
+                  ...p,
+                  categories: (p.categories || []).map(cn =>
+                    cn === oldCat.name ? data.category.name : cn
+                  )
+                };
+              }
+              return p;
+            })
+          );
+        }
+      }
+
+      return { success: true, category: data.category };
+    } catch {
+      let updatedCat: CategoryRecord | undefined;
+      setCategories(prev =>
+        prev
+          .map(c => {
+            if (c.id === categoryId) {
+              updatedCat = { ...c, ...updates };
+              return updatedCat;
+            }
+            return c;
+          })
+          .sort((a, b) => a.display_order - b.display_order)
+      );
+      return { success: true, category: updatedCat };
+    }
+  };
+
+  const adminToggleCountryActive = async (
+    countryId: string,
+    is_active: boolean
+  ): Promise<{ success: boolean; error?: string; country?: CountryRecord }> => {
+    const isAdmin =
+      currentUser.role === 'admin' ||
+      activeRole === 'admin' ||
+      Boolean((currentUser as any)?.adminPermissionLevel);
+    if (!isAdmin) {
+      return { success: false, error: 'Forbidden: Only administrators can activate or deactivate countries.' };
+    }
+
+    try {
+      const res = await fetch(`/api/admin/countries/${encodeURIComponent(countryId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: 'admin',
+          is_active
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data?.error || 'Failed to update country status.' };
+      }
+      if (Array.isArray(data.countries)) {
+        setCountries(data.countries);
+      } else if (data.country) {
+        setCountries(prev => prev.map(c => (c.id === countryId ? data.country : c)));
+      }
+      return { success: true, country: data.country };
+    } catch {
+      let updatedCountry: CountryRecord | undefined;
+      setCountries(prev =>
+        prev.map(c => {
+          if (c.id === countryId) {
+            updatedCountry = { ...c, is_active };
+            return updatedCountry;
+          }
+          return c;
+        })
+      );
+      return { success: true, country: updatedCountry };
+    }
+  };
+
+  const updateCreatorCountry = async (
+    creatorId: string,
+    countryNameOrId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const resolved = resolveCountryRecord(countryNameOrId, countries);
+    if (!resolved || !resolved.is_active) {
+      return { success: false, error: 'Please select an active country from the official country list.' };
+    }
+    const res = updateCreatorProfile(creatorId, {
+      country: resolved.name,
+      creator_country_id: resolved.id,
+      countryIsoCode: resolved.iso_code
+    });
+    return res;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -11080,13 +11847,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         simulatedBrowserLocale,
         setSimulatedBrowserLocale,
         setUserLanguagePreference,
+        preferredTranslationLanguage,
+        preferredTranslationLanguageMeta,
+        platformTranslationEnabled,
+        setPreferredTranslationLanguage,
+        setPlatformTranslationEnabled,
+        saveUserTranslationSettings,
+        translateContentItem,
         t,
         translatePhrase,
         translationRecords,
         adminToggleLanguageEnabled,
         adminUpdateTranslationEntry,
         adminAddTranslationKey,
-        adminPublishTranslations
+        adminPublishTranslations,
+        categories,
+        activeCategories,
+        countries,
+        activeCountries,
+        getCountryFlagAndName,
+        adminAddCategory,
+        adminUpdateCategory,
+        adminToggleCountryActive,
+        updateCreatorCountry
       }}
     >
       {children}

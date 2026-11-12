@@ -68,7 +68,10 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
     activeLanguageMeta,
     supportedLanguages,
     activeLanguageCode,
-    setUserLanguagePreference
+    setUserLanguagePreference,
+    platformTranslationEnabled,
+    setPlatformTranslationEnabled,
+    preferredTranslationLanguageMeta
   } = useApp();
   const isCreator = isCurrentUserApprovedCreator;
   const [isOpen, setIsOpen] = useState(false);
@@ -330,7 +333,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
               </div>
             </button>
 
-            {/* Language / اللغة Selector in Profile Menu */}
+            {/* Language & Translation in Profile Menu */}
             <button
               type="button"
               onClick={() => setShowLanguageSubmenu(prev => !prev)}
@@ -338,11 +341,18 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Globe className="w-4 h-4 text-[#d4af37]" />
-                <span data-no-translate="true">Language / اللغة</span>
+                <span data-no-translate="true">Language &amp; Translation</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-[#fce7b0]" data-no-translate="true">
-                  {activeLanguageMeta.nativeName}
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                    platformTranslationEnabled
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                  }`}
+                  data-no-translate="true"
+                >
+                  {platformTranslationEnabled ? 'ON' : 'OFF'}
                 </span>
                 <ChevronRight
                   className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${
@@ -353,7 +363,31 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
             </button>
 
             {showLanguageSubmenu && (
-              <div className="p-1.5 space-y-1 bg-[#16161b] rounded-xl border border-[#27272a] my-1 max-h-48 overflow-y-auto">
+              <div className="p-2 space-y-2 bg-[#16161b] rounded-xl border border-[#27272a] my-1">
+                {/* Quick Platform Translation Toggle (Default Disabled) */}
+                <div className="p-2 rounded-lg bg-[#121216] border border-[#26262f] space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] font-bold text-white">Platform Translation</div>
+                      <div className="text-[10px] text-neutral-400" data-no-translate="true">
+                        Target: {preferredTranslationLanguageMeta.englishName}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPlatformTranslationEnabled(!platformTranslationEnabled)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
+                        platformTranslationEnabled
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700'
+                      }`}
+                      data-no-translate="true"
+                    >
+                      {platformTranslationEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -361,39 +395,11 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                     setShowLanguageSubmenu(false);
                     onOpenSettings();
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-[#d4af37] bg-[#1a1810] hover:bg-[#242116] border border-[#d4af37]/30 flex items-center justify-between cursor-pointer mb-1"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-[#fce7b0] bg-[#1a1810] hover:bg-[#242116] border border-[#d4af37]/30 flex items-center justify-between cursor-pointer"
                 >
-                  <span>Full Language Settings (Search 19)</span>
-                  <ChevronRight className="w-3 h-3" />
+                  <span>Language &amp; Translation Settings</span>
+                  <ChevronRight className="w-3 h-3 text-[#d4af37]" />
                 </button>
-                {supportedLanguages
-                  .filter(l => l.enabled)
-                  .map(lang => {
-                    const isSelected = activeLanguageCode === lang.code;
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => {
-                          setUserLanguagePreference('manual', lang.code);
-                          setShowLanguageSubmenu(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'bg-[#d4af37]/15 text-[#fce7b0] font-semibold'
-                            : 'hover:bg-[#1f1f26] text-neutral-300 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span data-no-translate="true">{lang.nativeName}</span>
-                          <span className="text-[10px] text-neutral-500" data-no-translate="true">
-                            ({lang.englishName})
-                          </span>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#d4af37]" />}
-                      </button>
-                    );
-                  })}
               </div>
             )}
 

@@ -46,6 +46,19 @@ export interface User {
   adminPermissions?: string[];
   preferredLanguageCode?: string;
   languagePreferenceMode?: 'automatic' | 'manual' | 'english';
+  preferred_translation_language?: string;
+  platform_translation_enabled?: boolean;
+  app_language?: string;
+}
+
+export interface UserTranslationPreferences {
+  userId: string;
+  preferred_translation_language: string;
+  platform_translation_enabled: boolean;
+  app_language: string;
+  app_language_mode?: 'automatic' | 'manual' | 'english';
+  explicitly_saved?: boolean;
+  updated_at: string;
 }
 
 export interface CreatorTier {
@@ -106,6 +119,8 @@ export interface CreatorProfile extends User {
   verificationExpiresAt?: string | null;
   verificationLastRenewalDate?: string;
   verificationPlanName?: string;
+  creator_country_id?: string;
+  countryIsoCode?: string;
 }
 
 export type VideoProcessingStage =
@@ -179,7 +194,9 @@ export interface UpdatePostPayload {
   content?: string;
   tags?: string[];
   categories?: string[];
+  category_ids?: string[];
   country?: string;
+  video_country_id?: string;
   visibility?: PostVisibility;
   ppvPrice?: number;
   ppvPreviewDuration?: 10 | 15 | 30;
@@ -215,7 +232,9 @@ export interface Post {
   updatedAt?: string;
   tags?: string[];
   categories?: string[];
+  category_ids?: string[];
   country?: string;
+  video_country_id?: string;
   fileName?: string;
   fileSize?: number;
   scheduledFor?: string;
@@ -1466,3 +1485,46 @@ export interface BrandingHistoryRecord {
   timestamp: string;
   snapshotTheme: PlatformBrandingTheme;
 }
+
+// ============================================================================
+// GLOBAL CATEGORIES AND COUNTRIES DISCOVERY SYSTEM TYPES
+// ============================================================================
+
+export interface CategoryRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  image: string;
+  is_active: boolean;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CountryRecord {
+  id: string;
+  name: string;
+  iso_code: string; // Official ISO 3166-1 alpha-2 code
+  flag: string;
+  region?: string;
+  aliases?: string[]; // e.g. ['UAE', 'Emirates'] for United Arab Emirates
+  is_active: boolean;
+}
+
+export interface PostCategoryRelation {
+  post_id: string;
+  category_id: string;
+}
+
+export interface CreatorCountryRelation {
+  creator_id: string;
+  creator_country_id: string;
+}
+
+export interface PostCountryRelation {
+  post_id: string;
+  creator_id: string;
+  video_country_id: string;
+}
+
