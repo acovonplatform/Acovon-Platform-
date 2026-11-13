@@ -35,6 +35,8 @@ interface ExplorePageProps {
   onOpenVideoPlayer?: (postId: string, initialTime?: number) => void;
   onOpenPhotoViewer?: (postId: string, mediaIndex?: number) => void;
   onOpenSubscribeModal?: (creatorId: string) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export const ExplorePage: React.FC<ExplorePageProps> = ({ 
@@ -43,7 +45,9 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   onGoAdFree,
   onOpenVideoPlayer,
   onOpenPhotoViewer,
-  onOpenSubscribeModal
+  onOpenSubscribeModal,
+  searchQuery: externalSearchQuery,
+  onSearchChange
 }) => {
   const {
     creators,
@@ -53,6 +57,11 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
     getCountryFlagAndName,
     promotions,
     activeRole,
+    isAuthenticated,
+    currentUser,
+    isFollowing,
+    isSubscribedTo,
+    isPostPurchased,
     showDemoBadges,
     isCreatorVerifiedBadgeActive,
     getRecommendedCreators,
@@ -62,7 +71,12 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'creators' | 'media_library'>('creators');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [internalSearchQuery, setInternalSearchQuery] = useState(externalSearchQuery ?? '');
+  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery;
+  const setSearchQuery = (val: string) => {
+    setInternalSearchQuery(val);
+    onSearchChange?.(val);
+  };
   const [appliedFilters, setAppliedFilters] = useState<{
     categories: string[];
     videoCountries: string[];
@@ -90,12 +104,15 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
     if ((activeFanInterestProfile?.hiddenCreatorIds || []).includes(c.id)) return false;
 
     // Search query
+    const q = searchQuery.trim().toLowerCase();
     const matchSearch = 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.bio?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (c.country?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      c.category.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      c.name.toLowerCase().includes(q) ||
+      c.username.toLowerCase().includes(q.replace(/^@/, '')) ||
+      (c.bio?.toLowerCase() || '').includes(q) ||
+      (c.country?.toLowerCase() || '').includes(q) ||
+      c.category.toLowerCase().includes(q) ||
+      (c.categories && c.categories.some(cat => cat.toLowerCase().includes(q)));
 
     if (!matchSearch) return false;
 
@@ -204,122 +221,8 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-8 py-6 sm:py-8">
       
-      {/* Title, Tab Switcher, Search & Combined Category/Country Filter Bar */}
-      <div className="mb-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 bg-[#121215] border border-[#27272a] rounded-xl p-1 self-start">
-            <button
-              type="button"
-              onClick={() => setActiveTab('creators')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'creators'
-                  ? 'bg-[#d4af37] text-black font-bold'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              Creators ({filteredCreators.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('media_library')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'media_library'
-                  ? 'bg-[#d4af37] text-black font-bold'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              Videos &amp; Media ({filteredPosts.length})
-            </button>
-          </div>
-
-          {/* Search bar */}
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-xl">
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onBlur={() => {
-                if (searchQuery.trim().length >= 3) {
-                  trackEngagementEvent({
-                    eventType: 'search_performed',
-                    searchQuery: searchQuery.trim(),
-                    surface: 'explore'
-                  });
-                }
-              }}
-              placeholder={
-                activeTab === 'creators'
-                  ? "Search creators by name, country, discipline, or keywords..."
-                  : "Search videos, photography sets, countries, topics, or hashtags..."
-              }
-              className="w-full bg-[#121215] border border-[#27272a] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
-            />
-          </form>
-        </div>
-
-        {/* Combined Category, Video Country & Creator Country Filter Bar */}
-        <DiscoveryFilterBar
-          appliedFilters={appliedFilters}
-          onApplyFilters={setAppliedFilters}
-          totalMatchingCount={activeTab === 'creators' ? filteredCreators.length : filteredPosts.length}
-          resultUnitLabel={activeTab === 'creators' ? 'creators' : 'posts'}
-        />
-      </div>
-
-      {/* Fast Filter Toggles for Creators Tab */}
-      {activeTab === 'creators' && (
-        <div className="flex flex-wrap items-center gap-3 mb-8 text-xs">
-          <button
-            onClick={() => setFilterLiveCalls(!filterLiveCalls)}
-            className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
-              filterLiveCalls
-                ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
-                : 'bg-[#141418] border-[#27272a] text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Video className="w-3.5 h-3.5" />
-            <span>Available for Video Calls Now</span>
-          </button>
-
-          <button
-            onClick={() => setFilterCustomReqs(!filterCustomReqs)}
-            className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
-              filterCustomReqs
-                ? 'bg-[#d4af37]/15 border-[#d4af37] text-[#fce7b0]'
-                : 'bg-[#141418] border-[#27272a] text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Clapperboard className="w-3.5 h-3.5" />
-            <span>Accepting Custom Videos</span>
-          </button>
-
-          <button
-            onClick={() => setFilterVerifiedOnly(!filterVerifiedOnly)}
-            className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors cursor-pointer ${
-              filterVerifiedOnly
-                ? 'bg-[#1D9BF0]/15 border-[#1D9BF0] text-[#7cc5f8]'
-                : 'bg-[#141418] border-[#27272a] text-neutral-400 hover:text-white'
-            }`}
-          >
-            <VerifiedBadge forceShow size="xs" />
-            <span>Verified Creators Only</span>
-          </button>
-
-          {activeRole === 'creator' && onOpenCreatorAd && (
-            <button
-              onClick={onOpenCreatorAd}
-              className="px-3.5 py-1.5 rounded-lg bg-[#d4af37]/15 hover:bg-[#d4af37]/25 border border-[#d4af37]/50 text-[#fce7b0] flex items-center gap-1.5 transition-colors cursor-pointer ml-auto font-medium"
-            >
-              <Rocket className="w-3.5 h-3.5 text-[#d4af37]" />
-              <span>Promote My Profile in Discovery</span>
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Media Type Filter for Media Library Tab */}
       {activeTab === 'media_library' && (
         <div className="flex flex-wrap items-center gap-2 mb-8 text-xs">
@@ -380,7 +283,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
               <p className="text-neutral-400 text-xs">No creators matching your criteria were found.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-5 sm:gap-6">
               {filteredCreators.map(creator => {
                 const isBoosted = boostedCreatorIds.has(creator.id);
 
@@ -431,10 +334,11 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <h3 className="font-bold text-white text-base group-hover:text-[#fce7b0] transition-colors">
                               {creator.name}
                             </h3>
+                            <VerifiedBadge creatorId={creator.id} size="sm" />
                             {showDemoBadges && creator.isDemo && (
                               <span className="text-[9px] font-mono font-bold tracking-wider px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
                                 DEMO
@@ -444,10 +348,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
                           {/* Unboxed Metadata with Creator Country Flag */}
                           <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-400">
-                            <span className="inline-flex items-center gap-1">
-                              <span>@{creator.username}</span>
-                              <VerifiedBadge creatorId={creator.id} size="xs" />
-                            </span>
+                            <span>@{creator.username}</span>
                             <span aria-hidden="true">·</span>
                             <span>{creator.category}</span>
                             {creator.country && (
@@ -497,11 +398,24 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
               <p className="text-neutral-400 text-xs">No media assets matching your filter criteria were found.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-5 sm:gap-6">
               {filteredPosts.map(post => {
                 const primaryMedia = post.media[0];
                 const isVideo = primaryMedia?.type === 'video';
                 const hasMultipleMedia = post.media.length > 1;
+                const isOwnPost = isAuthenticated && currentUser.id === post.creatorId;
+                const isLockedCard =
+                  !isOwnPost &&
+                  ((post.visibility === 'subscribers' && !isSubscribedTo(post.creatorId)) ||
+                    (post.visibility === 'pay_per_view' && !isPostPurchased(post.id)) ||
+                    (post.visibility === 'followers' &&
+                      !isFollowing(post.creatorId) &&
+                      !isSubscribedTo(post.creatorId)));
+                const safeThumbSrc = isLockedCard
+                  ? primaryMedia?.thumbnailUrl && primaryMedia.thumbnailUrl !== primaryMedia.url
+                    ? primaryMedia.thumbnailUrl
+                    : undefined
+                  : primaryMedia?.thumbnailUrl || primaryMedia?.url;
 
                 return (
                   <div
@@ -522,12 +436,20 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                           }
                         }}
                       >
-                        <img
-                          src={primaryMedia?.thumbnailUrl || primaryMedia?.url}
-                          alt={post.content}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
+                        {safeThumbSrc ? (
+                          <img
+                            src={safeThumbSrc}
+                            alt={post.content}
+                            referrerPolicy="no-referrer"
+                            className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${
+                              isLockedCard ? 'blur-lg opacity-35' : ''
+                            }`}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-[#101016] flex items-center justify-center">
+                            <Lock className="w-8 h-8 text-[#d4af37]/60" />
+                          </div>
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
 
                         {/* Badges on Thumbnail */}
@@ -601,20 +523,27 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                             referrerPolicy="no-referrer"
                             className="w-7 h-7 rounded-full object-cover border border-[#27272a]"
                           />
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-semibold text-white group-hover/creator:text-[#fce7b0] transition-colors">
-                              {post.creatorName}
-                            </span>
-                            <span className="text-[10px] text-neutral-400 inline-flex items-center gap-1">
-                              <span>@{post.creatorUsername}</span>
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span className="text-xs font-semibold text-white group-hover/creator:text-[#fce7b0] transition-colors inline-flex items-center gap-1">
+                              <span>{post.creatorName}</span>
                               <VerifiedBadge creatorId={post.creatorId} size="xs" />
+                            </span>
+                            <span className="text-[10px] text-neutral-400">
+                              @{post.creatorUsername}
                             </span>
                           </div>
                         </div>
 
-                        <p className="text-xs text-neutral-300 line-clamp-2 leading-relaxed">
-                          {post.content}
-                        </p>
+                        <TranslateContentButton
+                          text={post.content}
+                          contentType="post"
+                          contentRef={`explore_card_${post.id}`}
+                          renderPrimaryText
+                          collapsible
+                          compact
+                          linkify
+                          textClassName="text-xs text-neutral-300 leading-relaxed"
+                        />
 
                         {/* Categories, Video Country & Tags */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
@@ -670,30 +599,30 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
       {/* MODAL: Full Media Preview for Playable Videos and Photos */}
       {activePreviewPost && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 acovon-modal-panel">
             {/* Modal Header */}
-            <div className="p-4 border-b border-[#26262b] flex items-center justify-between">
+            <div className="p-3 sm:p-4 border-b border-[#26262b] flex items-center justify-between gap-2 shrink-0">
               <div 
                 onClick={() => {
                   onSelectCreator(activePreviewPost.creatorId);
                   setActivePreviewPost(null);
                 }}
-                className="flex items-center gap-3 cursor-pointer group"
+                className="flex items-center gap-3 cursor-pointer group min-w-0"
               >
                 <img
                   src={activePreviewPost.creatorAvatar}
                   alt={activePreviewPost.creatorName}
                   referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-full object-cover border border-[#d4af37]/40"
+                  className="w-9 h-9 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
                 />
-                <div>
-                  <div className="text-sm font-semibold text-white group-hover:text-[#fce7b0]">
-                    <span>{activePreviewPost.creatorName}</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-white group-hover:text-[#fce7b0] flex items-center gap-1.5">
+                    <span className="truncate">{activePreviewPost.creatorName}</span>
+                    <VerifiedBadge creatorId={activePreviewPost.creatorId} size="sm" />
                   </div>
-                  <div className="text-[11px] text-neutral-400 flex items-center gap-1">
+                  <div className="text-[11px] text-neutral-400 flex items-center gap-1 truncate">
                     <span>@{activePreviewPost.creatorUsername}</span>
-                    <VerifiedBadge creatorId={activePreviewPost.creatorId} size="xs" />
                     <span>· {activePreviewPost.visibility}</span>
                   </div>
                 </div>
@@ -701,27 +630,56 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
               <button
                 onClick={() => setActivePreviewPost(null)}
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            <div className="flex-1 overflow-y-auto">
             {/* Media Player / Image Viewer */}
-            <div className="relative bg-black aspect-video flex items-center justify-center">
-              {activePreviewPost.media[0]?.type === 'video' ? (
+            <div className="relative bg-black aspect-video max-h-[55dvh] mx-auto w-full flex items-center justify-center">
+              {!(
+                isAuthenticated && currentUser.id === activePreviewPost.creatorId
+              ) &&
+              ((activePreviewPost.visibility === 'subscribers' &&
+                !isSubscribedTo(activePreviewPost.creatorId)) ||
+                (activePreviewPost.visibility === 'pay_per_view' &&
+                  !isPostPurchased(activePreviewPost.id)) ||
+                (activePreviewPost.visibility === 'followers' &&
+                  !isFollowing(activePreviewPost.creatorId) &&
+                  !isSubscribedTo(activePreviewPost.creatorId))) ? (
+                <div className="p-6 text-center space-y-3">
+                  <Lock className="w-8 h-8 text-[#d4af37] mx-auto" />
+                  <p className="text-xs text-neutral-300">
+                    This content requires creator access to view.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activePreviewPost.visibility === 'subscribers' && onOpenSubscribeModal) {
+                        onOpenSubscribeModal(activePreviewPost.creatorId);
+                      } else {
+                        onSelectCreator(activePreviewPost.creatorId);
+                        setActivePreviewPost(null);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#d4af37] text-black font-bold text-xs cursor-pointer"
+                  >
+                    View Creator Profile
+                  </button>
+                </div>
+              ) : activePreviewPost.media[0]?.type === 'video' ? (
                 <video
-                  src={activePreviewPost.media[0].url || '/videos/sample1.mp4'}
+                  src={activePreviewPost.media[0].url || activePreviewPost.media[0].previewUrl || ''}
+                  poster={
+                    activePreviewPost.media[0].thumbnailUrl !== activePreviewPost.media[0].url
+                      ? activePreviewPost.media[0].thumbnailUrl
+                      : undefined
+                  }
                   controls
                   autoPlay
                   playsInline
-                  onError={(e) => {
-                    const el = e.currentTarget;
-                    if (!el.src.includes('/videos/sample1.mp4')) {
-                      el.src = '/videos/sample1.mp4';
-                      el.load();
-                    }
-                  }}
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -743,6 +701,10 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                 contentType="post"
                 contentRef={`explore_preview_${activePreviewPost.id}`}
                 renderPrimaryText
+                collapsible
+                compact
+                linkify
+                maxExpandedHeightClass="max-h-[28vh] overflow-y-auto"
                 textClassName="text-sm text-neutral-200 leading-relaxed"
               />
 
@@ -770,6 +732,7 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                   Visit Creator Profile
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>

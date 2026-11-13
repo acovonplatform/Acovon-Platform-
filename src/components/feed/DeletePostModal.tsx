@@ -59,17 +59,17 @@ export const DeletePostModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#121216] border border-[#2b2b36] rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-[#121216] border border-[#2b2b36] rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col acovon-modal-panel overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#23232c] flex items-center justify-between bg-[#161316]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-400">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#23232c] flex items-center justify-between gap-2 bg-[#161316] shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
               <Trash2 className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Delete Published Post?</h3>
-              <p className="text-[11px] text-neutral-400">
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-bold text-white truncate">Delete Published Post?</h3>
+              <p className="text-[11px] text-neutral-400 truncate">
                 Confirm permanent removal from your public profile and feed
               </p>
             </div>
@@ -85,9 +85,9 @@ export const DeletePostModal: React.FC = () => {
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-4 sm:p-5 space-y-4 text-xs flex-1 min-h-0 overflow-y-auto">
           {/* Post Identification Preview Card */}
-          <div className="p-3.5 rounded-xl bg-[#18181f] border border-[#2a2a36] flex items-start gap-3.5">
+          <div className="p-3.5 rounded-xl bg-[#18181f] border border-[#2a2a36] flex flex-col xs:flex-row items-start gap-3">
             {thumbnail && (
               <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-black shrink-0 border border-[#2c2c38]">
                 <img src={thumbnail} alt="" className="w-full h-full object-cover" />
@@ -98,7 +98,7 @@ export const DeletePostModal: React.FC = () => {
             )}
 
             <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-mono">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-neutral-400 font-mono">
                 <span>Post #{deletingPost.id.slice(-6)}</span>
                 <span>·</span>
                 <span className="capitalize text-[#fce7b0]">{deletingPost.visibility.replace(/_/g, ' ')}</span>
@@ -110,7 +110,7 @@ export const DeletePostModal: React.FC = () => {
                 {deletingPost.content}
               </p>
 
-              <div className="flex items-center gap-3 text-[11px] text-neutral-400 pt-0.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-neutral-400 pt-0.5">
                 <span className="inline-flex items-center gap-1">
                   <Heart className="w-3 h-3 text-rose-400" />
                   {deletingPost.likesCount} likes
@@ -176,7 +176,7 @@ export const DeletePostModal: React.FC = () => {
           )}
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#23232c]">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-[#23232c]">
             <button
               type="button"
               onClick={() => setDeletingPost(null)}

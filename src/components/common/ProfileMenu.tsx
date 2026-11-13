@@ -144,12 +144,12 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
         </div>
         
         <div className="hidden sm:flex flex-col text-left leading-none">
-          <span className="text-xs font-semibold text-neutral-200 truncate max-w-[115px]">
-            {currentUser.name}
-          </span>
-          <span className="text-[10px] text-neutral-400 truncate max-w-[115px] flex items-center gap-1 mt-0.5">
-            <span>@{currentUser.username}</span>
+          <span className="text-xs font-semibold text-neutral-200 max-w-[130px] inline-flex items-center gap-1">
+            <span className="truncate">{currentUser.name}</span>
             {isCreator && <VerifiedBadge creatorId={currentUser.id} size="xs" />}
+          </span>
+          <span className="text-[10px] text-neutral-400 truncate max-w-[115px] mt-0.5">
+            @{currentUser.username}
           </span>
         </div>
         
@@ -158,7 +158,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="fixed left-3 right-3 top-[60px] w-auto max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72 sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
+        <div className="fixed left-3 right-3 top-[calc(var(--acovon-header-height,58px)+4px)] w-auto max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72 sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
           
           {/* User Overview Card */}
           <div className="p-3 bg-[#18181c] rounded-xl mb-2 border border-[#27272a]">
@@ -169,12 +169,12 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/50"
               />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-white truncate">
-                  {currentUser.name}
-                </div>
-                <div className="text-[11px] text-neutral-400 truncate flex items-center gap-1">
-                  <span>@{currentUser.username}</span>
+                <div className="text-xs font-bold text-white flex items-center gap-1 min-w-0">
+                  <span className="truncate">{currentUser.name}</span>
                   {isCreator && <VerifiedBadge creatorId={currentUser.id} size="xs" />}
+                </div>
+                <div className="text-[11px] text-neutral-400 truncate">
+                  @{currentUser.username}
                 </div>
                 <div className="text-[10px] font-mono text-[#fce7b0] mt-0.5">
                   Balance: ${Number(currentUser?.walletBalance || 0).toFixed(2)}
@@ -550,7 +550,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
               onClick={() => {
                 setIsOpen(false);
                 logoutUser();
-                onNavigate('landing');
+                onNavigate('feed');
               }}
               className="w-full text-left px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/20 rounded-lg transition-colors flex items-center gap-2.5 cursor-pointer"
             >

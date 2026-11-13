@@ -150,13 +150,13 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
       <form onSubmit={handleSave} className="space-y-6">
 
         {/* 1. Real-time Video Call Rates */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <PhoneCall className="w-4 h-4 text-[#d4af37]" />
+              <PhoneCall className="w-4 h-4 text-[#d4af37] shrink-0" />
               <span>Private 1-on-1 Video Call Rates</span>
             </h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 font-bold">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 font-bold shrink-0">
               PER-MINUTE ESCROW
             </span>
           </div>
@@ -216,15 +216,15 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div className="flex items-center justify-between p-3.5 bg-[#18181c] rounded-xl border border-[#26262b]">
-              <div>
+            <div className="flex items-center justify-between gap-3 p-3.5 bg-[#18181c] rounded-xl border border-[#26262b]">
+              <div className="min-w-0">
                 <div className="text-xs font-semibold text-white">Live Calls Readiness</div>
                 <div className="text-[11px] text-neutral-400">Show "Calls Ready" indicator on profile</div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsLiveForCalls(!isLiveForCalls)}
-                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                   isLiveForCalls ? 'bg-[#d4af37]' : 'bg-neutral-700'
                 }`}
               >
@@ -234,15 +234,15 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
               </button>
             </div>
 
-            <div className="flex items-center justify-between p-3.5 bg-[#18181c] rounded-xl border border-[#26262b]">
-              <div>
+            <div className="flex items-center justify-between gap-3 p-3.5 bg-[#18181c] rounded-xl border border-[#26262b]">
+              <div className="min-w-0">
                 <div className="text-xs font-semibold text-white">Instant Call Initiation</div>
                 <div className="text-[11px] text-neutral-400">Allow verified subscribers to ring directly</div>
               </div>
               <button
                 type="button"
                 onClick={() => setInstantCallsEnabled(!instantCallsEnabled)}
-                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                   instantCallsEnabled ? 'bg-[#d4af37]' : 'bg-neutral-700'
                 }`}
               >
@@ -255,16 +255,16 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
         </div>
 
         {/* 2. Custom Video Requests & Commissions */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Video className="w-4 h-4 text-[#d4af37]" />
+              <Video className="w-4 h-4 text-[#d4af37] shrink-0" />
               <span>Custom Video Requests &amp; Commissions</span>
             </h3>
             <button
               type="button"
               onClick={() => setAcceptingCustomRequests(!acceptingCustomRequests)}
-              className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+              className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                 acceptingCustomRequests ? 'bg-[#d4af37]' : 'bg-neutral-700'
               }`}
             >
@@ -328,9 +328,9 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
         </div>
 
         {/* 3. Private Video Rates, Paid Messages & PPV Livestream Tickets */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Coins className="w-4 h-4 text-[#d4af37]" />
+            <Coins className="w-4 h-4 text-[#d4af37] shrink-0" />
             <span>Private Video, Message &amp; Ticket Pricing</span>
           </h3>
 
@@ -392,7 +392,7 @@ export const MonetizationRatesSection: React.FC<MonetizationRatesSectionProps> =
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <button
             type="button"
             onClick={handleReset}

@@ -57,8 +57,8 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative animate-in zoom-in-95 acovon-modal-panel">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors cursor-pointer"
@@ -90,7 +90,7 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-neutral-300 mb-1">
                 For Who? (Recipient Name)
@@ -162,7 +162,7 @@ export const CustomRequestModal: React.FC<CustomRequestModalProps> = ({
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}

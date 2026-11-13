@@ -226,7 +226,7 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
       )}
 
       {/* Profile Picture Card */}
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-5">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -258,7 +258,7 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
-              className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white"
+              className="touch-always-visible absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white"
             >
               <Camera className="w-6 h-6 text-[#d4af37]" />
               <span className="text-[10px] font-semibold mt-1">Upload New</span>
@@ -278,7 +278,7 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
       </div>
 
       {/* Cover Banner Card */}
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-5">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -290,7 +290,7 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Desktop / Mobile Preview Mode Toggle */}
             <div className="flex items-center gap-1 bg-[#18181c] p-1 rounded-xl border border-[#27272a]">
               <button
@@ -358,7 +358,7 @@ export const ProfileBrandingSection: React.FC<ProfileBrandingSectionProps> = ({
             <button
               type="button"
               onClick={() => coverInputRef.current?.click()}
-              className="absolute top-4 right-4 px-3 py-1.5 rounded-xl bg-black/75 hover:bg-black text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1.5 cursor-pointer"
+              className="touch-always-visible absolute top-3 sm:top-4 right-3 sm:right-4 px-2.5 sm:px-3 py-1.5 rounded-xl bg-black/75 hover:bg-black text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1.5 cursor-pointer"
             >
               <Camera className="w-3.5 h-3.5 text-[#d4af37]" />
               <span>Upload New Banner</span>

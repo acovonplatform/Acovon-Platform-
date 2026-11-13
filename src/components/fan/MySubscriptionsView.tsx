@@ -70,10 +70,10 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
   });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-8 py-8 space-y-6">
+    <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-8 py-6 sm:py-8 space-y-6">
       
       {/* Header & Overview Banner */}
-      <div className="bg-gradient-to-r from-[#141418] via-[#18181f] to-[#121215] border border-[#27272a] rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xl">
+      <div className="bg-gradient-to-r from-[#141418] via-[#18181f] to-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#d4af37]/20 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
@@ -103,10 +103,10 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
 
       {/* Tabs & Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#26262b] pb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
           <button
             onClick={() => setActiveTab('creators')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'creators'
                 ? 'bg-[#18181f] text-[#fce7b0] border border-[#d4af37]/30 shadow-sm'
                 : 'text-neutral-400 hover:text-white'
@@ -116,7 +116,7 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('posts')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'posts'
                 ? 'bg-[#18181f] text-[#fce7b0] border border-[#d4af37]/30 shadow-sm'
                 : 'text-neutral-400 hover:text-white'
@@ -162,7 +162,7 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4 sm:gap-5">
               {filteredSubs.map((sub) => {
                 const creator = creators.find(c => c.id === sub.creatorId);
                 if (!creator) return null;
@@ -205,13 +205,13 @@ export const MySubscriptionsView: React.FC<MySubscriptionsViewProps> = ({
 
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <h3 className="font-bold text-sm text-white group-hover:text-[#fce7b0] transition-colors">
+                            <h3 className="font-bold text-sm text-white group-hover:text-[#fce7b0] transition-colors truncate">
                               {creator.name}
                             </h3>
-                          </div>
-                          <span className="text-[11px] text-neutral-400 inline-flex items-center gap-1">
-                            <span>@{creator.username}</span>
                             <VerifiedBadge creatorId={creator.id} size="xs" />
+                          </div>
+                          <span className="text-[11px] text-neutral-400">
+                            @{creator.username}
                           </span>
                         </div>
 

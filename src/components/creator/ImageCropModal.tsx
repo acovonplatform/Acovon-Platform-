@@ -162,24 +162,24 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full max-h-[92dvh] my-auto overflow-hidden shadow-2xl flex flex-col acovon-modal-panel">
         {/* Header */}
-        <div className="p-4 border-b border-[#26262b] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Move className="w-4 h-4 text-[#d4af37]" />
-            <h3 className="text-sm font-bold text-white tracking-wide">{title}</h3>
+        <div className="p-3.5 sm:p-4 border-b border-[#26262b] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Move className="w-4 h-4 text-[#d4af37] shrink-0" />
+            <h3 className="text-sm font-bold text-white tracking-wide truncate">{title}</h3>
           </div>
           <button 
             onClick={onClose}
-            className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors"
+            className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Viewport / Crop Canvas Box */}
-        <div className="relative bg-black flex items-center justify-center overflow-hidden min-h-[320px] max-h-[460px] select-none">
+        <div className="relative bg-black flex items-center justify-center overflow-hidden min-h-[210px] sm:min-h-[300px] max-h-[42dvh] sm:max-h-[460px] select-none shrink-0">
           <div
             ref={containerRef}
             onMouseDown={handleMouseDown}
@@ -188,10 +188,10 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             onTouchEnd={handleTouchEnd}
             className={`relative overflow-hidden cursor-grab active:cursor-grabbing flex items-center justify-center ${
               aspectRatio === 'square'
-                ? 'w-72 h-72 sm:w-80 sm:h-80'
+                ? 'w-52 h-52 xs:w-64 xs:h-64 sm:w-80 sm:h-80'
                 : previewDevice === 'mobile'
-                ? 'w-72 h-48 sm:w-80 sm:h-52'
-                : 'w-full h-64 sm:h-72'
+                ? 'w-64 h-40 sm:w-80 sm:h-52'
+                : 'w-full h-44 sm:h-72'
             }`}
           >
             {/* The Image being transformed */}
@@ -229,10 +229,10 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         </div>
 
         {/* Controls Toolbar */}
-        <div className="p-4 bg-[#141418] border-t border-[#26262b] space-y-3">
+        <div className="p-3.5 sm:p-4 bg-[#141418] border-t border-[#26262b] space-y-3 overflow-y-auto flex-1 min-h-0">
           <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
             {/* Zoom Slider */}
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <div className="flex items-center gap-2 flex-1 min-w-0 w-full sm:w-auto sm:min-w-[200px]">
               <button 
                 type="button"
                 onClick={() => setZoom(z => Math.max(0.5, Number((z - 0.2).toFixed(1))))}
@@ -312,7 +312,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#26262b]/60">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-[#26262b]/60">
             <button
               type="button"
               onClick={onClose}

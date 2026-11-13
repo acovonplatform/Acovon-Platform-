@@ -308,7 +308,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div className="p-6 rounded-2xl bg-[#111115] border border-[#24242c] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="p-4 sm:p-6 rounded-2xl bg-[#111115] border border-[#24242c] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-sky-950/80 border border-sky-500/40 flex items-center justify-center shrink-0">
             <VerifiedBadge forceShow size="lg" />
@@ -384,7 +384,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
               <code className="text-sky-400">verificationTransactions</code> &{' '}
               <code className="text-sky-400">creatorVerificationRecords</code>.
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {(['all', '30d', '90d', '2026', '2025'] as const).map(df => (
                 <button
                   key={df}
@@ -403,7 +403,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
           </div>
 
           {/* 8 Primary KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 tabular-nums">
             <div className="p-5 rounded-xl bg-[#111115] border border-[#24242c]">
               <div className="text-[11px] uppercase tracking-wider text-neutral-400">
                 Total Verified Creators
@@ -458,8 +458,8 @@ export const AdminCreatorVerificationSection: React.FC = () => {
 
           {/* Monthly Revenue Chart & Currency Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-7 p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="lg:col-span-7 p-4 sm:p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-white">Verification Revenue by Month</h3>
                   <p className="text-xs text-neutral-400">
@@ -476,13 +476,13 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                   No completed transactions in selected period.
                 </div>
               ) : (
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3 pt-2 tabular-nums">
                   {revenueStats.monthlySeries.map(item => {
                     const maxGross = Math.max(...revenueStats.monthlySeries.map(m => m.gross), 100);
                     const pct = Math.min(100, Math.round((item.gross / maxGross) * 100));
                     return (
                       <div key={item.month} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-mono text-neutral-300">{item.month}</span>
                           <span className="text-white font-semibold">
                             ${item.gross.toFixed(2)} ({item.count} purchase{item.count > 1 ? 's' : ''})
@@ -501,7 +501,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
               )}
             </div>
 
-            <div className="lg:col-span-5 p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-4">
+            <div className="lg:col-span-5 p-4 sm:p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-white">Revenue by Currency</h3>
                 <p className="text-xs text-neutral-400">
@@ -509,11 +509,11 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                 </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3 tabular-nums">
                 {Object.entries(revenueStats.byCurrency).map(([curr, stats]) => (
                   <div
                     key={curr}
-                    className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between"
+                    className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex flex-wrap items-center justify-between gap-2"
                   >
                     <div>
                       <div className="text-xs font-bold text-white">
@@ -593,7 +593,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
           {/* Creators Verification Table */}
           <div className="rounded-2xl bg-[#111115] border border-[#24242c] overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs whitespace-nowrap tabular-nums">
                 <thead>
                   <tr className="border-b border-neutral-800 bg-neutral-950/60 text-neutral-400">
                     <th className="py-3 px-4 font-medium">Creator</th>
@@ -621,12 +621,12 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                               className="w-9 h-9 rounded-full object-cover"
                             />
                             <div>
-                              <div className="font-bold text-white">
-                                {creator.name}
-                              </div>
-                              <div className="text-[11px] text-neutral-400 flex items-center gap-1">
-                                <span>@{creator.username}</span>
+                              <div className="font-bold text-white flex items-center gap-1.5">
+                                <span>{creator.name}</span>
                                 <VerifiedBadge creatorId={creator.id} size="xs" />
+                              </div>
+                              <div className="text-[11px] text-neutral-400">
+                                <span>@{creator.username}</span>
                               </div>
                             </div>
                           </div>
@@ -784,7 +784,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {activeSubTab === 'pricing_config' && (
         <form
           onSubmit={handleSaveSettings}
-          className="p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-6"
+          className="p-4 sm:p-6 rounded-2xl bg-[#111115] border border-[#24242c] space-y-6"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
             <div>
@@ -972,7 +972,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
             </label>
             <div className="space-y-2">
               {benefitsInput.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
+                <div key={i} className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2">
                   <input
                     type="text"
                     value={b}
@@ -981,25 +981,25 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                       copy[i] = e.target.value;
                       setBenefitsInput(copy);
                     }}
-                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white"
+                    className="flex-1 min-w-0 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white"
                   />
                   <button
                     type="button"
                     onClick={() => setBenefitsInput(benefitsInput.filter((_, idx) => idx !== i))}
-                    className="p-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300"
+                    className="p-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 self-end xs:self-auto shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2">
               <input
                 type="text"
                 value={newBenefitText}
                 onChange={e => setNewBenefitText(e.target.value)}
                 placeholder="Add another verification benefit..."
-                className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white"
+                className="flex-1 min-w-0 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white"
               />
               <button
                 type="button"
@@ -1009,7 +1009,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                     setNewBenefitText('');
                   }
                 }}
-                className="px-3.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Benefit</span>
@@ -1024,7 +1024,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {/* =================================================================== */}
       {activeSubTab === 'transactions_refunds' && (
         <div className="rounded-2xl bg-[#111115] border border-[#24242c] overflow-hidden">
-          <div className="p-5 border-b border-neutral-800 flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">
                 Verification Payment & Refund Ledger
@@ -1039,7 +1039,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs whitespace-nowrap tabular-nums">
               <thead>
                 <tr className="border-b border-neutral-800 bg-neutral-950/60 text-neutral-400">
                   <th className="py-3 px-4 font-medium">Tx ID</th>
@@ -1058,12 +1058,12 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                   <tr key={tx.id} className="hover:bg-neutral-900/40">
                     <td className="py-3 px-4 font-mono text-neutral-200">{tx.id}</td>
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-white">
-                        {tx.creatorName}
-                      </div>
-                      <div className="text-[11px] text-neutral-400 flex items-center gap-1">
-                        <span>@{tx.creatorUsername}</span>
+                      <div className="font-semibold text-white flex items-center gap-1.5">
+                        <span>{tx.creatorName}</span>
                         <VerifiedBadge creatorId={tx.creatorId} size="xs" />
+                      </div>
+                      <div className="text-[11px] text-neutral-400">
+                        <span>@{tx.creatorUsername}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4 capitalize text-neutral-300">{tx.transactionType}</td>
@@ -1154,7 +1154,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {/* =================================================================== */}
       {activeSubTab === 'audit_logs' && (
         <div className="rounded-2xl bg-[#111115] border border-[#24242c] overflow-hidden">
-          <div className="p-5 border-b border-neutral-800">
+          <div className="p-4 sm:p-5 border-b border-neutral-800">
             <h3 className="text-sm font-bold text-white">
               Creator Verification Administrative & System Audit Trail
             </h3>
@@ -1169,7 +1169,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                 className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-neutral-900/40 text-xs"
               >
                 <div className="space-y-1">
-                  <div className="font-bold text-white flex items-center gap-2">
+                  <div className="font-bold text-white flex flex-wrap items-center gap-2">
                     <span>{log.action}</span>
                     {log.creatorName && (
                       <span className="text-sky-400 font-normal">· {log.creatorName}</span>
@@ -1182,7 +1182,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="text-right text-[11px] text-neutral-400 shrink-0">
+                <div className="sm:text-right text-[11px] text-neutral-400 shrink-0">
                   <div className="text-neutral-200 font-medium">{log.adminName}</div>
                   <div className="font-mono">{log.timestamp}</div>
                 </div>
@@ -1196,8 +1196,8 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {/* MODAL: SUSPEND / RESTORE / REVOKE CREATOR VERIFICATION              */}
       {/* =================================================================== */}
       {actionModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-neutral-900 border border-neutral-800 p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-neutral-900 border border-neutral-800 p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white capitalize">
                 {actionModal.type} Creator Verification — {actionModal.creatorName}
@@ -1229,7 +1229,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-xs text-white"
               />
             </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setActionModal(null)}
@@ -1257,8 +1257,8 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {/* MODAL: MANAGE VERIFICATION REFUND                                   */}
       {/* =================================================================== */}
       {refundModalTx && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-800 p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-800 p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">
                 Manage Verification Refund ({refundModalTx.id})
@@ -1327,7 +1327,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setRefundModalTx(null)}
@@ -1351,22 +1351,22 @@ export const AdminCreatorVerificationSection: React.FC = () => {
       {/* MODAL: INSPECT CREATOR VERIFICATION & PAYMENT HISTORY               */}
       {/* =================================================================== */}
       {inspectedCreatorRow && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-neutral-900 border border-neutral-800 p-6 space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <div className="flex items-center gap-3">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-2xl bg-neutral-900 border border-neutral-800 p-5 sm:p-6 space-y-4 max-h-[92dvh] overflow-y-auto acovon-modal-panel">
+            <div className="flex items-center justify-between gap-2 border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <img
                   src={inspectedCreatorRow.creator.avatar}
                   alt={inspectedCreatorRow.creator.name}
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="w-10 h-10 rounded-full object-cover shrink-0"
                 />
-                <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-1.5">
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white flex flex-wrap items-center gap-1.5">
                     <span>{inspectedCreatorRow.creator.name}</span>
-                  </h3>
-                  <div className="text-xs text-neutral-400 inline-flex items-center gap-1">
-                    <span>@{inspectedCreatorRow.creator.username}</span>
                     <VerifiedBadge creatorId={inspectedCreatorRow.creator.id} size="xs" />
+                  </h3>
+                  <div className="text-xs text-neutral-400 inline-flex flex-wrap items-center gap-1">
+                    <span>@{inspectedCreatorRow.creator.username}</span>
                     <span>· ID: {inspectedCreatorRow.creator.id}</span>
                   </div>
                 </div>
@@ -1374,13 +1374,13 @@ export const AdminCreatorVerificationSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setInspectCreatorId(null)}
-                className="text-neutral-400 hover:text-white"
+                className="text-neutral-400 hover:text-white shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800">
                 <div className="text-neutral-400">Current Status</div>
                 <div className="text-white font-bold capitalize mt-0.5">
@@ -1411,7 +1411,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                   .map(t => (
                     <div
                       key={t.id}
-                      className="p-3 flex items-center justify-between text-xs"
+                      className="p-3 flex flex-col xs:flex-row xs:items-center justify-between gap-2 text-xs"
                     >
                       <div>
                         <div className="font-semibold text-white">
@@ -1421,7 +1421,7 @@ export const AdminCreatorVerificationSection: React.FC = () => {
                           {t.paymentProvider} ({t.providerTransactionId}) · {t.paymentTimestamp}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="xs:text-right shrink-0 tabular-nums">
                         <div className="font-bold text-white">
                           {CURRENCY_SYM[t.currency] || '$'}
                           {t.amount.toFixed(2)} {t.currency}

@@ -1,0 +1,25 @@
+{
+  "media_66c944d1-490d-4010-ac74-c38b1e47d361.mp4": {
+    "mediaId": "media_66c944d1-490d-4010-ac74-c38b1e47d361",
+    "fileName": "media_66c944d1-490d-4010-ac74-c38b1e47d361.mp4",
+    "originalFilename": "1337492147597432052.MP4",
+    "ownerId": "d8cb4219-e105-4d9c-9158-13dccd549f73",
+    "mimeType": "video/mp4",
+    "sizeBytes": 26920521,
+    "sha256": "e32f6ec7a8bae269ba1592c823a1331d54fe937ac851bf264e180e23efd27c1c",
+    "url": "/api/media/files/media_66c944d1-490d-4010-ac74-c38b1e47d361.mp4",
+    "postId": "postitem_e5a16c7a-a690-48c2-b63e-11f9ea599e7b",
+    "createdAt": "2026-11-13T15:15:07.496Z"
+  },
+  "media_b68d5f31-64f3-4a06-a713-a65dc51cd4b7.png": {
+    "mediaId": "media_b68d5f31-64f3-4a06-a713-a65dc51cd4b7",
+    "fileName": "media_b68d5f31-64f3-4a06-a713-a65dc51cd4b7.png",
+    "originalFilename": "test_cover.png",
+    "ownerId": "admin_test",
+    "mimeType": "image/png",
+    "sizeBytes": 70,
+    "sha256": "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77",
+    "url": "/api/media/files/media_b68d5f31-64f3-4a06-a713-a65dc51cd4b7.png",
+    "createdAt": "2026-11-13T17:03:32.242Z"
+  }
+}

@@ -18,7 +18,10 @@ import {
   CheckCircle2, 
   UserCheck, 
   UserPlus,
-  Coins
+  Coins,
+  Lock,
+  Unlock,
+  Crown
 } from 'lucide-react';
 
 interface FullScreenPhotoModalProps {
@@ -50,26 +53,24 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
     isPostSaved, 
     toggleSavePost, 
     isSubscribedTo,
+    isPostPurchased,
+    unlockPPVPost,
     setEditingPost,
     setDeletingPost
   } = useApp();
 
-  // Find active posts with images
-  const photoPosts = posts.filter(
-    p =>
-      !p.isDeletedByCreator &&
-      p.moderationStatus !== 'removed' &&
-      p.media &&
-      p.media.some(m => m.type === 'image')
-  );
-  const initialPostIndex = photoPosts.findIndex(p => p.id === initialPostId);
-  const [currentPostIndex, setCurrentPostIndex] = useState(initialPostIndex >= 0 ? initialPostIndex : 0);
-  
-  const currentPost = photoPosts[currentPostIndex] || posts[0];
+  // Scope strictly to the opened post and its photos only
+  const currentPost = posts.find(p => p.id === initialPostId);
   const postImages = currentPost?.media?.filter(m => m.type === 'image') || [];
-  const [currentMediaIndex, setCurrentMediaIndex] = useState(
-    initialMediaIndex < postImages.length ? initialMediaIndex : 0
-  );
+  const safeInitialIndex =
+    initialMediaIndex >= 0 && initialMediaIndex < postImages.length ? initialMediaIndex : 0;
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(safeInitialIndex);
+
+  useEffect(() => {
+    setCurrentMediaIndex(
+      initialMediaIndex >= 0 && initialMediaIndex < postImages.length ? initialMediaIndex : 0
+    );
+  }, [initialPostId, initialMediaIndex, postImages.length]);
 
   const currentImage: MediaAsset | undefined = postImages[currentMediaIndex];
 
@@ -85,10 +86,20 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
   const initialScaleRef = useRef<number>(1);
   const lastTapRef = useRef<number>(0);
 
-  const isAuthor = currentUser.id === currentPost?.creatorId;
-  const isFollowingCreator = isFollowing(currentPost?.creatorId);
-  const isSubscribed = isSubscribedTo(currentPost?.creatorId);
-  const isSaved = isPostSaved(currentPost?.id);
+  const isAuthor = isAuthenticated && currentUser.id === currentPost?.creatorId;
+  const isFollowingCreator = isFollowing(currentPost?.creatorId || '');
+  const isSubscribed = isSubscribedTo(currentPost?.creatorId || '');
+  const isSaved = isPostSaved(currentPost?.id || '');
+  const isPurchased = isPostPurchased(currentPost?.id || '');
+
+  const isLockedSubscribers = currentPost?.visibility === 'subscribers' && !isAuthor && !isSubscribed;
+  const isLockedPPV = currentPost?.visibility === 'pay_per_view' && !isAuthor && !isPurchased;
+  const isLockedFollowers = currentPost?.visibility === 'followers' && !isAuthor && !isFollowingCreator && !isSubscribed;
+  const isLockedPhoto =
+    isLockedSubscribers ||
+    isLockedPPV ||
+    isLockedFollowers ||
+    (currentPost?.visibility === 'private' && !isAuthor);
 
   // Lock body scroll
   useEffect(() => {
@@ -103,26 +114,19 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
   useEffect(() => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
-  }, [currentPostIndex, currentMediaIndex]);
+  }, [initialPostId, currentMediaIndex]);
 
   const handleNext = useCallback(() => {
     if (currentMediaIndex < postImages.length - 1) {
       setCurrentMediaIndex(prev => prev + 1);
-    } else if (currentPostIndex < photoPosts.length - 1) {
-      setCurrentPostIndex(prev => prev + 1);
-      setCurrentMediaIndex(0);
     }
-  }, [currentMediaIndex, postImages.length, currentPostIndex, photoPosts.length]);
+  }, [currentMediaIndex, postImages.length]);
 
   const handlePrev = useCallback(() => {
     if (currentMediaIndex > 0) {
       setCurrentMediaIndex(prev => prev - 1);
-    } else if (currentPostIndex > 0) {
-      setCurrentPostIndex(prev => prev - 1);
-      const prevImages = photoPosts[currentPostIndex - 1]?.media?.filter(m => m.type === 'image') || [];
-      setCurrentMediaIndex(Math.max(0, prevImages.length - 1));
     }
-  }, [currentMediaIndex, currentPostIndex, photoPosts]);
+  }, [currentMediaIndex]);
 
   // Keyboard controls
   useEffect(() => {
@@ -256,6 +260,8 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
     setIsDragging(false);
   };
 
+  if (!currentPost) return null;
+
   return (
     <div 
       className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center select-none overflow-hidden"
@@ -317,19 +323,73 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
           )}
         </div>
 
-        {/* Counter Badge */}
+        {/* Counter Badge (photos in this post only) */}
         <div className="px-2.5 sm:px-3 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[11px] sm:text-xs font-mono font-medium text-neutral-300 whitespace-nowrap shrink-0">
-          {postImages.length > 1 ? `${currentMediaIndex + 1} / ${postImages.length}` : `${currentPostIndex + 1} / ${photoPosts.length}`}
+          {postImages.length > 0 ? `${currentMediaIndex + 1} / ${postImages.length}` : '0 / 0'}
         </div>
       </div>
 
       {/* Main Image Area with Zoom & Drag Transform */}
       <div 
         className="w-full h-full flex items-center justify-center p-2 sm:p-6 overflow-hidden cursor-grab active:cursor-grabbing"
-        onClick={handleDoubleTap}
-        onMouseDown={handleMouseDown}
+        onClick={isLockedPhoto ? undefined : handleDoubleTap}
+        onMouseDown={isLockedPhoto ? undefined : handleMouseDown}
       >
-        {currentImage ? (
+        {isLockedPhoto && currentPost ? (
+          <div className="bg-[#121216] border border-[#2a2a35] rounded-2xl p-5 sm:p-8 max-w-sm w-full text-center space-y-4 shadow-2xl max-h-[88dvh] overflow-y-auto acovon-modal-panel">
+            <div className="w-14 h-14 rounded-2xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] mx-auto">
+              {isLockedSubscribers ? <Crown className="w-7 h-7" /> : isLockedFollowers ? <UserPlus className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold font-brand text-white">
+                {isLockedSubscribers
+                  ? 'Subscriber-Only Photo'
+                  : isLockedPPV
+                  ? `Pay-Per-View Photo · $${currentPost.ppvPrice?.toFixed(2) || '9.99'}`
+                  : isLockedFollowers
+                  ? 'Follower-Only Photo'
+                  : 'Private Photo'}
+              </h3>
+              <p className="text-xs text-neutral-300">
+                {isLockedSubscribers
+                  ? `Subscribe to ${currentPost.creatorName} to view this photo.`
+                  : isLockedPPV
+                  ? `Unlock this photo for $${currentPost.ppvPrice?.toFixed(2) || '9.99'}.`
+                  : isLockedFollowers
+                  ? `Follow ${currentPost.creatorName} to view this photo.`
+                  : 'This photo is private.'}
+              </p>
+            </div>
+            {isLockedSubscribers ? (
+              <button
+                type="button"
+                onClick={() => onOpenSubscribeModal(currentPost.creatorId)}
+                className="w-full py-2.5 px-5 bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer inline-flex items-center justify-center gap-2"
+              >
+                <Crown className="w-4 h-4" />
+                <span>Join Membership</span>
+              </button>
+            ) : isLockedPPV ? (
+              <button
+                type="button"
+                onClick={() => unlockPPVPost(currentPost.id)}
+                className="w-full py-2.5 px-5 bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer inline-flex items-center justify-center gap-2"
+              >
+                <Unlock className="w-4 h-4" />
+                <span>Unlock Photo · ${currentPost.ppvPrice?.toFixed(2) || '9.99'}</span>
+              </button>
+            ) : isLockedFollowers ? (
+              <button
+                type="button"
+                onClick={() => toggleFollowCreator(currentPost.creatorId)}
+                className="w-full py-2.5 px-5 bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer inline-flex items-center justify-center gap-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Follow to View</span>
+              </button>
+            ) : null}
+          </div>
+        ) : currentImage ? (
           <img
             src={currentImage.url}
             alt={currentPost.content}
@@ -338,53 +398,64 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
               transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
               transition: isDragging ? 'none' : 'transform 0.15s ease-out'
             }}
-            className="max-w-full max-h-[82dvh] sm:max-h-[85vh] object-contain drop-shadow-2xl select-none"
+            className="max-w-full max-h-[80dvh] sm:max-h-[85dvh] landscape-short:max-h-[68dvh] object-contain drop-shadow-2xl select-none"
           />
         ) : (
           <div className="text-neutral-500 text-sm">Image unavailable</div>
         )}
       </div>
 
-      {/* Previous / Next Arrow Controls */}
-      <button
-        type="button"
-        onClick={handlePrev}
-        className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md hover:bg-black text-white flex items-center justify-center border border-white/10 transition-all cursor-pointer z-30 shadow-xl ${
-          showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        title="Previous Image (Arrow Left)"
-      >
-        <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-      </button>
+      {/* Previous / Next Arrow Controls (scoped to photos in this post only) */}
+      {postImages.length > 1 && currentMediaIndex > 0 && (
+        <button
+          type="button"
+          onClick={handlePrev}
+          className={`absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md hover:bg-black text-white flex items-center justify-center border border-white/10 transition-all cursor-pointer z-30 shadow-xl ${
+            showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          title="Previous Image (Arrow Left)"
+        >
+          <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+      )}
 
-      <button
-        type="button"
-        onClick={handleNext}
-        className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md hover:bg-black text-white flex items-center justify-center border border-white/10 transition-all cursor-pointer z-30 shadow-xl ${
-          showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        title="Next Image (Arrow Right)"
-      >
-        <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-      </button>
+      {postImages.length > 1 && currentMediaIndex < postImages.length - 1 && (
+        <button
+          type="button"
+          onClick={handleNext}
+          className={`absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md hover:bg-black text-white flex items-center justify-center border border-white/10 transition-all cursor-pointer z-30 shadow-xl ${
+            showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          title="Next Image (Arrow Right)"
+        >
+          <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+      )}
 
       {/* Bottom Info Bar Overlay */}
-      <div className={`absolute bottom-0 left-0 right-0 pt-4 px-3 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/85 to-transparent z-30 transition-opacity duration-300 ${
+      <div className={`absolute bottom-0 left-0 right-0 pt-3 sm:pt-4 px-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/85 to-transparent z-30 transition-opacity duration-300 ${
         showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}>
         {currentPost?.content && (
-          <div className="max-w-4xl mx-auto mb-2.5">
+          <div
+            onClick={e => e.stopPropagation()}
+            className="max-w-4xl mx-auto mb-2.5"
+          >
             <TranslateContentButton
               text={currentPost.content}
               contentType="post"
               contentRef={`photo_viewer_${currentPost.id}`}
               renderPrimaryText
-              textClassName="text-xs sm:text-sm text-neutral-200 leading-relaxed line-clamp-2"
+              collapsible
               compact
+              linkify
+              variant="overlay"
+              maxExpandedHeightClass="max-h-[24dvh] overflow-y-auto"
+              textClassName="text-xs sm:text-sm text-neutral-200 leading-relaxed"
             />
           </div>
         )}
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
           
           {/* Creator Profile Row */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -402,14 +473,14 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
                 className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-[#d4af37] shadow-lg group-hover:scale-105 transition-transform shrink-0"
               />
               <div className="min-w-0">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-xs sm:text-sm font-bold text-white group-hover:text-[#fce7b0] truncate">
                     {currentPost.creatorName}
                   </span>
+                  <VerifiedBadge creatorId={currentPost.creatorId} size="sm" />
                 </div>
-                <span className="text-[11px] sm:text-xs text-neutral-400 truncate flex items-center gap-1">
-                  <span>@{currentPost.creatorUsername}</span>
-                  <VerifiedBadge creatorId={currentPost.creatorId} size="xs" />
+                <span className="text-[11px] sm:text-xs text-neutral-400 truncate block">
+                  @{currentPost.creatorUsername}
                 </span>
               </div>
             </button>
@@ -444,7 +515,7 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-3 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => toggleLikePost(currentPost.id)}

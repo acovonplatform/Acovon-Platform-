@@ -148,14 +148,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95">
-        <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <User className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Edit Profile</h3>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col p-4 sm:p-6 space-y-4 sm:space-y-5 animate-in fade-in zoom-in-95 acovon-modal-panel">
+        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <User className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Edit Profile</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -166,7 +166,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
             <p className="text-white font-medium">Profile successfully updated!</p>
           </div>
         ) : (
-          <form onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <form onSubmit={handleSave} className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1">
             <input
               ref={avatarFileInputRef}
               type="file"
@@ -186,7 +186,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
                   alt={name} 
                   className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/50" 
                 />
-                <div className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 touch-always-visible transition-opacity flex items-center justify-center">
                   <Camera className="w-5 h-5 text-[#d4af37]" />
                 </div>
               </div>
@@ -211,7 +211,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
             </div>
 
             {isCreator ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs text-neutral-400">Display Name</label>
                   <input 
@@ -258,7 +258,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs text-neutral-400">Category</label>
                     <input 
@@ -282,7 +282,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
               </>
             )}
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-[#27272a]">
+            <div className="flex flex-wrap justify-end gap-3 pt-3 border-t border-[#27272a]">
               <button 
                 type="button" 
                 onClick={onClose}
@@ -334,21 +334,21 @@ export const PaymentMethodsModal: React.FC<{ onClose: () => void }> = ({ onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-5">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 acovon-modal-panel">
         <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Payment Methods</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <CreditCard className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Payment Methods</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="space-y-3">
           {methods.map(m => (
-            <div key={m.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between">
+            <div key={m.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-2 flex-wrap xs:flex-nowrap">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#22222a] flex items-center justify-center">
                   <CreditCard className="w-5 h-5 text-neutral-300" />
@@ -385,7 +385,7 @@ export const PaymentMethodsModal: React.FC<{ onClose: () => void }> = ({ onClose
               required
               className="w-full bg-[#121215] border border-[#27272a] rounded-lg px-3 py-2 text-xs text-white"
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
               <input 
                 type="text" 
                 placeholder="MM/YY"
@@ -443,19 +443,19 @@ export const SubscriptionManagementModal: React.FC<{
   const { subscriptions, creators, cancelSubscription } = useApp();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Subscription Management</h3>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col p-4 sm:p-6 space-y-4 sm:space-y-5 acovon-modal-panel">
+        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Subscription Management</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-3 max-h-80 overflow-y-auto">
+        <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
           {subscriptions.length === 0 ? (
             <div className="p-8 text-center space-y-3">
               <p className="text-neutral-400 text-xs">You have no active creator subscriptions.</p>
@@ -470,7 +470,7 @@ export const SubscriptionManagementModal: React.FC<{
             subscriptions.map(sub => {
               const creator = creators.find(c => c.id === sub.creatorId);
               return (
-                <div key={sub.id} className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-4">
+                <div key={sub.id} className="p-3.5 sm:p-4 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 sm:gap-4">
                   <div className="flex items-center gap-3">
                     <img 
                       src={creator?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'} 
@@ -520,14 +520,14 @@ export const PurchaseHistoryModal: React.FC<{ onClose: () => void }> = ({ onClos
   const myPurchases = purchases.filter(p => p.userId === currentUser.id);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[92dvh] flex flex-col acovon-modal-panel">
         <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Purchase &amp; Transaction History</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <DollarSign className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Purchase &amp; Transaction History</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -590,7 +590,7 @@ export const PurchaseHistoryModal: React.FC<{ onClose: () => void }> = ({ onClos
               Ledger Transactions ({transactions.length})
             </div>
             {transactions.map(t => (
-              <div key={t.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+              <div key={t.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 text-xs">
                 <div>
                   <div className="font-semibold text-white capitalize">{t.description || t.type.replace('_', ' ')}</div>
                   <div className="text-[10px] text-neutral-500">{t.createdAt} · ID: {t.id}</div>
@@ -707,62 +707,62 @@ export const SettingsModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-5 sm:p-6 space-y-4 max-h-[92vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0">
-          <div className="flex items-center gap-2">
-            <SettingsIcon className="w-5 h-5 text-[#d4af37]" />
-            <div>
-              <h3 className="font-brand text-base sm:text-lg font-bold text-white">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-4 sm:p-6 space-y-4 max-h-[92dvh] flex flex-col shadow-2xl acovon-modal-panel">
+        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <SettingsIcon className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <div className="min-w-0">
+              <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">
                 Settings — Language &amp; Translation
               </h3>
-              <p className="text-[11px] text-neutral-400" data-no-translate="true">
+              <p className="text-[11px] text-neutral-400 truncate" data-no-translate="true">
                 Profile → Settings → Language &amp; Translation
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Settings Sub-Tabs (Language & Translation, Feed Personalization, Security & Preferences) */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#18181c] border border-[#27272a] rounded-xl text-xs shrink-0">
+        <div className="flex items-center gap-1.5 p-1 bg-[#18181c] border border-[#27272a] rounded-xl text-xs shrink-0 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('language')}
-            className={`py-2 px-2 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-max py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'language'
                 ? 'bg-[#d4af37] text-black font-bold'
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
             <Languages className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate" data-no-translate="true">Language &amp; Translation</span>
+            <span data-no-translate="true">Language &amp; Translation</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('personalization')}
-            className={`py-2 px-2 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-max py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'personalization'
                 ? 'bg-[#d4af37] text-black font-bold'
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Personalization</span>
+            <span>Personalization</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('general')}
-            className={`py-2 px-2 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-max py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'general'
                 ? 'bg-[#d4af37] text-black font-bold'
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
             <SettingsIcon className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Preferences</span>
+            <span>Preferences</span>
           </button>
         </div>
 
@@ -958,7 +958,7 @@ export const SettingsModal: React.FC<{
 
               {/* 3. APP LANGUAGE (INDEPENDENT INTERFACE LANGUAGE) */}
               <div className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl space-y-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-bold text-white flex items-center gap-2" data-no-translate="true">
                       <span>App Language (Interface &amp; Navigation Only)</span>
@@ -1106,7 +1106,7 @@ export const SettingsModal: React.FC<{
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 text-[10px]">
                         <div className="p-2 rounded-lg bg-[#121215] border border-[#25252e]">
                           <div className="text-neutral-400">Localized Date</div>
                           <div className="font-semibold text-white mt-0.5" data-no-translate="true">
@@ -1238,7 +1238,7 @@ export const SettingsModal: React.FC<{
               </div>
 
               {/* Reset Personalized Recommendations */}
-              <div className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-3">
+              <div className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold text-white">Reset Personalized Recommendations</div>
                   <div className="text-[11px] text-neutral-400">
@@ -1263,7 +1263,7 @@ export const SettingsModal: React.FC<{
             <>
               {/* Appearance Mode (Light Mode / Dark Mode / System Default) */}
               <div className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="font-semibold text-white">Display Appearance Mode</div>
                     <div className="text-[11px] text-neutral-400">
@@ -1275,7 +1275,7 @@ export const SettingsModal: React.FC<{
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setAppearanceMode('dark')}
@@ -1359,7 +1359,7 @@ export const SettingsModal: React.FC<{
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#27272a] shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#27272a] shrink-0">
           <div className="text-[11px] text-neutral-400">
             {saved ? (
               <span className="text-emerald-400 font-semibold flex items-center gap-1">
@@ -1393,14 +1393,14 @@ export const PrivacyModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [dmPermission, setDmPermission] = useState('subscribers_only');
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-5">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 acovon-modal-panel">
         <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Privacy & Safety</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <Lock className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Privacy & Safety</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1465,19 +1465,19 @@ export const HelpCenterModal: React.FC<{ onClose: () => void }> = ({ onClose }) 
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand text-lg font-bold text-white">Acovon Help Center & Academy</h3>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col p-4 sm:p-6 space-y-4 sm:space-y-5 acovon-modal-panel">
+        <div className="flex items-center justify-between pb-3 border-b border-[#27272a] shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <HelpCircle className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">Acovon Help Center & Academy</h3>
           </div>
-          <button onClick={onClose} className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+        <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
           {faqs.map((f, i) => (
             <div key={i} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-1 text-xs">
               <div className="font-semibold text-[#fce7b0]">{f.q}</div>
@@ -1486,7 +1486,7 @@ export const HelpCenterModal: React.FC<{ onClose: () => void }> = ({ onClose }) 
           ))}
         </div>
 
-        <div className="p-3 bg-[#1a1a20] rounded-xl flex items-center justify-between text-xs">
+        <div className="p-3 bg-[#1a1a20] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
           <span className="text-neutral-300">Need immediate creator support?</span>
           <span className="text-[#d4af37] font-semibold">support@acovon.com</span>
         </div>

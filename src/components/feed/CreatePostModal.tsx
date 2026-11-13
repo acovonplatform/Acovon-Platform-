@@ -7,23 +7,28 @@ import {
   uploadUserFileToSupabase,
   deleteSupabaseFileByPath
 } from '../../services/supabase';
-import { 
-  X, 
-  UploadCloud, 
-  Image as ImageIcon, 
-  Video as VideoIcon, 
-  Lock, 
-  Globe, 
-  Users, 
-  Coins, 
+import {
+  extractVideoCoverFrames,
+  persistSelectedVideoCover,
+  isStockOrPlaceholderThumbnail,
+  computeAspectRatioLabel,
+  ExtractedVideoFrame
+} from '../../utils/videoFrameExtractor';
+import {
+  X,
+  UploadCloud,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Lock,
+  Globe,
+  Users,
+  Coins,
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  Play,
   RotateCcw,
   Trash2,
   Calendar,
-  Clock,
   Tag,
   Search,
   Check,
@@ -32,8 +37,8 @@ import {
   FileCheck,
   Zap,
   Cpu,
-  HardDrive,
-  Layers
+  Layers,
+  Wand2
 } from 'lucide-react';
 
 interface CreatePostModalProps {
@@ -49,10 +54,17 @@ interface SelectedFileItem {
   previewUrl: string;
   thumbnailUrl: string;
   previewFrames?: string[];
+  extractedFrames?: ExtractedVideoFrame[];
+  recommendedThumbnailUrl?: string;
+  autoSelectCover?: boolean;
+  coverExtractionStatus?: 'extracting' | 'ready' | 'failed';
+  coverExtractionError?: string;
   sizeMb: string;
   durationSeconds?: number;
   width?: number;
   height?: number;
+  aspectRatio?: string;
+  orientation?: 'landscape' | 'portrait' | 'square';
   frameRate?: number;
   jobId?: string;
   videoMediaId?: string;
@@ -125,134 +137,129 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [backgroundQueuedNotice, setBackgroundQueuedNotice] = useState(false);
 
-  // Filterable categories list from centralized activeCategories database
-  const availableCategories =
+  // Filterable categories list from centralized activeCategories database (case-insensitive unique)
+  const rawCategories =
     activeCategories && activeCategories.length > 0
       ? activeCategories.map(c => c.name)
       : CATEGORIES.filter(c => c !== 'All Categories');
+  const availableCategories = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of rawCategories) {
+      const trimmed = typeof raw === 'string' ? raw.trim() : '';
+      const norm = trimmed.toLowerCase();
+      if (!norm || seen.has(norm)) continue;
+      seen.add(norm);
+      out.push(trimmed);
+    }
+    return out;
+  })();
   const filteredCategories = availableCategories.filter(c => 
     c.toLowerCase().includes(categorySearch.toLowerCase())
   );
 
-  // Extract metadata & multi-frame thumbnails using offscreen video + canvas
-  const extractVideoMetadataAndFrames = (
-    videoFile: File
-  ): Promise<{
-    thumbnailUrl: string;
-    previewFrames: string[];
-    duration: number;
-    width: number;
-    height: number;
-  }> => {
-    return new Promise((resolve) => {
-      let settled = false;
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      const objectUrl = URL.createObjectURL(videoFile);
-      video.src = objectUrl;
-      video.muted = true;
-      video.playsInline = true;
+  // Run real frame extraction for a video item (never uses stock images)
+  const runCoverExtractionForItem = async (params: {
+    itemId: string;
+    file?: File;
+    sourceUrl: string;
+    fileName: string;
+    fileSizeBytes: number;
+    mimeType: string;
+    preserveExistingAutoSetting?: boolean;
+  }) => {
+    setSelectedFiles(prev =>
+      prev.map(f =>
+        f.id === params.itemId
+          ? {
+              ...f,
+              coverExtractionStatus: 'extracting',
+              coverExtractionError: undefined
+            }
+          : f
+      )
+    );
 
-      const fallbackFrames = [
-        'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=900&q=80',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=900&q=80',
-        'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
-        'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80'
-      ];
-
-      const finish = (result: {
-        thumbnailUrl: string;
-        previewFrames: string[];
-        duration: number;
-        width: number;
-        height: number;
-      }) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        try {
-          video.removeAttribute('src');
-          video.load();
-          URL.revokeObjectURL(objectUrl);
-        } catch {
-          // ignore
-        }
-        resolve(result);
-      };
-
-      const timeoutId = setTimeout(() => {
-        const dur = Number.isFinite(video.duration) && video.duration > 0 ? Math.round(video.duration) : 60;
-        finish({
-          thumbnailUrl: fallbackFrames[0],
-          previewFrames: fallbackFrames,
-          duration: dur,
-          width: video.videoWidth || 1920,
-          height: video.videoHeight || 1080
-        });
-      }, 2500);
-
-      video.onloadedmetadata = () => {
-        const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 60;
-        const seekTime = Math.min(1.0, dur / 4);
-        try {
-          video.currentTime = seekTime;
-        } catch {
-          finish({
-            thumbnailUrl: fallbackFrames[0],
-            previewFrames: fallbackFrames,
-            duration: Math.round(dur),
-            width: video.videoWidth || 1920,
-            height: video.videoHeight || 1080
-          });
-        }
-      };
-
-      video.onseeked = () => {
-        const dur = Number.isFinite(video.duration) && video.duration > 0 ? Math.round(video.duration) : 60;
-        try {
-          const width = video.videoWidth || 1920;
-          const height = video.videoHeight || 1080;
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.min(width, 960);
-          canvas.height = Math.min(height, 540);
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const thumbUrl = canvas.toDataURL('image/webp', 0.85);
-            finish({
-              thumbnailUrl: thumbUrl,
-              previewFrames: [thumbUrl, ...fallbackFrames.slice(1)],
-              duration: dur,
-              width,
-              height
-            });
-            return;
-          }
-        } catch {
-          // fallback
-        }
-        finish({
-          thumbnailUrl: fallbackFrames[0],
-          previewFrames: fallbackFrames,
-          duration: dur,
-          width: video.videoWidth || 1920,
-          height: video.videoHeight || 1080
-        });
-      };
-
-      video.onerror = () => {
-        finish({
-          thumbnailUrl: fallbackFrames[0],
-          previewFrames: fallbackFrames,
-          duration: 60,
-          width: 1920,
-          height: 1080
-        });
-      };
+    const res = await extractVideoCoverFrames({
+      file: params.file,
+      sourceUrl: params.sourceUrl,
+      creatorId: currentUser.id
     });
+
+    if (!res.success || res.frames.length === 0) {
+      setSelectedFiles(prev =>
+        prev.map(f =>
+          f.id === params.itemId
+            ? {
+                ...f,
+                thumbnailUrl: '',
+                previewFrames: [],
+                extractedFrames: [],
+                coverExtractionStatus: 'failed',
+                coverExtractionError:
+                  res.error || 'Could not extract frames from this video. Please retry.'
+              }
+            : f
+        )
+      );
+      return;
+    }
+
+    const previewFrames = res.frames.map(fr => fr.url);
+    const chosenThumb = res.recommendedThumbnailUrl || previewFrames[0];
+
+    const jobResult = startVideoOptimizationJob({
+      creatorId: currentUser.id,
+      creatorName: currentUser.name,
+      sourceContext: isScheduled
+        ? 'scheduled_post'
+        : visibility === 'pay_per_view'
+        ? 'ppv_video'
+        : 'feed_post',
+      fileName: params.fileName,
+      fileSize: params.fileSizeBytes,
+      mimeType: params.mimeType,
+      sourceUrl: params.sourceUrl,
+      thumbnailUrl: chosenThumb,
+      previewFrames,
+      width: res.width || 1280,
+      height: res.height || 720,
+      durationSeconds: res.durationSeconds || 30,
+      frameRate: 60
+    });
+
+    setSelectedFiles(prev =>
+      prev.map(f => {
+        if (f.id !== params.itemId) return f;
+        const useAuto = params.preserveExistingAutoSetting ? f.autoSelectCover !== false : true;
+        const finalThumb = useAuto
+          ? chosenThumb
+          : f.thumbnailUrl && previewFrames.includes(f.thumbnailUrl)
+          ? f.thumbnailUrl
+          : chosenThumb;
+        return {
+          ...f,
+          thumbnailUrl: finalThumb,
+          previewFrames,
+          extractedFrames: res.frames,
+          recommendedThumbnailUrl: chosenThumb,
+          autoSelectCover: useAuto,
+          coverExtractionStatus: 'ready',
+          coverExtractionError: undefined,
+          durationSeconds: res.durationSeconds || f.durationSeconds,
+          width: res.width || f.width,
+          height: res.height || f.height,
+          aspectRatio: res.aspectRatio || computeAspectRatioLabel(res.width || 1280, res.height || 720),
+          orientation: res.orientation,
+          jobId: f.jobId || jobResult.jobId,
+          videoMediaId: f.videoMediaId || jobResult.videoMediaId,
+          deduplicated: jobResult.deduplicated
+        };
+      })
+    );
   };
 
-  // Process chosen files and send videos automatically into the optimization pipeline
+  // Process chosen files and send videos automatically into real cover extraction + optimization pipeline
   const processFiles = async (filesList: FileList | File[]) => {
     const filesArray = Array.from(filesList);
     if (filesArray.length === 0) return;
@@ -264,7 +271,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     const maxVideoSize = (videoProcessingConfig.maxFileSizeMB || 2000) * 1024 * 1024;
     const maxImageSize = 25 * 1024 * 1024;
 
-    const newItems: SelectedFileItem[] = [];
+    const itemsToExtract: Array<{
+      itemId: string;
+      file: File;
+      previewUrl: string;
+      ext: string;
+    }> = [];
 
     for (let i = 0; i < filesArray.length; i++) {
       const file = filesArray[i];
@@ -291,7 +303,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         return;
       }
 
-      const itemId = `post_${Date.now()}_${i}`;
+      const itemId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? `postitem_${crypto.randomUUID()}`
+          : `post_${Date.now()}_${i}`;
       const uploadRes = await uploadUserFileToSupabase({
         uid: currentUser.id,
         file,
@@ -307,126 +322,97 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
             : 'public'
       });
 
-      const previewUrl = uploadRes.signedUrl || URL.createObjectURL(file);
-      let thumbnailUrl = previewUrl;
-      let previewFrames: string[] | undefined;
-      let durationSeconds: number | undefined;
-      let width = 1920;
-      let height = 1080;
-      let jobId: string | undefined;
-      let videoMediaId: string | undefined;
-      let deduplicated = false;
-
-      if (isVideo) {
-        const meta = await extractVideoMetadataAndFrames(file);
-        thumbnailUrl = meta.thumbnailUrl;
-        previewFrames = meta.previewFrames;
-        durationSeconds = meta.duration;
-        width = meta.width;
-        height = meta.height;
-
-        const jobResult = startVideoOptimizationJob({
-          creatorId: currentUser.id,
-          creatorName: currentUser.name,
-          sourceContext: isScheduled ? 'scheduled_post' : visibility === 'pay_per_view' ? 'ppv_video' : 'feed_post',
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || `video/${ext}`,
-          sourceUrl: previewUrl,
-          thumbnailUrl,
-          previewFrames,
-          width,
-          height,
-          durationSeconds: durationSeconds || 60,
-          frameRate: 60
-        });
-
-        jobId = jobResult.jobId;
-        videoMediaId = jobResult.videoMediaId;
-        deduplicated = jobResult.deduplicated;
+      if (!uploadRes.success || !uploadRes.signedUrl || uploadRes.signedUrl.startsWith('blob:')) {
+        setErrorMessage(
+          uploadRes.error || `Failed to save "${file.name}" to permanent storage. Please retry.`
+        );
+        setUploadStatus('error');
+        return;
       }
 
-      newItems.push({
+      const previewUrl = uploadRes.signedUrl;
+
+      const pendingItem: SelectedFileItem = {
         id: itemId,
         file,
         fileName: file.name,
         fileSizeBytes: file.size,
         type: isVideo ? 'video' : 'image',
         previewUrl,
-        thumbnailUrl,
-        previewFrames,
+        thumbnailUrl: isVideo ? '' : previewUrl,
+        previewFrames: isVideo ? [] : undefined,
+        extractedFrames: isVideo ? [] : undefined,
+        autoSelectCover: true,
+        coverExtractionStatus: isVideo ? 'extracting' : 'ready',
         sizeMb: (file.size / (1024 * 1024)).toFixed(1),
-        durationSeconds,
-        width,
-        height,
         frameRate: 60,
-        jobId,
-        videoMediaId,
-        deduplicated,
         storagePath: uploadRes.storagePath,
         supabaseFileId: uploadRes.record?.file_id
-      });
+      };
+
+      setSelectedFiles(prev => [...prev, pendingItem]);
+
+      if (isVideo) {
+        itemsToExtract.push({
+          itemId,
+          file,
+          previewUrl,
+          ext
+        });
+      }
     }
 
-    setSelectedFiles(prev => [...prev, ...newItems]);
     setUploadStatus('ready');
+
+    // Run real frame extraction for each newly added video so processing status is visible live
+    for (const v of itemsToExtract) {
+      await runCoverExtractionForItem({
+        itemId: v.itemId,
+        file: v.file,
+        sourceUrl: v.previewUrl,
+        fileName: v.file.name,
+        fileSizeBytes: v.file.size,
+        mimeType: v.file.type || `video/${v.ext}`
+      });
+    }
   };
 
-  // Trigger a realistic 4K or 1080p Studio Master Video preset for immediate testing
-  const handleAddStudioMasterPreset = (preset: '4k_prores' | '1080p_cinema') => {
+  // Trigger a real local sample video preset and extract actual frames from that video
+  const handleAddStudioMasterPreset = async (preset: '4k_prores' | '1080p_cinema') => {
     setErrorMessage(null);
     const is4K = preset === '4k_prores';
     const fileName = is4K
-      ? 'Milan_Runway_Backstage_4K60_Master.mov'
-      : 'Studio_Session_Vocal_Take_1080p.mp4';
+      ? 'Atelier_Cinema_Highlight_4K60.mp4'
+      : 'Studio_Session_Showcase_1080p.mp4';
     const fileSizeBytes = is4K ? 448 * 1024 * 1024 : 164 * 1024 * 1024;
-    const width = is4K ? 3840 : 1920;
-    const height = is4K ? 2160 : 1080;
-    const durationSeconds = is4K ? 142 : 95;
-    const sourceUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
-    const previewFrames = [
-      'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80'
-    ];
+    const sourceUrl = is4K ? '/videos/sample3.mp4' : '/videos/sample2.mp4';
+    const itemId = `preset_${Date.now()}`;
 
-    const jobResult = startVideoOptimizationJob({
-      creatorId: currentUser.id,
-      creatorName: currentUser.name,
-      sourceContext: isScheduled ? 'scheduled_post' : visibility === 'pay_per_view' ? 'ppv_video' : 'feed_post',
-      fileName,
-      fileSize: fileSizeBytes,
-      mimeType: is4K ? 'video/quicktime' : 'video/mp4',
-      sourceUrl,
-      thumbnailUrl: previewFrames[0],
-      previewFrames,
-      width,
-      height,
-      durationSeconds,
-      frameRate: 60
-    });
-
-    const newItem: SelectedFileItem = {
-      id: `preset_${Date.now()}`,
+    const pendingItem: SelectedFileItem = {
+      id: itemId,
       fileName,
       fileSizeBytes,
       type: 'video',
       previewUrl: sourceUrl,
-      thumbnailUrl: previewFrames[0],
-      previewFrames,
+      thumbnailUrl: '',
+      previewFrames: [],
+      extractedFrames: [],
+      autoSelectCover: true,
+      coverExtractionStatus: 'extracting',
       sizeMb: (fileSizeBytes / (1024 * 1024)).toFixed(1),
-      durationSeconds,
-      width,
-      height,
-      frameRate: 60,
-      jobId: jobResult.jobId,
-      videoMediaId: jobResult.videoMediaId,
-      deduplicated: jobResult.deduplicated
+      frameRate: 60
     };
 
-    setSelectedFiles(prev => [...prev, newItem]);
+    setSelectedFiles(prev => [...prev, pendingItem]);
     setUploadStatus('ready');
+
+    await runCoverExtractionForItem({
+      itemId,
+      sourceUrl,
+      fileName,
+      fileSizeBytes,
+      mimeType: 'video/mp4'
+    });
   };
 
   const handleCustomThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -440,7 +426,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
       itemId: activeThumbTargetId,
       visibility: 'public'
     });
-    const url = uploadRes.signedUrl || URL.createObjectURL(file);
+    if (!uploadRes.success || !uploadRes.signedUrl || uploadRes.signedUrl.startsWith('blob:')) {
+      setErrorMessage(uploadRes.error || 'Failed to upload custom thumbnail permanently. Please retry.');
+      return;
+    }
+    const url = uploadRes.signedUrl;
 
     setSelectedFiles(prev =>
       prev.map(item =>
@@ -448,6 +438,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
           ? {
               ...item,
               thumbnailUrl: url,
+              autoSelectCover: false,
+              coverExtractionStatus: 'ready',
               thumbnailStoragePath: uploadRes.storagePath,
               previewFrames: [url, ...(item.previewFrames || [])]
             }
@@ -552,23 +544,55 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
       return;
     }
 
+    // Strict guard: never publish a video while frame extraction is running or without a real extracted frame
+    const extractingVideo = selectedFiles.find(
+      f => f.type === 'video' && f.coverExtractionStatus === 'extracting'
+    );
+    if (extractingVideo) {
+      setErrorMessage(
+        `Extracting video cover frames for "${extractingVideo.fileName}". Please wait a moment before publishing.`
+      );
+      return;
+    }
+
+    const failedOrMissingThumbVideo = selectedFiles.find(
+      f =>
+        f.type === 'video' &&
+        (f.coverExtractionStatus === 'failed' ||
+          !f.thumbnailUrl ||
+          isStockOrPlaceholderThumbnail(f.thumbnailUrl))
+    );
+    if (failedOrMissingThumbVideo) {
+      setErrorMessage(
+        `A valid cover frame from "${failedOrMissingThumbVideo.fileName}" is required before publishing. Click "Retry Frame Extraction" on the video card.`
+      );
+      return;
+    }
+
     setIsPublishing(true);
     setErrorMessage(null);
 
-    // Build media assets enriched with adaptive compression metadata
+    // Build media assets enriched with real extracted cover metadata
     const mediaAssets: MediaAsset[] = selectedFiles.map((item, idx) => {
       const mediaRec = item.videoMediaId
         ? videoMediaRecords.find(r => r.id === item.videoMediaId)
         : undefined;
       return {
-        id: `media_${Date.now()}_${idx}`,
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? `media_${crypto.randomUUID()}`
+            : `media_${Date.now()}_${idx}`,
         type: item.type,
         url: item.previewUrl || mediaRec?.masterPlaylistUrl || '',
         thumbnailUrl: item.thumbnailUrl,
         previewUrl: item.type === 'video' ? item.previewUrl : undefined,
-        durationSeconds: item.durationSeconds || 120,
+        durationSeconds: item.durationSeconds || 30,
         videoMediaId: item.videoMediaId,
-        availableResolutions: mediaRec?.availableResolutions || (item.width && item.width >= 3840 ? ['4K', '1440p', '1080p', '720p', '480p', '360p'] : ['1080p', '720p', '480p', '360p']),
+        availableResolutions:
+          mediaRec?.availableResolutions ||
+          (item.width && item.width >= 3840
+            ? ['4K', '1440p', '1080p', '720p', '480p', '360p']
+            : ['1080p', '720p', '480p', '360p']),
         availableCodecs: mediaRec?.availableCodecs || ['AV1', 'H.265/HEVC', 'H.264'],
         streamingManifestRef: mediaRec?.streamingManifestRef,
         streamingProtocol: mediaRec?.streamingProtocol || 'HLS',
@@ -578,22 +602,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         vmafScore: mediaRec?.vmafScore || 97.1,
         width: item.width,
         height: item.height,
+        aspectRatio: item.aspectRatio,
+        orientation: item.orientation,
         frameRate: item.frameRate || 60,
         previewFrames: item.previewFrames
       };
     });
 
-    if (mediaAssets.length === 0) {
-      mediaAssets.push({
-        id: `media_${Date.now()}`,
-        type: 'image',
-        url: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1200&q=80',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&q=80'
-      });
-    }
-
     setTimeout(() => {
-      createPost({
+      const createdPostId = createPost({
         creatorId: currentUser.id,
         creatorName: currentUser.name,
         creatorUsername: currentUser.username,
@@ -614,6 +631,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         downloadsDisabled: disableDownloads
       });
 
+      // Persist selected video cover association on backend for every video asset
+      selectedFiles.forEach(item => {
+        if (item.type === 'video' && item.thumbnailUrl) {
+          persistSelectedVideoCover({
+            postId: typeof createdPostId === 'string' ? createdPostId : undefined,
+            videoMediaId: item.videoMediaId,
+            creatorId: currentUser.id,
+            selectedThumbnailUrl: item.thumbnailUrl,
+            autoSelected: Boolean(item.autoSelectCover),
+            previewFrames: item.previewFrames
+          });
+        }
+      });
+
       setIsPublishing(false);
       if (asBackgroundDraft) {
         setBackgroundQueuedNotice(true);
@@ -624,7 +655,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
       setTimeout(() => {
         onClose();
       }, 950);
-    }, 500);
+    }, 450);
   };
 
   const handlePublish = async (e: React.FormEvent) => {
@@ -640,7 +671,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-4 sm:p-7 shadow-2xl relative my-auto animate-in zoom-in-95 max-h-[92dvh] flex flex-col">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-4 sm:p-7 shadow-2xl relative my-auto animate-in zoom-in-95 max-h-[92dvh] flex flex-col acovon-modal-panel">
         
         {/* Hidden Custom Thumbnail Input */}
         <input
@@ -667,13 +698,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
             <h3 className="font-bold text-white text-sm sm:text-lg flex items-center gap-2 flex-wrap">
               <Film className="w-5 h-5 text-[#d4af37] shrink-0" />
               <span>Create New Acovon Post</span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
-                Auto-AV1/HEVC Engine
-              </span>
             </h3>
-            <p className="text-[11px] sm:text-xs text-neutral-400 mt-0.5">
-              Automatic visually lossless video compression, multi-bitrate HLS packaging, and vault monetization.
-            </p>
           </div>
           <button
             type="button"
@@ -712,37 +737,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
 
             {/* 1. REAL MEDIA UPLOAD + AUTOMATIC VIDEO COMPRESSION PIPELINE */}
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="block text-xs font-semibold text-neutral-200">
-                  Media Asset (Gallery or Mobile Camera)
-                </label>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => cameraCaptureInputRef.current?.click()}
-                    className="px-2.5 py-1 rounded-lg bg-[#1c1c24] hover:bg-[#252530] border border-[#d4af37]/50 text-[10px] font-semibold text-[#fce7b0] flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Camera className="w-3 h-3 text-[#d4af37]" />
-                    <span>Use Camera</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddStudioMasterPreset('4k_prores')}
-                    className="px-2.5 py-1 rounded-lg bg-[#1c1c24] hover:bg-[#252530] border border-[#d4af37]/40 text-[10px] font-mono font-semibold text-[#fce7b0] flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Zap className="w-3 h-3 text-[#d4af37]" />
-                    <span>+ 4K Master (448 MB)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddStudioMasterPreset('1080p_cinema')}
-                    className="px-2.5 py-1 rounded-lg bg-[#1c1c24] hover:bg-[#252530] border border-white/10 text-[10px] font-mono text-neutral-300 hover:text-white cursor-pointer transition-colors"
-                  >
-                    <span>+ 1080p Sample (164 MB)</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Drag and Drop Zone */}
               <div
                 onDragOver={handleDragOver}
@@ -801,19 +795,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                         </button>
 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-center">
-                          <div className="sm:col-span-5 relative aspect-video rounded-xl overflow-hidden bg-black border border-[#2e2e38]">
+                          <div
+                            className="sm:col-span-5 relative rounded-xl overflow-hidden bg-black border border-[#2e2e38] max-h-56 mx-auto w-full"
+                            style={{
+                              aspectRatio:
+                                item.width && item.height ? `${item.width} / ${item.height}` : '16 / 9'
+                            }}
+                          >
                             {item.type === 'video' ? (
                               <video
-                                src={item.previewUrl || '/videos/sample1.mp4'}
-                                poster={item.thumbnailUrl}
+                                src={item.previewUrl}
+                                poster={item.thumbnailUrl || undefined}
                                 controls
-                                onError={(e) => {
-                                  const el = e.currentTarget;
-                                  if (!el.src.includes('/videos/sample1.mp4')) {
-                                    el.src = '/videos/sample1.mp4';
-                                    el.load();
-                                  }
-                                }}
+                                playsInline
+                                preload="metadata"
                                 className="w-full h-full object-contain"
                               />
                             ) : (
@@ -825,12 +820,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                             )}
                           </div>
 
-                          <div className="sm:col-span-7 space-y-2.5 text-xs">
-                            <div className="flex items-center justify-between pr-7">
-                              <span className="truncate font-mono font-bold text-white max-w-[220px]">
+                          <div className="sm:col-span-7 space-y-2.5 text-xs min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 pr-8">
+                              <span className="truncate font-mono font-bold text-white min-w-0 flex-1">
                                 {item.fileName}
                               </span>
-                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22222a] text-[#fce7b0]">
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22222a] text-[#fce7b0] shrink-0">
                                 {item.width || 1920}×{item.height || 1080} • {item.frameRate || 60}fps
                               </span>
                             </div>
@@ -848,18 +843,18 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                                 {/* Live 8-Stage Pipeline Progress Bar */}
                                 {job && (
                                   <div className="space-y-1.5 bg-[#121215] p-2.5 rounded-xl border border-[#26262f]">
-                                    <div className="flex items-center justify-between text-[11px]">
-                                      <span className="font-semibold text-[#fce7b0] flex items-center gap-1.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                                      <span className="font-semibold text-[#fce7b0] flex items-center gap-1.5 min-w-0">
                                         {job.stage === 'ready' ? (
-                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                                         ) : job.stage === 'failed' ? (
-                                          <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                                          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                                         ) : (
-                                          <RotateCcw className="w-3.5 h-3.5 text-[#d4af37] animate-spin" />
+                                          <RotateCcw className="w-3.5 h-3.5 text-[#d4af37] animate-spin shrink-0" />
                                         )}
-                                        <span>{stageInfo.label}</span>
+                                        <span className="truncate">{stageInfo.label}</span>
                                       </span>
-                                      <span className="font-mono text-white font-bold">{job.progress}%</span>
+                                      <span className="font-mono text-white font-bold tabular-nums">{job.progress}%</span>
                                     </div>
                                     <div className="w-full h-1.5 bg-[#1e1e26] rounded-full overflow-hidden">
                                       <div
@@ -889,7 +884,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                                 )}
 
                                 {/* Compression Savings & Perceptual Quality Metrics */}
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                                   <div className="p-2 rounded-lg bg-[#121215] border border-[#26262f]">
                                     <div className="text-[10px] text-neutral-400">Size Reduction</div>
                                     <div className="font-mono font-bold text-emerald-400 text-[11px]">
@@ -933,41 +928,226 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                           </div>
                         </div>
 
-                        {/* Multi-Frame Thumbnail Picker for Video */}
-                        {item.type === 'video' && item.previewFrames && item.previewFrames.length > 0 && (
-                          <div className="pt-2 border-t border-[#26262f] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 overflow-x-auto">
-                              <span className="text-[10px] text-neutral-400 shrink-0">Cover Frame:</span>
-                              {item.previewFrames.map((frameUrl, fIdx) => (
+                        {/* Choose Video Cover — Automatically Extracted Real Frames */}
+                        {item.type === 'video' && (
+                          <div className="pt-3 border-t border-[#26262f] space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <ImageIcon className="w-3.5 h-3.5 text-[#d4af37]" />
+                                  <span>Choose Video Cover</span>
+                                </div>
+                                <p className="text-[10px] text-neutral-400">
+                                  Frames extracted directly from your uploaded video ({item.aspectRatio || 'original aspect ratio'}).
+                                </p>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Automatic Cover Selection Toggle */}
+                                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#121216] border border-[#2b2b36] cursor-pointer text-[10px] font-semibold text-neutral-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.autoSelectCover !== false}
+                                    onChange={(e) => {
+                                      const enabled = e.target.checked;
+                                      setSelectedFiles(prev =>
+                                        prev.map(f => {
+                                          if (f.id !== item.id) return f;
+                                          const autoUrl =
+                                            f.recommendedThumbnailUrl ||
+                                            f.extractedFrames?.find(fr => fr.isAutoRecommended)?.url ||
+                                            f.previewFrames?.[0] ||
+                                            f.thumbnailUrl;
+                                          return {
+                                            ...f,
+                                            autoSelectCover: enabled,
+                                            thumbnailUrl: enabled && autoUrl ? autoUrl : f.thumbnailUrl
+                                          };
+                                        })
+                                      );
+                                    }}
+                                    className="accent-[#d4af37] w-3 h-3"
+                                  />
+                                  <Wand2 className="w-3 h-3 text-[#d4af37]" />
+                                  <span>Automatic Cover Selection</span>
+                                </label>
+
                                 <button
-                                  key={fIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveThumbTargetId(item.id);
+                                    customThumbnailRef.current?.click();
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-[#22222a] hover:bg-[#2c2c36] text-[10px] font-semibold text-neutral-200 flex items-center gap-1 cursor-pointer shrink-0"
+                                >
+                                  <Camera className="w-3 h-3 text-[#d4af37]" />
+                                  <span>Upload Image</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {item.coverExtractionStatus === 'extracting' ? (
+                              <div className="p-4 rounded-xl bg-[#121216] border border-[#2a2a36] flex items-center justify-center gap-2.5 text-xs text-[#fce7b0]">
+                                <RotateCcw className="w-4 h-4 text-[#d4af37] animate-spin shrink-0" />
+                                <span>Processing uploaded video &amp; extracting high-resolution cover frames...</span>
+                              </div>
+                            ) : item.coverExtractionStatus === 'failed' ? (
+                              <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div className="flex items-start gap-2 text-[11px] text-rose-200">
+                                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                                  <span>
+                                    {item.coverExtractionError ||
+                                      'Frame extraction failed. Retry extracting frames from your video before publishing.'}
+                                  </span>
+                                </div>
+                                <button
                                   type="button"
                                   onClick={() =>
-                                    setSelectedFiles(prev =>
-                                      prev.map(f => (f.id === item.id ? { ...f, thumbnailUrl: frameUrl } : f))
-                                    )
+                                    runCoverExtractionForItem({
+                                      itemId: item.id,
+                                      file: item.file,
+                                      sourceUrl: item.previewUrl,
+                                      fileName: item.fileName,
+                                      fileSizeBytes: item.fileSizeBytes,
+                                      mimeType: item.file?.type || 'video/mp4',
+                                      preserveExistingAutoSetting: true
+                                    })
                                   }
-                                  className={`w-14 aspect-video rounded-md overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
-                                    item.thumbnailUrl === frameUrl
-                                      ? 'border-[#d4af37] scale-105'
-                                      : 'border-transparent opacity-60 hover:opacity-100'
-                                  }`}
+                                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
                                 >
-                                  <img src={frameUrl} alt="" className="w-full h-full object-cover" />
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Retry Frame Extraction</span>
                                 </button>
-                              ))}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveThumbTargetId(item.id);
-                                customThumbnailRef.current?.click();
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-[#22222a] hover:bg-[#2c2c36] text-[10px] font-semibold text-neutral-200 flex items-center gap-1 cursor-pointer shrink-0"
-                            >
-                              <Camera className="w-3 h-3 text-[#d4af37]" />
-                              <span>Custom Cover</span>
-                            </button>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                                {/* Selected Cover Preview preserving original video aspect ratio */}
+                                <div className="sm:col-span-5 space-y-1">
+                                  <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                                    Selected Cover Preview
+                                  </div>
+                                  <div
+                                    className="w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/50 relative max-h-40 flex items-center justify-center mx-auto"
+                                    style={{
+                                      aspectRatio:
+                                        item.width && item.height
+                                          ? `${item.width} / ${item.height}`
+                                          : '16 / 9'
+                                    }}
+                                  >
+                                    {item.thumbnailUrl ? (
+                                      <img
+                                        src={item.thumbnailUrl}
+                                        alt="Selected video cover preview"
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : null}
+                                    <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-mono text-[#fce7b0]">
+                                      {item.autoSelectCover !== false &&
+                                      item.thumbnailUrl === item.recommendedThumbnailUrl
+                                        ? 'Auto Best Frame'
+                                        : 'Selected Cover'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Selectable Extracted Video Frames */}
+                                <div className="sm:col-span-7 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                                      Extracted Video Frames ({item.extractedFrames?.length || item.previewFrames?.length || 0})
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        runCoverExtractionForItem({
+                                          itemId: item.id,
+                                          file: item.file,
+                                          sourceUrl: item.previewUrl,
+                                          fileName: item.fileName,
+                                          fileSizeBytes: item.fileSizeBytes,
+                                          mimeType: item.file?.type || 'video/mp4',
+                                          preserveExistingAutoSetting: true
+                                        })
+                                      }
+                                      className="text-[10px] text-[#d4af37] hover:underline flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5" />
+                                      <span>Re-extract</span>
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 xs:grid-cols-3 gap-2">
+                                    {(item.extractedFrames && item.extractedFrames.length > 0
+                                      ? item.extractedFrames
+                                      : (item.previewFrames || []).map((url, idx) => ({
+                                          id: `pf_${idx}`,
+                                          url,
+                                          timestampSeconds: idx * 3,
+                                          timestampFormatted: `${Math.floor((idx * 3) / 60)}:${((idx * 3) % 60).toString().padStart(2, '0')}`,
+                                          width: item.width || 1280,
+                                          height: item.height || 720,
+                                          aspectRatio: item.aspectRatio || '16:9',
+                                          lumaMean: 110,
+                                          contrastScore: 90,
+                                          isAutoRecommended: idx === 0
+                                        }))
+                                    ).map((frame) => {
+                                      const isSelected = item.thumbnailUrl === frame.url;
+                                      return (
+                                        <button
+                                          key={frame.id}
+                                          type="button"
+                                          onClick={() =>
+                                            setSelectedFiles(prev =>
+                                              prev.map(f =>
+                                                f.id === item.id
+                                                  ? {
+                                                      ...f,
+                                                      thumbnailUrl: frame.url,
+                                                      autoSelectCover: false
+                                                    }
+                                                  : f
+                                              )
+                                            )
+                                          }
+                                          className={`relative rounded-lg overflow-hidden border-2 transition-all cursor-pointer bg-black ${
+                                            isSelected
+                                              ? 'border-[#d4af37] ring-1 ring-[#d4af37]'
+                                              : 'border-[#27272f] opacity-75 hover:opacity-100'
+                                          }`}
+                                          style={{
+                                            aspectRatio:
+                                              item.width && item.height
+                                                ? `${item.width} / ${item.height}`
+                                                : '16 / 9'
+                                          }}
+                                        >
+                                          <img
+                                            src={frame.url}
+                                            alt={`Frame at ${frame.timestampFormatted}`}
+                                            className="w-full h-full object-cover"
+                                          />
+                                          <span className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 text-[9px] font-mono text-white">
+                                            {frame.timestampFormatted}
+                                          </span>
+                                          {frame.isAutoRecommended && (
+                                            <span className="absolute top-1 left-1 px-1 py-0.2 rounded bg-[#d4af37] text-[8px] font-bold text-black">
+                                              Best
+                                            </span>
+                                          )}
+                                          {isSelected && (
+                                            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#d4af37] text-black flex items-center justify-center">
+                                              <Check className="w-2.5 h-2.5" />
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1011,7 +1191,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
 
               {/* Selected Category Tags */}
               <div className="flex flex-wrap gap-1.5 min-h-7">
-                {selectedCategories.map(cat => (
+                {Array.from(new Set(selectedCategories)).map(cat => (
                   <span 
                     key={cat}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-[#d4af37]/15 border border-[#d4af37]/40 text-[#fce7b0]"
@@ -1168,7 +1348,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                   <span>Pay-To-View Monetization Settings</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-neutral-400 mb-1">
                       Unlock Price ($ USD)
@@ -1211,7 +1391,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
 
             {/* 6. ADDITIONAL SETTINGS & SCHEDULE */}
             <div className="space-y-3 pt-2 border-t border-[#26262b]">
-              <div className="flex items-center justify-between text-xs text-neutral-300">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-300">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1269,7 +1449,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                 {hasActiveOptimization ? 'Close & Continue in Background' : 'Cancel'}
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedFiles.some(f => f.type === 'video') && (
                   <button
                     type="button"

@@ -26,6 +26,8 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
 }) => {
   const {
     currentUser,
+    isAuthenticated,
+    requireAuth,
     creators,
     getActiveCreatorStatuses,
     markStatusViewed,
@@ -50,6 +52,13 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   }, [creatorsWithStories, initialCreatorId]);
 
   const [activeCreatorIdx, setActiveCreatorIdx] = useState<number>(currentCreatorIndex);
+
+  useEffect(() => {
+    setActiveCreatorIdx(currentCreatorIndex);
+    setCurrentIndex(0);
+    setProgress(0);
+  }, [initialCreatorId, currentCreatorIndex]);
+
   const currentCreator = creatorsWithStories[activeCreatorIdx] || creators.find(c => c.id === initialCreatorId);
 
   // Active creator's statuses
@@ -61,10 +70,33 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const currentStatus: CreatorStatus | undefined = creatorStatuses[currentIndex];
 
+  // Auto-close safely if no active status exists for this creator so modal state never hangs
+  useEffect(() => {
+    if (!currentCreator || !currentStatus) {
+      onClose();
+    }
+  }, [currentCreator, currentStatus, onClose]);
+
+  const resolvedMediaType: 'image' | 'video' | 'text' = useMemo(() => {
+    if (!currentStatus) return 'image';
+    const raw = currentStatus.mediaType || currentStatus.type;
+    if (raw === 'video') return 'video';
+    if (raw === 'text') return 'text';
+    if (raw === 'photo' || raw === 'image') return 'image';
+    if (currentStatus.textContent || currentStatus.textOverlay) return 'text';
+    return 'image';
+  }, [currentStatus]);
+
+  const resolvedTextContent = currentStatus?.textContent || currentStatus?.textOverlay || currentStatus?.caption || '';
+  const resolvedTextBg =
+    currentStatus?.textBackground ||
+    currentStatus?.backgroundColor ||
+    'linear-gradient(135deg, #1f1205 0%, #997819 100%)';
+
   // Playback & progress timer state
   const [progress, setProgress] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const [replyText, setReplyText] = useState<string>('');
   const [replySentSuccess, setReplySentSuccess] = useState<boolean>(false);
   const [floatingReaction, setFloatingReaction] = useState<string | null>(null);
@@ -78,6 +110,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   const timerRef = useRef<number | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const touchStartTimeRef = useRef<number>(0);
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Check if current user can view this story
   const accessCheck = useMemo(() => {
@@ -85,15 +118,37 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
     return canUserViewStatus(currentStatus);
   }, [currentStatus, canUserViewStatus]);
 
-  const isOwner = currentUser.id === currentCreator?.id;
-  const userHasLiked = currentStatus?.reactions?.some(r => r.userId === currentUser.id && r.emoji === '❤️');
+  const isOwner = isAuthenticated && currentUser.id === currentCreator?.id;
+  const userHasLiked = isAuthenticated && currentStatus?.reactions?.some(r => r.userId === currentUser.id && r.emoji === '❤️');
 
-  // Mark status as viewed as soon as it opens
+  // Mark status as viewed as soon as it opens & ensure video plays with sound
   useEffect(() => {
     if (currentStatus && accessCheck.canView) {
       markStatusViewed(currentStatus.id);
     }
-  }, [currentStatus?.id, accessCheck.canView, markStatusViewed]);
+    if (resolvedMediaType === 'video' && accessCheck.canView && videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (!isMuted) {
+        videoRef.current.volume = 1;
+      }
+      videoRef.current.play().catch(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = true;
+          setIsMuted(true);
+          videoRef.current.play().catch(() => {});
+        }
+      });
+    }
+  }, [currentStatus?.id, resolvedMediaType, accessCheck.canView, markStatusViewed]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (!isMuted) {
+        videoRef.current.volume = 1;
+      }
+    }
+  }, [isMuted]);
 
   // Transition to next story or next creator
   const goToNextStory = useCallback(() => {
@@ -142,7 +197,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
     }
 
     // Default duration: 5000ms for images and text, 10000ms for video if metadata not loaded
-    const defaultDuration = currentStatus?.type === 'video' ? 10000 : 5000;
+    const defaultDuration = resolvedMediaType === 'video' ? 10000 : 5000;
     const intervalMs = 50;
     const step = (intervalMs / defaultDuration) * 100;
 
@@ -159,7 +214,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentStatus, accessCheck.canView, isPaused, showReportModal, showViewersModal, isDeleting, goToNextStory]);
+  }, [currentStatus, resolvedMediaType, accessCheck.canView, isPaused, showReportModal, showViewersModal, isDeleting, goToNextStory]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -173,21 +228,48 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, goToNextStory, goToPrevStory, showReportModal, showViewersModal]);
 
-  // Handle tap / click on story surface
+  // Handle tap / click on story surface (ignoring child interactive controls & drags)
+  const isInteractiveTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest('button, a, input, textarea, select, form, [data-story-interactive="true"]'));
+  };
+
   const handleSurfacePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (isInteractiveTarget(e.target)) return;
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
     touchStartTimeRef.current = Date.now();
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
     pressTimerRef.current = window.setTimeout(() => {
       setIsPaused(true);
       if (videoRef.current) videoRef.current.pause();
     }, 180);
   };
 
+  const handleSurfacePointerCancel = () => {
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pointerDownPosRef.current = null;
+    setIsPaused(false);
+    if (videoRef.current && !videoRef.current.ended) {
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
   const handleSurfacePointerUp = (e: React.PointerEvent) => {
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    const startPos = pointerDownPosRef.current;
+    pointerDownPosRef.current = null;
+
+    if (!startPos || isInteractiveTarget(e.target)) {
+      setIsPaused(false);
+      return;
+    }
+
+    const dx = Math.abs(e.clientX - startPos.x);
+    const dy = Math.abs(e.clientY - startPos.y);
     const holdDuration = Date.now() - touchStartTimeRef.current;
 
-    if (holdDuration < 200) {
-      // Tap navigation
+    if (holdDuration < 250 && dx < 14 && dy < 14) {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const width = rect.width;
@@ -207,6 +289,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
 
   // Reactions
   const handleSendReaction = (emoji: string) => {
+    if (!requireAuth('react to stories')) return;
     if (!currentStatus) return;
     reactToStatus(currentStatus.id, emoji);
     setFloatingReaction(emoji);
@@ -216,6 +299,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
   // Reply
   const handleSendReply = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth('reply to stories')) return;
     if (!currentStatus || !replyText.trim()) return;
     replyToStatus(currentStatus.id, replyText.trim());
     setReplyText('');
@@ -301,9 +385,10 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
 
       {/* Story Stage Container (Mobile-first 9:16 aspect ratio or responsive viewport) */}
       <div 
-        className="relative w-full h-full max-w-md max-h-[92vh] md:rounded-3xl overflow-hidden bg-neutral-950 flex flex-col shadow-2xl border border-white/10"
+        className="relative w-full h-full max-w-md max-h-[100dvh] md:max-h-[92dvh] md:rounded-3xl overflow-hidden bg-neutral-950 flex flex-col shadow-2xl border border-white/10 touch-manipulation"
         onPointerDown={handleSurfacePointerDown}
         onPointerUp={handleSurfacePointerUp}
+        onPointerCancel={handleSurfacePointerCancel}
       >
         {/* Progress Bars Segments */}
         <div className="absolute top-0 inset-x-0 z-30 pt-3 px-3 flex gap-1 pointer-events-none">
@@ -323,31 +408,32 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
         </div>
 
         {/* Story Header */}
-        <div className="relative z-30 pt-6 px-4 pb-3 flex items-center justify-between text-white bg-gradient-to-b from-black/70 via-black/40 to-transparent">
-          <div className="flex items-center gap-3">
+        <div className="relative z-30 pt-6 px-3 sm:px-4 pb-3 flex items-center justify-between gap-2 text-white bg-gradient-to-b from-black/70 via-black/40 to-transparent">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
                 onNavigateToCreatorProfile?.(currentCreator.id);
               }}
-              className="flex items-center gap-2 group text-left"
+              className="flex items-center gap-2 group text-left min-w-0 flex-1"
             >
-              <div className="relative">
+              <div className="relative shrink-0">
                 <img 
                   src={currentCreator.avatar} 
                   alt={currentCreator.name}
-                  className="w-10 h-10 rounded-full object-cover border-2 border-amber-400 ring-2 ring-black"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-amber-400 ring-2 ring-black"
                 />
               </div>
-              <div>
-                <div className="flex items-center gap-1.5 font-semibold text-sm drop-shadow">
-                  <span>{currentCreator.name}</span>
-                  <span className="text-white/60 text-xs font-normal">· {formatTimeAgo(currentStatus.createdAt)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 font-semibold text-xs sm:text-sm drop-shadow min-w-0">
+                  <span className="truncate">{currentCreator.name}</span>
+                  <VerifiedBadge creatorId={currentCreator.id} size="sm" />
+                  <span className="text-white/60 text-[11px] font-normal shrink-0">· {formatTimeAgo(currentStatus.createdAt)}</span>
                 </div>
-                <div className="text-[11px] text-amber-300/90 font-medium flex items-center gap-1">
+                <div className="text-[11px] text-amber-300/90 font-medium truncate">
                   <span>@{currentCreator.username}</span>
-                  <VerifiedBadge creatorId={currentCreator.id} size="xs" />
                 </div>
               </div>
             </button>
@@ -355,11 +441,12 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             {/* Quick Follow Button if not current user & not following */}
             {!isOwner && !isUserFollowingCreator && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleFollowCreator(currentCreator.id);
                 }}
-                className="ml-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-white/20 hover:bg-white/30 backdrop-blur text-white flex items-center gap-1 transition-all"
+                className="shrink-0 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-full bg-white/20 hover:bg-white/30 backdrop-blur text-white flex items-center gap-1 transition-all"
               >
                 <UserPlus className="w-3 h-3 text-amber-300" />
                 <span>Follow</span>
@@ -368,9 +455,10 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
           </div>
 
           {/* Top Right Controls */}
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            {currentStatus.type === 'video' && (
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0" data-story-interactive="true" onClick={(e) => e.stopPropagation()}>
+            {resolvedMediaType === 'video' && (
               <button
+                type="button"
                 onClick={() => {
                   setIsMuted(!isMuted);
                   if (videoRef.current) videoRef.current.muted = !isMuted;
@@ -406,7 +494,10 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             {/* Report Button for Fans */}
             {!isOwner && (
               <button
-                onClick={() => setShowReportModal(true)}
+                onClick={() => {
+                  if (!requireAuth('report content')) return;
+                  setShowReportModal(true);
+                }}
                 className="p-1.5 rounded-full bg-black/40 hover:bg-black/60 text-white/80 hover:text-white"
                 title="Report content"
               >
@@ -458,6 +549,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
                 ) : (
                   <button
                     onClick={() => {
+                      if (!requireAuth('subscribe to creators')) return;
                       onClose();
                       onOpenSubscribeModal?.(currentCreator.id);
                     }}
@@ -477,72 +569,81 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             </div>
           ) : null}
 
-          {/* Status Content Rendering */}
-          {currentStatus.type === 'text' ? (
-            <div 
-              className="w-full h-full flex flex-col items-center justify-center p-8 text-center"
-              style={{
-                background: currentStatus.backgroundColor || 'linear-gradient(135deg, #1f1205 0%, #997819 100%)'
-              }}
-            >
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="max-w-xs flex flex-col items-center gap-3 z-20"
+          {/* Status Content Rendering (Never mount restricted story media URLs when locked) */}
+          {accessCheck.canView && (
+            resolvedMediaType === 'text' ? (
+              <div 
+                className="w-full h-full flex flex-col items-center justify-center p-5 sm:p-8 text-center overflow-y-auto"
+                style={{
+                  background: resolvedTextBg
+                }}
               >
-                <TranslateContentButton
-                  text={currentStatus.textOverlay || currentStatus.caption || ''}
-                  contentType="status"
-                  contentRef={`status_${currentStatus.id}`}
-                  renderPrimaryText
-                  textClassName="text-white font-serif text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words"
+                <div
+                  data-story-interactive="true"
+                  onClick={(e) => e.stopPropagation()}
+                  className="max-w-xs flex flex-col items-center gap-3 z-20"
+                >
+                  <TranslateContentButton
+                    text={resolvedTextContent}
+                    contentType="status"
+                    contentRef={`status_${currentStatus.id}`}
+                    renderPrimaryText
+                    textClassName="text-white font-serif text-xl sm:text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words"
+                  />
+                </div>
+                <div className="mt-6 text-xs text-amber-200/80 font-mono uppercase tracking-widest">
+                  ACOVON MOMENTS
+                </div>
+              </div>
+            ) : resolvedMediaType === 'video' ? (
+              <div className="w-full h-full relative flex items-center justify-center bg-black">
+                <video
+                  key={currentStatus.id}
+                  ref={videoRef}
+                  src={currentStatus.mediaUrl || '/videos/sample1.mp4'}
+                  poster={currentStatus.thumbnailUrl}
+                  playsInline
+                  autoPlay
+                  muted={isMuted}
+                  loop={false}
+                  onEnded={goToNextStory}
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.src.includes('/videos/sample1.mp4')) {
+                      el.src = '/videos/sample1.mp4';
+                      el.load();
+                    }
+                  }}
+                  className="w-full h-full object-cover"
                 />
               </div>
-              <div className="mt-6 text-xs text-amber-200/80 font-mono uppercase tracking-widest">
-                ACOVON MOMENTS
+            ) : (
+              <div className="w-full h-full relative flex items-center justify-center bg-black">
+                <img
+                  src={currentStatus.mediaUrl || currentStatus.thumbnailUrl || currentCreator.avatar}
+                  alt={currentStatus.caption || 'Creator Story'}
+                  className="w-full h-full object-cover"
+                />
               </div>
-            </div>
-          ) : currentStatus.type === 'video' ? (
-            <div className="w-full h-full relative flex items-center justify-center bg-black">
-              <video
-                ref={videoRef}
-                src={currentStatus.mediaUrl || '/videos/sample1.mp4'}
-                poster={currentStatus.thumbnailUrl}
-                playsInline
-                autoPlay
-                muted={isMuted}
-                loop={false}
-                onEnded={goToNextStory}
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (!el.src.includes('/videos/sample1.mp4')) {
-                    el.src = '/videos/sample1.mp4';
-                    el.load();
-                  }
-                }}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="w-full h-full relative flex items-center justify-center bg-black">
-              <img
-                src={currentStatus.mediaUrl}
-                alt={currentStatus.caption || 'Creator Story'}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            )
           )}
 
           {/* Optional Caption Overlay */}
-          {currentStatus.caption && currentStatus.type !== 'text' && (
+          {currentStatus.caption && resolvedMediaType !== 'text' && (
             <div
+              data-story-interactive="true"
               onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-20 inset-x-0 z-20 px-4 py-3 bg-gradient-to-t from-black/85 via-black/50 to-transparent text-white text-sm text-center leading-relaxed flex flex-col items-center"
+              className="absolute bottom-0 inset-x-0 z-20 px-4 pt-3 pb-2 bg-gradient-to-t from-black/85 via-black/50 to-transparent text-white text-sm text-center leading-relaxed flex flex-col items-center"
             >
               <TranslateContentButton
                 text={currentStatus.caption}
                 contentType="status"
                 contentRef={`status_caption_${currentStatus.id}`}
                 renderPrimaryText
+                collapsible
+                linkify
+                variant="overlay"
+                maxExpandedHeightClass="max-h-[24vh] overflow-y-auto"
                 textClassName="drop-shadow-md font-medium max-w-sm mx-auto text-white"
                 compact
               />
@@ -569,12 +670,12 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Quick Emoji Reaction Row */}
-            <div className="flex items-center justify-around px-2 py-1">
+            <div className="flex items-center justify-around gap-1 px-1 sm:px-2 py-1">
               {QUICK_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   onClick={() => handleSendReaction(emoji)}
-                  className="text-2xl hover:scale-125 active:scale-95 transition-transform"
+                  className="text-xl min-[360px]:text-2xl hover:scale-125 active:scale-95 transition-transform"
                 >
                   {emoji}
                 </button>
@@ -601,7 +702,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
                   type="text"
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Send a message to @${currentCreator.username}...`}
+                  placeholder={`Send a message to ${currentCreator.name}...`}
                   className="w-full py-2.5 pl-4 pr-10 rounded-full bg-white/10 border border-white/20 text-white text-xs placeholder-white/50 focus:outline-none focus:border-amber-400 focus:bg-white/15 transition"
                 />
                 {replyText.trim() && (
@@ -618,7 +719,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
             {replySentSuccess && (
               <div className="text-center text-xs text-emerald-400 font-medium py-1 animate-fade-in flex items-center justify-center gap-1">
                 <Check className="w-3.5 h-3.5" />
-                <span>Message sent directly to @{currentCreator.username}!</span>
+                <span>Message sent directly to {currentCreator.name}!</span>
               </div>
             )}
           </div>
@@ -657,7 +758,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
           onClick={() => setShowViewersModal(false)}
         >
           <div 
-            className="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-800 p-5 shadow-2xl text-white"
+            className="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-5 shadow-2xl text-white max-h-[88dvh] flex flex-col acovon-modal-panel"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800 mb-3">
@@ -710,7 +811,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
           onClick={() => setShowReportModal(false)}
         >
           <div 
-            className="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-800 p-5 shadow-2xl text-white"
+            className="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-5 shadow-2xl text-white max-h-[88dvh] overflow-y-auto acovon-modal-panel"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800 mb-4">

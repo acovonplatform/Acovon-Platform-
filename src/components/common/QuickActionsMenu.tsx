@@ -64,7 +64,7 @@ export const QuickActionsMenu: React.FC<QuickActionsMenuProps> = ({
 
       {/* Popover Dropdown */}
       {isOpen && (
-        <div className="fixed left-3 right-3 top-[60px] w-auto max-w-[calc(100vw-1.5rem)] sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
+        <div className="fixed left-3 right-3 top-[calc(var(--acovon-header-height,58px)+4px)] w-auto max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
           
           <div className="px-2 py-1.5 border-b border-[#27272a] mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">

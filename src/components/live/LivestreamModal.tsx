@@ -50,6 +50,8 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
     activeLivestreamId,
     setActiveLivestreamId,
     currentUser,
+    isAuthenticated,
+    requireAuth,
     liveChat,
     sendLiveChatMessage,
     sendLiveGift,
@@ -109,7 +111,16 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
     }
   }, [celebrationGift]);
 
-  // Count replay view once when an ended replay is opened and unlocked
+  // Keep livestream video muted/volume synced with state and start with sound when unlocked
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (!isMuted) {
+        videoRef.current.volume = 1;
+      }
+    }
+  }, [isMuted]);
+
   useEffect(() => {
     if (stream && stream.status === 'ended' && hasCountedReplayViewRef.current !== stream.id) {
       const check = canUserAccessReplay(stream);
@@ -122,7 +133,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
   if (!stream) return null;
 
-  const isCreatorOfStream = currentUser.id === stream.creatorId;
+  const isCreatorOfStream = isAuthenticated && currentUser.id === stream.creatorId;
   const isEndedReplay = stream.status === 'ended';
   const liveAccessCheck = canUserAccessLivestream(stream);
   const replayAccessCheck = canUserAccessReplay(stream);
@@ -130,9 +141,10 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   const streamCreator = creators.find(c => c.id === stream.creatorId);
   const recMode = stream.recordingSettings?.mode || 'disabled';
   const isReplayAlreadyPurchased = Boolean(
-    stream.purchasedReplayUserIds?.includes(currentUser.id) ||
-      (stream.recordingSettings?.includeReplayWithLiveTicket &&
-        stream.purchasedViewerIds?.includes(currentUser.id))
+    isAuthenticated &&
+      (stream.purchasedReplayUserIds?.includes(currentUser.id) ||
+        (stream.recordingSettings?.includeReplayWithLiveTicket &&
+          stream.purchasedViewerIds?.includes(currentUser.id)))
   );
 
   // Play / Pause handler
@@ -162,6 +174,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
   const handleSendChat = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!requireAuth('chat in live streams')) return;
     if (!chatInput.trim()) return;
     setActionError('');
 
@@ -179,6 +192,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   };
 
   const handleSendGift = (gift: VirtualGift) => {
+    if (!requireAuth('send virtual gifts')) return;
     setActionError('');
     const res = sendLiveGift(stream.id, gift.id);
     if (!res.success) {
@@ -190,6 +204,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   };
 
   const handleSendTip = (amount: number) => {
+    if (!requireAuth('send live tips')) return;
     setActionError('');
     const res = sendLiveTip(stream.id, amount, tipNote);
     if (!res.success) {
@@ -216,6 +231,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
   const handleUnlockPasscode = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth('unlock private livestreams')) return;
     setPasscodeError('');
     const res = unlockInviteStream(stream.id, passcodeInput);
     if (!res.success) {
@@ -224,6 +240,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   };
 
   const handleTicketPurchase = () => {
+    if (!requireAuth('purchase livestream tickets')) return;
     setActionError('');
     const res = purchaseLivestreamTicket(stream.id);
     if (!res.success) {
@@ -232,6 +249,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   };
 
   const handleSubscribeNow = (tierId?: string) => {
+    if (!requireAuth('subscribe to creators')) return;
     setActionError('');
     const targetTierId = tierId || selectedTierForUpgrade || streamCreator?.tiers[0]?.id;
     if (!targetTierId) return;
@@ -242,6 +260,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
   };
 
   const handlePurchaseRecording = () => {
+    if (!requireAuth('purchase official recordings')) return;
     setActionError('');
     setRecordingPurchaseSuccess('');
     const res = purchaseLivestreamRecording(stream.id);
@@ -266,13 +285,13 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
       )}
 
       {/* Main Container */}
-      <div className="relative w-full h-[100dvh] lg:h-full max-w-[1720px] lg:max-h-[96vh] flex flex-col lg:flex-row bg-[#0c0c0e] lg:rounded-2xl border-0 lg:border border-zinc-800/80 overflow-hidden shadow-2xl">
+      <div className="relative w-full h-[100dvh] lg:h-full max-w-[1720px] lg:max-h-[96vh] flex flex-col landscape-short:flex-row lg:flex-row bg-[#0c0c0e] lg:rounded-2xl border-0 lg:border border-zinc-800/80 overflow-hidden shadow-2xl">
         
         {/* Left/Main Column: Video Player & Controls */}
-        <div className="flex-none lg:flex-1 flex flex-col relative h-[44dvh] sm:h-[50dvh] lg:h-full bg-black overflow-hidden">
+        <div className="flex-none landscape-short:flex-1 lg:flex-1 flex flex-col relative h-[38dvh] xs:h-[42dvh] sm:h-[48dvh] landscape-short:h-full lg:h-full bg-black overflow-hidden">
           
           {/* Top Bar Overlay */}
-          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between gap-2 p-2.5 sm:p-4 bg-gradient-to-b from-black/90 via-black/40 to-transparent">
+          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between gap-2 p-2 sm:p-4 bg-gradient-to-b from-black/90 via-black/40 to-transparent">
             {/* Creator Info & Live Badge */}
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
               <div className="relative shrink-0">
@@ -286,12 +305,14 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  <h3 className="font-semibold text-white text-xs sm:text-base tracking-wide truncate">
-                    {stream.creatorName}
-                  </h3>
-                  <span className="text-[11px] text-neutral-400 inline-flex items-center gap-1">
-                    <span>@{stream.creatorUsername}</span>
-                    <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h3 className="font-semibold text-white text-xs sm:text-base tracking-wide truncate">
+                      {stream.creatorName}
+                    </h3>
+                    <VerifiedBadge creatorId={stream.creatorId} size="sm" />
+                  </div>
+                  <span className="text-[11px] text-neutral-400 hidden sm:inline">
+                    @{stream.creatorUsername}
                   </span>
                   {isEndedReplay ? (
                     <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#fce7b0]">
@@ -320,7 +341,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] sm:text-xs text-zinc-400 truncate max-w-[200px] sm:max-w-md">
+                <p className="text-[11px] sm:text-xs text-zinc-400 truncate max-w-full sm:max-w-md">
                   {stream.title}
                 </p>
               </div>
@@ -371,7 +392,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               </div>
 
               {/* Creator Gross Revenue Badge (visible only to stream creator or admin) */}
-              {(isCreatorOfStream || currentUser.role === 'admin') && (
+              {(isCreatorOfStream || (isAuthenticated && currentUser.role === 'admin')) && (
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#d4af37]/15 border border-[#d4af37]/40 text-xs font-semibold text-[#fce7b0]">
                   <DollarSign className="w-3.5 h-3.5 text-[#d4af37]" />
                   <span>Gross: ${stream.totalRevenue.toFixed(2)}</span>
@@ -432,18 +453,18 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
                 {/* Floating Celebration Overlay (When someone sends gift/tip) */}
                 {celebrationGift && (
-                  <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in zoom-in-90 fade-in duration-300">
-                    <div className="px-6 py-3 rounded-2xl bg-black/85 border border-[#d4af37] shadow-[0_0_40px_rgba(212,175,55,0.35)] flex items-center gap-4 text-white">
-                      <span className="text-4xl animate-bounce">{celebrationGift.gift.icon}</span>
-                      <div>
-                        <div className="text-xs uppercase tracking-wider text-[#d4af37] font-bold">
+                  <div className="absolute top-14 sm:top-20 left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-30 pointer-events-none animate-in zoom-in-90 fade-in duration-300 flex justify-center">
+                    <div className="px-3.5 sm:px-6 py-2 sm:py-3 rounded-2xl bg-black/85 border border-[#d4af37] shadow-[0_0_40px_rgba(212,175,55,0.35)] flex items-center gap-2.5 sm:gap-4 text-white max-w-md">
+                      <span className="text-2xl sm:text-4xl animate-bounce shrink-0">{celebrationGift.gift.icon}</span>
+                      <div className="min-w-0">
+                        <div className="text-[10px] sm:text-xs uppercase tracking-wider text-[#d4af37] font-bold">
                           Stream Celebration
                         </div>
-                        <div className="text-sm font-semibold">
+                        <div className="text-xs sm:text-sm font-semibold truncate">
                           <span className="text-[#fce7b0]">{celebrationGift.senderName}</span> sent {celebrationGift.gift.name}
                         </div>
                       </div>
-                      <span className="text-sm font-bold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-500/30">
+                      <span className="text-xs sm:text-sm font-bold text-emerald-400 bg-emerald-950/60 px-2 sm:px-2.5 py-1 rounded-md border border-emerald-500/30 shrink-0">
                         +${celebrationGift.gift.price.toFixed(2)}
                       </span>
                     </div>
@@ -461,8 +482,8 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                 )}
 
                 {/* Video Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex items-center justify-between z-20">
-                  <div className="flex items-center gap-2 sm:gap-3">
+                <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-wrap items-center justify-between gap-2 z-20">
+                  <div className="flex items-center gap-1.5 sm:gap-3">
                     <button
                       onClick={togglePlay}
                       className="p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-white transition-colors cursor-pointer"
@@ -479,7 +500,10 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
 
                     {/* Create Clip Button (Last 30 seconds -> saved as Highlight to creator gallery) */}
                     <button
-                      onClick={() => setShowClipModal(true)}
+                      onClick={() => {
+                        if (!requireAuth('create livestream clips')) return;
+                        setShowClipModal(true);
+                      }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 hover:bg-[#d4af37]/25 border border-[#d4af37]/50 hover:border-[#d4af37] text-xs font-semibold text-[#fce7b0] transition-all shadow-md group cursor-pointer"
                       title="Save last 30s of livestream as a Highlight in creator's content gallery"
                     >
@@ -535,15 +559,15 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               /* ============================================================ */
               /* LOCKED OFFICIAL REPLAY GATE UI (AFTER LIVESTREAM HAS ENDED)  */
               /* ============================================================ */
-              <div className="relative w-full h-full flex flex-col items-center justify-center p-6 text-center bg-zinc-950 overflow-hidden">
+              <div className="relative w-full h-full flex flex-col items-center justify-center p-3 sm:p-6 text-center bg-zinc-950 overflow-y-auto">
                 <div
                   className="absolute inset-0 bg-cover bg-center filter blur-xl opacity-20 scale-105"
                   style={{ backgroundImage: `url(${stream.coverImage})` }}
                 />
 
-                <div className="relative z-10 max-w-lg w-full bg-[#121215]/95 border border-zinc-800 p-8 rounded-2xl shadow-2xl backdrop-blur-md">
-                  <div className="w-14 h-14 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto mb-4 text-[#d4af37]">
-                    <Film className="w-7 h-7" />
+                <div className="relative z-10 max-w-lg w-full max-h-full overflow-y-auto bg-[#121215]/95 border border-zinc-800 p-4 sm:p-8 rounded-2xl shadow-2xl backdrop-blur-md">
+                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto mb-3 sm:mb-4 text-[#d4af37]">
+                    <Film className="w-5 h-5 sm:w-7 sm:h-7" />
                   </div>
 
                   <span className="text-xs font-bold uppercase tracking-widest text-[#d4af37] mb-1 block">
@@ -588,7 +612,9 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                       </button>
 
                       <p className="text-[11px] text-zinc-500">
-                        Instant unlock via your Acovon Wallet (${currentUser.walletBalance.toFixed(2)} available). Added permanently to your Purchased Replays library.
+                        {isAuthenticated
+                          ? `Instant unlock via your Acovon Wallet ($${currentUser.walletBalance.toFixed(2)} available). Added permanently to your Purchased Replays library.`
+                          : 'Log in or create a free account to unlock official replays.'}
                       </p>
                     </div>
                   )}
@@ -661,16 +687,16 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               </div>
             ) : (
               /* LOCKED LIVESTREAM GATE UI */
-              <div className="relative w-full h-full flex flex-col items-center justify-center p-6 text-center bg-zinc-950 overflow-hidden">
+              <div className="relative w-full h-full flex flex-col items-center justify-center p-3 sm:p-6 text-center bg-zinc-950 overflow-y-auto">
                 {/* Blurred Cover Background */}
                 <div
                   className="absolute inset-0 bg-cover bg-center filter blur-xl opacity-20 scale-105"
                   style={{ backgroundImage: `url(${stream.coverImage})` }}
                 />
 
-                <div className="relative z-10 max-w-lg w-full bg-[#121215]/90 border border-zinc-800 p-8 rounded-2xl shadow-2xl backdrop-blur-md">
-                  <div className="w-14 h-14 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto mb-4 text-[#d4af37]">
-                    <Lock className="w-7 h-7" />
+                <div className="relative z-10 max-w-lg w-full max-h-full overflow-y-auto bg-[#121215]/90 border border-zinc-800 p-4 sm:p-8 rounded-2xl shadow-2xl backdrop-blur-md">
+                  <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto mb-3 sm:mb-4 text-[#d4af37]">
+                    <Lock className="w-5 h-5 sm:w-7 sm:h-7" />
                   </div>
 
                   <span className="text-xs font-bold uppercase tracking-widest text-[#d4af37] mb-1 block">
@@ -773,7 +799,9 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                       </button>
 
                       <p className="text-[11px] text-zinc-500">
-                        Deducted instantly from your Acovon Wallet balance (${Number(currentUser?.walletBalance || 0).toFixed(2)} available).
+                        {isAuthenticated
+                          ? `Deducted instantly from your Acovon Wallet balance ($${Number(currentUser?.walletBalance || 0).toFixed(2)} available).`
+                          : 'Log in or create a free account to purchase an entry ticket.'}
                       </p>
                     </div>
                   )}
@@ -821,7 +849,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
         </div>
 
         {/* Right Column: Live Chat & Interactivity */}
-        <div className="w-full lg:w-[420px] flex flex-col h-[48vh] lg:h-full bg-[#111114] border-t lg:border-t-0 lg:border-l border-zinc-800">
+        <div className="w-full flex-1 min-h-0 lg:flex-none lg:w-[420px] landscape-short:flex-none landscape-short:w-[270px] md:landscape-short:w-[320px] landscape-short:h-full lg:h-full flex flex-col bg-[#111114] border-t landscape-short:border-t-0 landscape-short:border-l lg:border-t-0 lg:border-l border-zinc-800">
           
           {/* Live Chat Header */}
           <div className="px-4 py-3 border-b border-zinc-800/80 flex items-center justify-between">
@@ -1097,7 +1125,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
           )}
 
           {/* Chat Type Selector: Standard, Highlighted ($2), Priority Question ($5) */}
-          <div className="px-3 pt-2 pb-1 bg-zinc-950/90 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
+          <div className="px-2.5 sm:px-3 pt-2 pb-1 bg-zinc-950/90 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1113,8 +1141,11 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               {stream.settings.enableHighlightedMessages && (
                 <button
                   type="button"
-                  onClick={() => setSelectedChatType('highlighted')}
-                  className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+                  onClick={() => {
+                    if (!requireAuth('send highlighted chat messages')) return;
+                    setSelectedChatType('highlighted');
+                  }}
+                  className={`px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer ${
                     selectedChatType === 'highlighted'
                       ? 'bg-[#d4af37]/20 text-[#fce7b0] border border-[#d4af37]/40 font-medium'
                       : 'text-zinc-400 hover:text-[#d4af37]'
@@ -1127,8 +1158,11 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               {stream.settings.enablePaidMessages && (
                 <button
                   type="button"
-                  onClick={() => setSelectedChatType('priority_question')}
-                  className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+                  onClick={() => {
+                    if (!requireAuth('ask priority questions')) return;
+                    setSelectedChatType('priority_question');
+                  }}
+                  className={`px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer ${
                     selectedChatType === 'priority_question'
                       ? 'bg-purple-900/40 text-purple-200 border border-purple-500/40 font-medium'
                       : 'text-zinc-400 hover:text-purple-300'
@@ -1146,10 +1180,11 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (!requireAuth('send virtual gifts')) return;
                     setShowGiftDrawer(!showGiftDrawer);
                     setShowTipDrawer(false);
                   }}
-                  className={`p-1.5 rounded transition-colors ${
+                  className={`p-1.5 rounded transition-colors cursor-pointer ${
                     showGiftDrawer
                       ? 'bg-[#d4af37] text-black'
                       : 'text-zinc-400 hover:text-[#d4af37]'
@@ -1163,10 +1198,11 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (!requireAuth('send live tips')) return;
                     setShowTipDrawer(!showTipDrawer);
                     setShowGiftDrawer(false);
                   }}
-                  className={`p-1.5 rounded transition-colors ${
+                  className={`p-1.5 rounded transition-colors cursor-pointer ${
                     showTipDrawer
                       ? 'bg-emerald-500 text-white'
                       : 'text-zinc-400 hover:text-emerald-400'
@@ -1180,7 +1216,10 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
               {/* Create Clip Action */}
               <button
                 type="button"
-                onClick={() => setShowClipModal(true)}
+                onClick={() => {
+                  if (!requireAuth('create livestream clips')) return;
+                  setShowClipModal(true);
+                }}
                 className="p-1.5 rounded text-zinc-400 hover:text-[#d4af37] transition-colors cursor-pointer"
                 title="Create 30s Clip (Saved as Highlight to Content Gallery)"
               >
@@ -1197,9 +1236,16 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
             <input
               type="text"
               value={chatInput}
+              onFocus={() => {
+                if (!isAuthenticated) {
+                  requireAuth('chat in live streams');
+                }
+              }}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder={
-                selectedChatType === 'highlighted'
+                !isAuthenticated
+                  ? 'Log in to join live chat...'
+                  : selectedChatType === 'highlighted'
                   ? 'Send highlighted chat ($2.00)...'
                   : selectedChatType === 'priority_question'
                   ? 'Ask a priority question ($5.00)...'
@@ -1209,7 +1255,7 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
             />
             <button
               type="submit"
-              disabled={!chatInput.trim()}
+              disabled={isAuthenticated && !chatInput.trim()}
               className="p-2 rounded-xl bg-[#d4af37] hover:bg-[#c29e2f] text-black font-semibold disabled:opacity-40 disabled:hover:bg-[#d4af37] transition-all cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />

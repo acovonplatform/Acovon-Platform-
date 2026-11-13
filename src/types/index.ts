@@ -182,12 +182,27 @@ export interface PostEditAuditRecord {
   postId: string;
   creatorId: string;
   creatorName: string;
-  action: 'edited' | 'media_replaced' | 'deleted' | 'archived_with_purchases';
+  action: 'created' | 'edited' | 'media_replaced' | 'restored' | 'deleted' | 'archived_with_purchases';
   changedFields: string[];
   hadExistingPurchases: boolean;
   purchaseCount: number;
   summary: string;
   timestamp: string;
+}
+
+export interface PostRevision {
+  revisionId: string;
+  postId: string;
+  version: number;
+  changeType: 'created' | 'edited' | 'media_replaced' | 'restored' | 'deleted';
+  changedFields: string[];
+  editorId: string;
+  editorName: string;
+  editorRole: string;
+  reason?: string;
+  restoredFromRevisionId?: string;
+  createdAt: string;
+  snapshot: Post;
 }
 
 export interface UpdatePostPayload {
@@ -229,7 +244,12 @@ export interface Post {
   isLiked?: boolean;
   isPinned?: boolean;
   createdAt: string;
+  createdAtIso?: string;
   updatedAt?: string;
+  version?: number;
+  revisionCount?: number;
+  originalContentHash?: string;
+  lastEditedBy?: string;
   tags?: string[];
   categories?: string[];
   category_ids?: string[];

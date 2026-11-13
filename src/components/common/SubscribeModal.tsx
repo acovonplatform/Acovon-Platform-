@@ -105,11 +105,11 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[#121215] border border-[#27272a] rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto acovon-modal-panel">
         
         {/* Creator Hero Header */}
-        <div className="relative h-32 bg-gradient-to-r from-[#211a0e] via-[#16161b] to-[#121215] p-5 flex items-end">
+        <div className="relative h-28 sm:h-32 shrink-0 bg-gradient-to-r from-[#211a0e] via-[#16161b] to-[#121215] p-4 sm:p-5 flex items-end">
           <img 
             src={creator.coverImage} 
             alt={creator.name} 
@@ -143,11 +143,11 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-5 sm:p-6 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
           
           {/* Active Subscription Status Banner */}
           {isAlreadySubscribed && activeSubscription && (
-            <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl flex items-center justify-between gap-3">
+            <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <Crown className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
@@ -281,7 +281,7 @@ export const SubscribeModal: React.FC<SubscribeModalProps> = ({
                     <div className="text-[11px] text-neutral-400 mb-2 flex items-center justify-between">
                       <span>Need +${fundsDifference.toFixed(2)} more. 1-Click Quick Deposit:</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
                       {[10, 25, 50, 100].map(amt => (
                         <button
                           key={amt}

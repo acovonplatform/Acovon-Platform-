@@ -3,6 +3,7 @@ import { Post, VideoResolution, RecommendedPostResult, EngagementSurface } from 
 import { useApp } from '../../context/AppContext';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   Heart, 
   MessageCircle, 
@@ -26,8 +27,6 @@ import {
   X,
   Settings,
   PictureInPicture2,
-  Cpu,
-  Zap,
   Check,
   ThumbsUp,
   ThumbsDown,
@@ -67,6 +66,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const { 
     currentUser, 
     isAuthenticated,
+    requireAuth,
     isCurrentUserApprovedCreator,
     activeRole,
     setEditingPost,
@@ -93,7 +93,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   } = useApp();
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedPercent, setBufferedPercent] = useState(35);
@@ -105,6 +105,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [hoverSeekPercent, setHoverSeekPercent] = useState<number>(0);
   const [previewExceeded, setPreviewExceeded] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
+  const [videoLoadError, setVideoLoadError] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [isNearViewport, setIsNearViewport] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [localComments, setLocalComments] = useState<string[]>([
@@ -120,6 +124,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('copyright');
   const [reportSubmittedToast, setReportSubmittedToast] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLElement>(null);
@@ -127,8 +132,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const hasLoggedImpressionRef = useRef(false);
   const hasLoggedWatch50Ref = useRef(false);
+  const hasAutoRetriedRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isAuthor = currentUser.id === post.creatorId;
+  const isAuthor = isAuthenticated && currentUser.id === post.creatorId;
   const isCreatorOwner =
     isAuthenticated &&
     currentUser.id === post.creatorId &&
@@ -140,11 +147,22 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const isLockedPPV = post.visibility === 'pay_per_view' && !isAuthor && !isPurchased;
   const isLockedSubscribers = post.visibility === 'subscribers' && !isAuthor && !isSubscribed;
+  const isLockedFollowers = post.visibility === 'followers' && !isAuthor && !isFollowingCreator && !isSubscribed;
+  const isLockedPhoto =
+    isLockedSubscribers ||
+    isLockedPPV ||
+    isLockedFollowers ||
+    (post.visibility === 'private' && !isAuthor);
 
   const previewDuration = post.ppvPreviewDuration || 15;
   const videoAsset = post.media?.find(m => m.type === 'video');
   const imageAssets = post.media?.filter(m => m.type === 'image') || [];
   const primaryCategory = post.categories?.[0];
+  const hasPostMetaDetails = Boolean(
+    (post.categories && post.categories.length > 0) ||
+    post.country ||
+    (post.tags && post.tags.length > 0)
+  );
 
   // Up Next video recommendations when video finishes
   const upNextRecommendations = videoEnded ? getUpNextVideoRecommendations(post.id, 2) : [];
@@ -154,17 +172,39 @@ export const PostCard: React.FC<PostCardProps> = ({
     ? videoMediaRecords.find(r => r.id === videoAsset.videoMediaId)
     : undefined;
 
-  const resolvedVideoSrc =
-    videoAsset?.url && !videoAsset.url.includes('cdn.acovon.media') && !videoAsset.url.endsWith('.m3u8')
-      ? videoAsset.url
-      : videoAsset?.previewUrl && !videoAsset.previewUrl.includes('cdn.acovon.media') && !videoAsset.previewUrl.endsWith('.m3u8')
-      ? videoAsset.previewUrl
-      : linkedMediaRecord?.originalStorageRef &&
-        (linkedMediaRecord.originalStorageRef.startsWith('http') ||
-          linkedMediaRecord.originalStorageRef.startsWith('blob:')) &&
-        !linkedMediaRecord.originalStorageRef.includes('cdn.acovon.media')
-      ? linkedMediaRecord.originalStorageRef
-      : '/videos/sample1.mp4';
+  const isPlayableStreamUrl = (u?: string): u is string => {
+    if (!u || typeof u !== 'string') return false;
+    const trimmed = u.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.includes('cdn.acovon.media') ||
+      lower.endsWith('.m3u8') ||
+      lower.startsWith('blob:') ||
+      lower.startsWith('s3://')
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const videoCandidateSources: string[] = [];
+  if (isPlayableStreamUrl(videoAsset?.url)) {
+    videoCandidateSources.push(videoAsset.url.trim());
+  }
+  if (
+    isPlayableStreamUrl(videoAsset?.previewUrl) &&
+    !videoCandidateSources.includes(videoAsset.previewUrl.trim())
+  ) {
+    videoCandidateSources.push(videoAsset.previewUrl.trim());
+  }
+
+  const baseVideoSrc = videoCandidateSources[sourceIndex] || '';
+  const resolvedVideoSrc = baseVideoSrc
+    ? retryNonce > 0
+      ? `${baseVideoSrc}${baseVideoSrc.includes('?') ? '&' : '?'}_vretry=${retryNonce}`
+      : baseVideoSrc
+    : '';
 
   const availableResolutions: VideoResolution[] =
     videoAsset?.availableResolutions ||
@@ -175,16 +215,6 @@ export const PostCard: React.FC<PostCardProps> = ({
     videoAsset?.availableCodecs?.[0] ||
     linkedMediaRecord?.availableCodecs?.[0] ||
     'AV1';
-
-  const compressionRatio =
-    videoAsset?.compressionRatio ??
-    linkedMediaRecord?.compressionRatio ??
-    62;
-
-  const vmafScore =
-    videoAsset?.vmafScore ??
-    linkedMediaRecord?.vmafScore ??
-    96.8;
 
   const previewFrames =
     videoAsset?.previewFrames ||
@@ -214,6 +244,16 @@ export const PostCard: React.FC<PostCardProps> = ({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [showOptionsMenu]);
 
+  // Keep HTMLVideoElement muted & volume properties synced with state
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+      if (!isMuted) {
+        videoRef.current.volume = 1;
+      }
+    }
+  }, [isMuted]);
+
   // Single-video feed playback authority
   useEffect(() => {
     if (activePlayingVideoId && activePlayingVideoId !== post.id && isPlaying) {
@@ -223,6 +263,42 @@ export const PostCard: React.FC<PostCardProps> = ({
       setIsPlaying(false);
     }
   }, [activePlayingVideoId, post.id, isPlaying]);
+
+  // Reset error & fallback state whenever the post or its media URLs change
+  useEffect(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    hasAutoRetriedRef.current = false;
+    setSourceIndex(0);
+    setRetryNonce(0);
+    setVideoLoadError(false);
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [post.id, videoAsset?.url, videoAsset?.previewUrl]);
+
+  // Preload video metadata only when near the viewport to avoid concurrent stream stampedes
+  useEffect(() => {
+    if (!cardRef.current || !videoAsset) return;
+    const nearObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsNearViewport(true);
+            nearObserver.disconnect();
+          }
+        });
+      },
+      { rootMargin: '600px 0px' }
+    );
+    nearObserver.observe(cardRef.current);
+    return () => nearObserver.disconnect();
+  }, [post.id, videoAsset]);
 
   // Log viewport impression & pause when scrolled out of view
   useEffect(() => {
@@ -352,6 +428,10 @@ export const PostCard: React.FC<PostCardProps> = ({
       setActivePlayingVideoId(post.id);
       if (isReplay && videoRef.current) {
         videoRef.current.currentTime = 0;
+      }
+      videoRef.current.muted = isMuted;
+      if (!isMuted) {
+        videoRef.current.volume = 1;
       }
       videoRef.current.play().then(() => {
         setIsPlaying(true);
@@ -505,6 +585,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth('comment on posts')) return;
     if (!commentText.trim()) return;
     setLocalComments(prev => [...prev, `${currentUser.name}: ${commentText}`]);
     trackEngagementEvent({
@@ -522,6 +603,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     action: 'not_interested' | 'show_less' | 'show_more' | 'hide_creator'
   ) => {
     setShowOptionsMenu(false);
+    if (!requireAuth('manage feed preferences')) return;
     submitPostRecommendationFeedback(post.id, action);
     if (action === 'show_more') {
       setFeedbackToast(`Boosted recommendations for ${primaryCategory || post.creatorName}`);
@@ -603,13 +685,13 @@ export const PostCard: React.FC<PostCardProps> = ({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1 font-semibold text-neutral-100 group-hover:text-[#fce7b0] transition-colors text-xs sm:text-sm min-w-0">
+                <div className="flex items-center gap-1.5 font-semibold text-neutral-100 group-hover:text-[#fce7b0] transition-colors text-xs sm:text-sm min-w-0">
                   <span className="truncate">{post.creatorName}</span>
+                  <VerifiedBadge creatorId={post.creatorId} size="sm" />
                 </div>
                 
                 <div className="flex items-center gap-1 text-[11px] sm:text-xs text-neutral-400 truncate">
                   <span className="truncate">@{post.creatorUsername}</span>
-                  <VerifiedBadge creatorId={post.creatorId} size="xs" />
                   <span aria-hidden="true" className="shrink-0">·</span>
                   <span className="shrink-0">{post.createdAt}</span>
                 </div>
@@ -793,6 +875,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     type="button"
                     onClick={() => {
                       setShowOptionsMenu(false);
+                      if (!requireAuth('report content')) return;
                       setShowReportModal(true);
                     }}
                     className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
@@ -884,6 +967,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                   type="button"
                   onClick={() => {
                     setShowOptionsMenu(false);
+                    if (!requireAuth('report content')) return;
                     setShowReportModal(true);
                   }}
                   className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
@@ -901,116 +985,176 @@ export const PostCard: React.FC<PostCardProps> = ({
       )}
 
       {/* Post Text Caption */}
-      <div className="px-3.5 sm:px-5 pt-3.5 sm:pt-4 pb-3">
-        <TranslateContentButton
-          text={post.content}
-          contentType="post"
-          contentRef={`post_${post.id}`}
-          renderPrimaryText
-          textClassName="text-neutral-200 text-sm sm:text-base leading-relaxed whitespace-pre-line break-words"
-        />
-        
-        {((post.categories && post.categories.length > 0) || post.country) && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {post.categories?.map(cat => (
-              <span key={cat} className="px-2.5 py-0.5 rounded-lg text-[10px] font-semibold bg-[#1a1a22] text-[#fce7b0] border border-[#2e2e38]">
-                {cat}
-              </span>
-            ))}
-            {post.country && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-[#16161d] text-neutral-200 border border-[#272732]">
-                <span>{getCountryFlagAndName(post.country).flag}</span>
-                <span>{getCountryFlagAndName(post.country).name}</span>
-              </span>
-            )}
-          </div>
-        )}
+      {(post.content?.trim() || hasPostMetaDetails) && (
+        <div className="px-3.5 sm:px-5 pt-2.5 sm:pt-3 pb-2.5">
+          {post.content?.trim() ? (
+            <TranslateContentButton
+              text={post.content}
+              contentType="post"
+              contentRef={`post_${post.id}`}
+              renderPrimaryText
+              collapsible
+              compact
+              linkify
+              hideTranslateAction
+              hasExtraContent={hasPostMetaDetails}
+              onExpandedChange={setIsDescriptionExpanded}
+              textClassName="text-neutral-200 text-sm sm:text-base leading-relaxed"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsDescriptionExpanded(prev => !prev)}
+              aria-expanded={isDescriptionExpanded}
+              className="inline-flex items-center px-1.5 py-0.5 rounded hover:bg-[#1e1e26] text-[#d4af37] hover:text-[#fce7b0] font-semibold text-xs leading-none transition-colors cursor-pointer touch-manipulation select-none"
+            >
+              {isDescriptionExpanded ? 'Show Less' : 'More'}
+            </button>
+          )}
+          
+          {isDescriptionExpanded && ((post.categories && post.categories.length > 0) || post.country) && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {post.categories?.map(cat => (
+                <span key={cat} className="px-2.5 py-0.5 rounded-lg text-[10px] font-semibold bg-[#1a1a22] text-[#fce7b0] border border-[#2e2e38]">
+                  {cat}
+                </span>
+              ))}
+              {post.country && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium bg-[#16161d] text-neutral-200 border border-[#272732]">
+                  <span>{getCountryFlagAndName(post.country).flag}</span>
+                  <span>{getCountryFlagAndName(post.country).name}</span>
+                </span>
+              )}
+            </div>
+          )}
 
-        {post.tags && post.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#d4af37]">
-            {post.tags.map(t => (
-              <span
-                key={t}
-                onClick={() => {
-                  trackEngagementEvent({
-                    eventType: 'hashtag_clicked',
-                    postId: post.id,
-                    creatorId: post.creatorId,
-                    category: primaryCategory,
-                    tags: [t],
-                    surface: feedSurface
-                  });
-                }}
-                className="cursor-pointer hover:underline"
-              >
-                #{t}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+          {isDescriptionExpanded && post.tags && post.tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-[#d4af37]">
+              {post.tags.map(t => (
+                <span
+                  key={t}
+                  onClick={() => {
+                    trackEngagementEvent({
+                      eventType: 'hashtag_clicked',
+                      postId: post.id,
+                      creatorId: post.creatorId,
+                      category: primaryCategory,
+                      tags: [t],
+                      surface: feedSurface
+                    });
+                  }}
+                  className="cursor-pointer hover:underline"
+                >
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Media Showcase Area */}
       {videoAsset && (
         <div
           tabIndex={0}
           onKeyDown={handlePlayerKeyDown}
-          className="relative w-full bg-black aspect-video overflow-hidden group focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50"
+          style={
+            videoAsset.width && videoAsset.height
+              ? { aspectRatio: `${videoAsset.width} / ${videoAsset.height}` }
+              : undefined
+          }
+          className={`relative w-full bg-black overflow-hidden group focus:outline-none focus:ring-1 focus:ring-[#d4af37]/50 ${
+            videoAsset.width && videoAsset.height ? 'max-h-[620px] landscape-short:max-h-[75dvh] mx-auto' : 'aspect-video'
+          }`}
         >
-          <video
-            ref={videoRef}
-            src={resolvedVideoSrc}
-            poster={videoAsset.thumbnailUrl !== videoAsset.url ? videoAsset.thumbnailUrl : undefined}
-            preload="metadata"
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={handleVideoEnded}
-            onError={(e) => {
-              const el = e.currentTarget;
-              if (!el.src.includes('/videos/sample1.mp4')) {
-                el.src = '/videos/sample1.mp4';
-                el.load();
-              }
-            }}
-            muted={isMuted}
-            playsInline
-            onClick={handleTogglePlay}
-            className={`w-full h-full object-cover cursor-pointer transition-filter duration-300 ${
-              previewExceeded && isLockedPPV ? 'blur-md brightness-50' : ''
-            }`}
-          />
-
-          {/* Top Preview Banner while in Free Preview mode */}
-          {isLockedPPV && !previewExceeded && (
-            <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-[#d4af37]/40 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
-                <span className="font-medium text-[#fce7b0]">Free PPV Preview Active</span>
+          {!isLockedSubscribers && !isLockedFollowers ? (
+            videoLoadError || !resolvedVideoSrc ? (
+              <div className="w-full h-full bg-[#121216] flex flex-col items-center justify-center p-6 text-center gap-3">
+                {videoAsset.thumbnailUrl && videoAsset.thumbnailUrl !== videoAsset.url && (
+                  <img
+                    src={videoAsset.thumbnailUrl}
+                    alt={post.content}
+                    className="w-28 h-16 object-cover rounded-lg border border-white/10 opacity-75"
+                  />
+                )}
+                <p className="text-xs text-neutral-300 font-medium">
+                  Video stream temporarily unavailable
+                </p>
+                {videoCandidateSources.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (retryTimerRef.current) {
+                        clearTimeout(retryTimerRef.current);
+                        retryTimerRef.current = null;
+                      }
+                      hasAutoRetriedRef.current = false;
+                      setSourceIndex(0);
+                      setVideoLoadError(false);
+                      setRetryNonce(n => n + 1);
+                      requestAnimationFrame(() => {
+                        if (videoRef.current) {
+                          videoRef.current.load();
+                          videoRef.current.play().catch(() => {});
+                        }
+                      });
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#22222b] hover:bg-[#2d2d38] border border-[#3a3a48] text-xs font-semibold text-white cursor-pointer"
+                  >
+                    Retry Playback
+                  </button>
+                )}
               </div>
-              <div className="font-mono text-white text-[11px] tabular-nums">
-                {Math.floor(currentTime)}s / {previewDuration}s limit
-              </div>
-            </div>
-          )}
-
-          {/* Top-Right Adaptive Streaming & Compression Telemetry Badge (when not locked PPV preview) */}
-          {(!isLockedPPV || previewExceeded) && !isLockedSubscribers && (
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pointer-events-none">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-emerald-500/30 text-[10px] font-mono text-emerald-300">
-                <Zap className="w-2.5 h-2.5 text-emerald-400" />
-                <span>HLS • {activeCodecLabel} • -{compressionRatio}% size</span>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-[#d4af37]/30 text-[10px] font-mono text-[#fce7b0]">
-                <Cpu className="w-2.5 h-2.5 text-[#d4af37]" />
-                <span>VMAF {vmafScore.toFixed(1)}</span>
-              </span>
+            ) : (
+              <video
+                key={`${post.id}_${sourceIndex}_${retryNonce}`}
+                ref={videoRef}
+                src={resolvedVideoSrc}
+                poster={videoAsset.thumbnailUrl !== videoAsset.url ? videoAsset.thumbnailUrl : undefined}
+                preload={isNearViewport || isPlaying ? 'metadata' : 'none'}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={handleVideoEnded}
+                onError={() => {
+                  setIsPlaying(false);
+                  if (sourceIndex + 1 < videoCandidateSources.length) {
+                    setSourceIndex(prev => prev + 1);
+                    return;
+                  }
+                  if (!hasAutoRetriedRef.current) {
+                    hasAutoRetriedRef.current = true;
+                    retryTimerRef.current = setTimeout(() => {
+                      setSourceIndex(0);
+                      setRetryNonce(n => n + 1);
+                    }, 350);
+                    return;
+                  }
+                  setVideoLoadError(true);
+                }}
+                muted={isMuted}
+                playsInline
+                onClick={handleTogglePlay}
+                className={`w-full h-full object-cover cursor-pointer transition-filter duration-300 ${
+                  previewExceeded && isLockedPPV ? 'blur-md brightness-50' : ''
+                }`}
+              />
+            )
+          ) : (
+            <div className="w-full h-full bg-[#121216] relative overflow-hidden">
+              {videoAsset.thumbnailUrl && videoAsset.thumbnailUrl !== videoAsset.url && (
+                <img
+                  src={videoAsset.thumbnailUrl}
+                  alt={post.content}
+                  className="w-full h-full object-cover blur-xl opacity-30 scale-110"
+                />
+              )}
             </div>
           )}
 
           {/* Centered Big Play Button when paused */}
-          {!isPlaying && !previewExceeded && !isLockedSubscribers && !videoEnded && (
+          {!isPlaying && !previewExceeded && !isLockedSubscribers && !isLockedFollowers && !videoEnded && !videoLoadError && Boolean(resolvedVideoSrc) && (
             <button
               onClick={handleTogglePlay}
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-[#d4af37]/90 hover:bg-[#d4af37] text-black rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-2xl cursor-pointer z-10"
@@ -1022,8 +1166,8 @@ export const PostCard: React.FC<PostCardProps> = ({
 
           {/* Up Next Personalized Video Recommendations Overlay when Video Ends */}
           {videoEnded && !isLockedPPV && !isLockedSubscribers && upNextRecommendations.length > 0 && (
-            <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-20 p-4 sm:p-6 flex flex-col justify-between animate-in fade-in">
-              <div className="flex items-center justify-between">
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-20 p-3 sm:p-6 flex flex-col justify-between gap-2 overflow-y-auto animate-in fade-in">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#fce7b0]">
                   <Sparkles className="w-4 h-4 text-[#d4af37]" />
                   <span>Recommended Up Next For You</span>
@@ -1062,10 +1206,18 @@ export const PostCard: React.FC<PostCardProps> = ({
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[11px] font-bold text-white truncate group-hover/next:text-[#fce7b0]">
-                          {rec.post.creatorName}
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-white group-hover/next:text-[#fce7b0] min-w-0">
+                          <span className="truncate">{rec.post.creatorName}</span>
+                          <VerifiedBadge creatorId={rec.post.creatorId} size="xs" />
                         </div>
-                        <p className="text-[10px] text-neutral-300 line-clamp-1">{rec.post.content}</p>
+                        <CollapsibleDescriptionText
+                          text={rec.post.content}
+                          textClassName="text-[10px] text-neutral-300 leading-snug"
+                          compact
+                          linkify
+                          maxExpandedHeightClass="max-h-16 overflow-y-auto"
+                          resetKey={rec.post.id}
+                        />
                         <div className="text-[9px] font-mono text-[#d4af37] mt-0.5 truncate">
                           {rec.primaryReason}
                         </div>
@@ -1085,7 +1237,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           {showQualityMenu && !previewExceeded && (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-14 right-3 z-30 w-56 bg-[#121216]/95 backdrop-blur-xl border border-[#2e2e38] rounded-2xl p-2.5 shadow-2xl space-y-1.5 text-xs animate-in fade-in zoom-in-95"
+              className="absolute bottom-14 right-2 sm:right-3 z-30 w-56 max-w-[calc(100vw-2rem)] bg-[#121216]/95 backdrop-blur-xl border border-[#2e2e38] rounded-2xl p-2.5 shadow-2xl space-y-1.5 text-xs animate-in fade-in zoom-in-95"
             >
               <div className="flex items-center justify-between px-2 py-1 border-b border-[#26262f]">
                 <span className="font-bold text-white text-[11px] flex items-center gap-1.5">
@@ -1153,7 +1305,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
           {/* In-Feed Video Controls Bar (Bottom Overlay) */}
           {!previewExceeded && !isLockedSubscribers && (
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-3 flex flex-col gap-2 opacity-95 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
+            <div className="touch-always-visible absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-2.5 sm:p-3 flex flex-col gap-1.5 sm:gap-2 opacity-95 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
               
               {/* Scrubbable Progress Bar with Buffered Indicator & Hover Thumbnail Preview */}
               <div className="flex items-center gap-2.5">
@@ -1218,7 +1370,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               </div>
 
               {/* Bottom Buttons Row */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-1.5 flex-wrap">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleTogglePlay}
@@ -1352,48 +1504,137 @@ export const PostCard: React.FC<PostCardProps> = ({
               )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Photo Showcase Area */}
-      {!videoAsset && imageAssets.length > 0 && (
-        <div 
-          onClick={() => {
-            trackEngagementEvent({
-              eventType: imageAssets.length > 1 ? 'gallery_swiped' : 'photo_opened',
-              postId: post.id,
-              creatorId: post.creatorId,
-              category: primaryCategory,
-              tags: post.tags,
-              surface: feedSurface
-            });
-            if (onOpenPhotoViewer) {
-              onOpenPhotoViewer(post.id, 0);
-            }
-          }}
-          className="relative w-full bg-black aspect-video overflow-hidden group cursor-pointer"
-          title="Click to view full screen photo with zoom"
-        >
-          <img
-            src={imageAssets[0].url}
-            alt={post.content}
-            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
-          />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white">
-            <Maximize2 className="w-6 h-6 text-[#d4af37]" />
-            <span className="text-xs font-semibold">View Full Screen (Zoom)</span>
-          </div>
-
-          {imageAssets.length > 1 && (
-            <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-white">
-              +{imageAssets.length - 1} photos
+          {/* Locked Follower-Only Overlay */}
+          {!isLockedSubscribers && isLockedFollowers && (
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
+                <UserPlus className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white mb-0.5">
+                  Follower-Only Video
+                </h3>
+                <p className="text-xs text-neutral-300 max-w-sm mx-auto">
+                  Follow {post.creatorName} to unlock and watch this video.
+                </p>
+              </div>
+              <button
+                onClick={() => toggleFollowCreator(post.creatorId)}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-[#d4af37] text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-2"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Follow to Watch</span>
+              </button>
             </div>
           )}
         </div>
       )}
 
+      {/* Photo Showcase Area */}
+      {!videoAsset && imageAssets.length > 0 && (
+        isLockedPhoto ? (
+          <div className="relative w-full bg-[#101014] aspect-video overflow-hidden flex flex-col items-center justify-center p-6 text-center space-y-3 border-y border-[#1e1e26]">
+            {imageAssets[0].thumbnailUrl && imageAssets[0].thumbnailUrl !== imageAssets[0].url && (
+              <img
+                src={imageAssets[0].thumbnailUrl}
+                alt={post.content}
+                className="absolute inset-0 w-full h-full object-cover blur-xl opacity-25 scale-110 pointer-events-none"
+              />
+            )}
+            <div className="relative z-10 flex flex-col items-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
+                {isLockedSubscribers ? <Crown className="w-6 h-6" /> : isLockedFollowers ? <UserPlus className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white mb-0.5">
+                  {isLockedSubscribers
+                    ? 'Subscriber-Only Photo'
+                    : isLockedPPV
+                    ? `Pay-Per-View Photo · $${post.ppvPrice?.toFixed(2) || '9.99'}`
+                    : isLockedFollowers
+                    ? 'Follower-Only Photo'
+                    : 'Private Photo'}
+                </h3>
+                <p className="text-xs text-neutral-300 max-w-sm mx-auto">
+                  {isLockedSubscribers
+                    ? `Subscribe to ${post.creatorName} to view this photo set.`
+                    : isLockedPPV
+                    ? `Unlock this photo set for $${post.ppvPrice?.toFixed(2) || '9.99'} for permanent access.`
+                    : isLockedFollowers
+                    ? `Follow ${post.creatorName} to view this photo.`
+                    : 'This photo is private.'}
+                </p>
+              </div>
+              {isLockedSubscribers && onOpenSubscribeModal ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenSubscribeModal(post.creatorId)}
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-[#d4af37] text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-2"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>Join Membership</span>
+                </button>
+              ) : isLockedPPV ? (
+                <button
+                  type="button"
+                  onClick={handleUnlockPPV}
+                  className="px-6 py-2.5 bg-gradient-to-r from-[#d4af37] via-[#f1d07c] to-[#d4af37] text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-2"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Unlock for ${post.ppvPrice?.toFixed(2) || '9.99'}</span>
+                </button>
+              ) : isLockedFollowers ? (
+                <button
+                  type="button"
+                  onClick={() => toggleFollowCreator(post.creatorId)}
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-[#d4af37] text-black font-extrabold text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-2"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Follow to View</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div 
+            onClick={() => {
+              trackEngagementEvent({
+                eventType: imageAssets.length > 1 ? 'gallery_swiped' : 'photo_opened',
+                postId: post.id,
+                creatorId: post.creatorId,
+                category: primaryCategory,
+                tags: post.tags,
+                surface: feedSurface
+              });
+              if (onOpenPhotoViewer) {
+                onOpenPhotoViewer(post.id, 0);
+              }
+            }}
+            className="relative w-full bg-black aspect-video overflow-hidden group cursor-pointer"
+            title="Click to view full screen photo with zoom"
+          >
+            <img
+              src={imageAssets[0].url}
+              alt={post.content}
+              className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+            />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white">
+              <Maximize2 className="w-6 h-6 text-[#d4af37]" />
+              <span className="text-xs font-semibold">View Full Screen (Zoom)</span>
+            </div>
+
+            {imageAssets.length > 1 && (
+              <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-white">
+                +{imageAssets.length - 1} photos
+              </div>
+            )}
+          </div>
+        )
+      )}
+
       {/* Action Bar: Like, Comments, Save, Tip, Share */}
-      <div className="p-4 sm:p-5 border-t border-[#1c1c22] flex items-center justify-between">
+      <div className="p-3 sm:p-5 border-t border-[#1c1c22] flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-4">
           
           {/* Like Button */}
@@ -1453,11 +1694,11 @@ export const PostCard: React.FC<PostCardProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Direct Tip */}
           <button
             onClick={() => onOpenTipModal(post.creatorId, post.creatorName)}
-            className="px-3 py-1.5 bg-[#18181f] hover:bg-[#22222a] border border-[#d4af37]/30 text-[#fce7b0] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-2.5 sm:px-3 py-1.5 bg-[#18181f] hover:bg-[#22222a] border border-[#d4af37]/30 text-[#fce7b0] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Coins className="w-3.5 h-3.5 text-[#d4af37]" />
             <span>Tip</span>
@@ -1477,7 +1718,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 });
                 onOpenShareModal(post);
               }}
-              className="p-1.5 bg-[#18181f] hover:bg-[#22222a] border border-[#27272a] hover:border-[#d4af37]/40 text-neutral-300 hover:text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1 px-3"
+              className="py-1.5 px-2.5 sm:px-3 bg-[#18181f] hover:bg-[#22222a] border border-[#27272a] hover:border-[#d4af37]/40 text-neutral-300 hover:text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1"
               title="Share or Forward Post"
             >
               <Share2 className="w-3.5 h-3.5 text-[#d4af37]" />
@@ -1493,11 +1734,11 @@ export const PostCard: React.FC<PostCardProps> = ({
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
             {/* Official Creator Pinned Reply */}
             <div className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-[#27272a] space-y-1">
-              <div className="flex items-center gap-1.5 font-semibold text-white">
+              <div className="flex items-center gap-1.5 font-semibold text-white flex-wrap">
                 <span>{post.creatorName}</span>
+                <VerifiedBadge creatorId={post.creatorId} size="xs" />
                 <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-1">
                   <span>@{post.creatorUsername}</span>
-                  <VerifiedBadge creatorId={post.creatorId} size="xs" />
                   <span>· Creator</span>
                 </span>
               </div>
@@ -1510,31 +1751,48 @@ export const PostCard: React.FC<PostCardProps> = ({
                 compact
               />
             </div>
-            {localComments.map((comment, i) => (
-              <div key={i} className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-[#222228] space-y-1">
-                <TranslateContentButton
-                  text={comment}
-                  contentType="comment"
-                  contentRef={`comment_${post.id}_${i}`}
-                  renderPrimaryText
-                  textClassName="text-neutral-200"
-                  compact
-                />
-              </div>
-            ))}
+            {localComments.map((comment, i) => {
+              const colonIdx = comment.indexOf(': ');
+              const hasAuthor = colonIdx > 0 && colonIdx < 48;
+              const authorName = hasAuthor ? comment.slice(0, colonIdx) : '';
+              const commentBody = hasAuthor ? comment.slice(colonIdx + 2) : comment;
+              return (
+                <div key={i} className="p-2.5 bg-[#121215] rounded-xl text-xs text-neutral-200 border border-[#222228] space-y-1">
+                  {hasAuthor && (
+                    <div className="flex items-center gap-1.5 font-semibold text-white">
+                      <span>{authorName}</span>
+                      <VerifiedBadge creatorId={authorName} size="xs" />
+                    </div>
+                  )}
+                  <TranslateContentButton
+                    text={commentBody}
+                    contentType="comment"
+                    contentRef={`comment_${post.id}_${i}`}
+                    renderPrimaryText
+                    textClassName="text-neutral-200"
+                    compact
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
             <input
               type="text"
-              placeholder="Write a comment..."
+              placeholder={isAuthenticated ? "Write a comment..." : "Log in to write a comment..."}
               value={commentText}
+              onFocus={() => {
+                if (!isAuthenticated) {
+                  requireAuth('comment on posts');
+                }
+              }}
               onChange={(e) => setCommentText(e.target.value)}
-              className="flex-1 bg-[#121215] border border-[#27272a] rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
+              className="flex-1 min-w-0 bg-[#121215] border border-[#27272a] rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-[#d4af37] text-black font-bold text-xs rounded-xl cursor-pointer hover:bg-[#e5c07b] transition-colors"
+              className="px-4 py-2 bg-[#d4af37] text-black font-bold text-xs rounded-xl cursor-pointer hover:bg-[#e5c07b] transition-colors shrink-0"
             >
               Post
             </button>
@@ -1545,7 +1803,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       {/* Report Modal — Routes directly into the existing Moderation Queue */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-5 space-y-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-4 sm:p-5 space-y-4 max-h-[92dvh] overflow-y-auto acovon-modal-panel">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-white flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-red-400" />

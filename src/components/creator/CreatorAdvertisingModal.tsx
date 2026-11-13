@@ -74,8 +74,8 @@ export const CreatorAdvertisingModal: React.FC<CreatorAdvertisingModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto animate-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl relative max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 acovon-modal-panel">
         
         <button
           onClick={onClose}
@@ -160,7 +160,7 @@ export const CreatorAdvertisingModal: React.FC<CreatorAdvertisingModalProps> = (
                   <div
                     key={pkg.amt}
                     onClick={() => { setSelectedBudget(pkg.amt); setCustomBudget(''); }}
-                    className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-[#1e1e26] border-[#d4af37] shadow-lg shadow-[#d4af37]/10'
                         : 'bg-[#18181c] border-[#27272a] hover:border-[#383844]'
@@ -218,13 +218,13 @@ export const CreatorAdvertisingModal: React.FC<CreatorAdvertisingModalProps> = (
           )}
 
           {/* CTA */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#27272a]">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#27272a]">
             <div>
               <div className="text-[11px] text-neutral-400">Your Wallet Balance</div>
               <div className="text-sm font-mono font-bold text-white">${currentUser.walletBalance.toFixed(2)}</div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={onClose}

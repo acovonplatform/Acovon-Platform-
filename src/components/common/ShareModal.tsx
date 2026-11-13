@@ -32,8 +32,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const { 
     creators, 
     currentUser, 
+    isAuthenticated,
+    requireAuth,
     forwardPostInMessage, 
-    resolveReport 
+    submitPostRecommendationFeedback
   } = useApp();
 
   const [copied, setCopied] = useState(false);
@@ -75,6 +77,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const handleForwardInACOVON = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth('forward posts via ACOVON messaging')) return;
     if (!selectedRecipientId) return;
 
     setSendingMessage(true);
@@ -120,6 +123,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const handleSubmitReport = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth('report this post')) return;
+    submitPostRecommendationFeedback(post.id, 'report_content', reportReason);
     setReportSubmitted(true);
     setTimeout(() => {
       setShowReport(false);
@@ -128,28 +133,29 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   // Contacts / other creators for forwarding
-  const candidateRecipients = creators.filter(c => c.id !== currentUser.id);
+  const candidateRecipients = creators.filter(c => !isAuthenticated || c.id !== currentUser.id);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[#121215] border border-[#27272a] rounded-3xl max-w-md w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl sm:rounded-3xl max-w-md w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto acovon-modal-panel">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[#26262b] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-[#d4af37]" />
-            <h3 className="font-brand font-bold text-base text-white">Share Video / Post</h3>
+        <div className="p-4 sm:p-5 border-b border-[#26262b] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Share2 className="w-5 h-5 text-[#d4af37] shrink-0" />
+            <h3 className="font-brand font-bold text-base text-white truncate">Share Video / Post</h3>
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#18181c] hover:bg-[#22222a] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-[#18181c] hover:bg-[#22222a] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Post Card Preview */}
-        <div className="p-4 sm:p-5 border-b border-[#26262b] bg-[#16161b]">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Post Card Preview */}
+          <div className="p-4 sm:p-5 border-b border-[#26262b] bg-[#16161b]">
           <div className="flex items-center gap-3">
             {mediaThumb ? (
               <img 
@@ -237,7 +243,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               <span>Forward via ACOVON Message</span>
             </label>
 
-            {messageSent ? (
+            {!isAuthenticated ? (
+              <div className="flex items-center justify-between gap-3 p-2.5 bg-[#121215] border border-[#27272a] rounded-xl">
+                <span className="text-xs text-neutral-400">
+                  Log in or sign up to forward posts via direct message.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => requireAuth('forward posts via ACOVON messaging')}
+                  className="px-3 py-1.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-lg shrink-0 cursor-pointer"
+                >
+                  Log In
+                </button>
+              </div>
+            ) : messageSent ? (
               <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-center text-xs text-emerald-300 font-medium animate-in fade-in">
                 ✓ Post forwarded into private chat!
               </div>
@@ -281,7 +300,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             <label className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
               Share to External Platforms
             </label>
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-3 xs:grid-cols-5 gap-2 text-center">
               {[
                 { id: 'whatsapp', label: 'WhatsApp', color: 'hover:border-emerald-500/50 hover:text-emerald-400' },
                 { id: 'twitter', label: 'X (Twitter)', color: 'hover:border-sky-500/50 hover:text-sky-400' },
@@ -302,9 +321,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </div>
 
           {/* Safety: Report Content / Block Creator */}
-          <div className="pt-2 border-t border-[#26262b] flex items-center justify-between text-xs text-neutral-500">
+          <div className="pt-2 border-t border-[#26262b] flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
             <button
-              onClick={() => setShowReport(true)}
+              onClick={() => {
+                if (requireAuth('report this post')) setShowReport(true);
+              }}
               className="hover:text-red-400 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <ShieldAlert className="w-3.5 h-3.5" />
@@ -312,7 +333,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </button>
             <button
               onClick={() => {
-                alert(`Creator ${post.creatorName} has been muted from your recommendations.`);
+                if (!requireAuth('mute or hide creators from your feed')) return;
+                submitPostRecommendationFeedback(post.id, 'hide_creator');
                 onClose();
               }}
               className="hover:text-neutral-300 flex items-center gap-1 transition-colors cursor-pointer"
@@ -368,6 +390,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </form>
           )}
 
+        </div>
         </div>
 
       </div>

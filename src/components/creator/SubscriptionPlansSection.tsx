@@ -76,8 +76,9 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
   const [introductoryOffer, setIntroductoryOffer] = useState('');
   const [promotionalDiscount, setPromotionalDiscount] = useState<string>('');
 
-  // Toast notices
+  // Toast notices & inline delete confirmation
   const [feedbackNotice, setFeedbackNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [confirmDeleteTierId, setConfirmDeleteTierId] = useState<string | null>(null);
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedbackNotice({ type, message });
@@ -210,19 +211,22 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
     }
   };
 
-  // Delete plan
+  // Delete plan (two-step inline confirmation instead of window.confirm)
   const handleDeletePlan = (planId: string, planName: string) => {
     if (tiers.length <= 1) {
       showFeedback('error', 'You must maintain at least one subscription plan for your fanbase.');
       return;
     }
-    if (window.confirm(`Are you sure you want to delete or retire plan "${planName}"?`)) {
-      const res = deleteCreatorSubscriptionPlan(creator.id, planId);
-      if (res.success) {
-        showFeedback('success', res.error ? res.error : `Plan "${planName}" has been removed.`);
-      } else {
-        showFeedback('error', res.error || 'Failed to delete plan.');
-      }
+    if (confirmDeleteTierId !== planId) {
+      setConfirmDeleteTierId(planId);
+      return;
+    }
+    const res = deleteCreatorSubscriptionPlan(creator.id, planId);
+    setConfirmDeleteTierId(null);
+    if (res.success) {
+      showFeedback('success', res.error ? res.error : `Plan "${planName}" has been removed.`);
+    } else {
+      showFeedback('error', res.error || 'Failed to delete plan.');
     }
   };
 
@@ -240,7 +244,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onOpenPreview && (
             <button
               type="button"
@@ -280,7 +284,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
       )}
 
       {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4 sm:gap-5">
         {tiers.map((tier) => {
           const isPlanActive = tier.isActive !== false;
           // Count active subscribers for this tier
@@ -321,14 +325,14 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                 </div>
 
                 {/* Price Display */}
-                <div className="flex items-baseline gap-1.5 my-3">
-                  <span className="text-2xl sm:text-3xl font-bold font-mono text-white">
+                <div className="flex flex-wrap items-baseline gap-1.5 my-3">
+                  <span className="text-2xl sm:text-3xl font-bold font-mono text-white tabular-nums">
                     ${tier.price.toFixed(2)}
                   </span>
                   <span className="text-xs text-neutral-400">/ month</span>
 
                   {tier.annualPrice && (
-                    <span className="text-[11px] text-[#fce7b0] font-mono ml-auto">
+                    <span className="text-[11px] text-[#fce7b0] font-mono ml-auto tabular-nums">
                       ${tier.annualPrice.toFixed(2)} / yr
                     </span>
                   )}
@@ -362,43 +366,65 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
               <div className="pt-3 border-t border-[#1f1f23] space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-neutral-400 text-[11px]">Subscribers:</span>
-                  <span className="font-mono text-white font-semibold">
+                  <span className="font-mono text-white font-semibold tabular-nums">
                     {activeSubscribers} active
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(tier)}
-                    className="flex-1 py-1.5 px-2 bg-[#1c1c22] hover:bg-[#25252e] border border-[#27272a] text-neutral-200 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Edit</span>
-                  </button>
+                {confirmDeleteTierId === tier.id ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-red-950/40 border border-red-500/40">
+                    <span className="text-[11px] text-red-200 font-medium">Retire "{tier.name}"?</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteTierId(null)}
+                        className="px-2.5 py-1 rounded-lg bg-[#1c1c22] text-neutral-300 text-[11px] font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePlan(tier.id, tier.name)}
+                        className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold cursor-pointer"
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(tier)}
+                      className="flex-1 py-1.5 px-2 bg-[#1c1c22] hover:bg-[#25252e] border border-[#27272a] text-neutral-200 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Edit</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(tier.id, isPlanActive)}
-                    className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
-                      isPlanActive
-                        ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/60'
-                        : 'bg-neutral-800/40 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
-                    }`}
-                    title={isPlanActive ? 'Deactivate (hide from new fans)' : 'Activate plan'}
-                  >
-                    <Power className="w-3.5 h-3.5" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(tier.id, isPlanActive)}
+                      className={`p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                        isPlanActive
+                          ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/60'
+                          : 'bg-neutral-800/40 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
+                      }`}
+                      title={isPlanActive ? 'Deactivate (hide from new fans)' : 'Activate plan'}
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePlan(tier.id, tier.name)}
-                    className="p-2 bg-[#1c1c22] hover:bg-red-950/40 border border-[#27272a] hover:border-red-500/40 text-neutral-400 hover:text-red-400 rounded-xl text-xs transition-colors cursor-pointer"
-                    title="Delete plan"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePlan(tier.id, tier.name)}
+                      className="p-2 bg-[#1c1c22] hover:bg-red-950/40 border border-[#27272a] hover:border-red-500/40 text-neutral-400 hover:text-red-400 rounded-xl text-xs transition-colors cursor-pointer"
+                      title="Delete plan"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -407,27 +433,27 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
 
       {/* MODAL: Plan Creator & Editor */}
       {isEditorOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-3xl w-full my-8 overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-3xl w-full my-auto max-h-[92dvh] acovon-modal-panel overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-4 border-b border-[#26262b] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Crown className="w-5 h-5 text-[#d4af37]" />
-                <h3 className="text-sm font-bold text-white tracking-wide">
+            <div className="p-4 border-b border-[#26262b] flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <Crown className="w-5 h-5 text-[#d4af37] shrink-0" />
+                <h3 className="text-sm font-bold text-white tracking-wide truncate">
                   {editingTierId ? 'Edit Subscription Plan' : 'Create New Subscription Plan'}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditorOpen(false)}
-                className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body: Two-column Form & Live Preview */}
-            <form onSubmit={handleSavePlan} className="p-6 space-y-6">
+            <form onSubmit={handleSavePlan} className="p-4 sm:p-6 space-y-5 sm:space-y-6 flex-1 min-h-0 overflow-y-auto">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Left Form: 7 cols */}
@@ -448,7 +474,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                   </div>
 
                   {/* Pricing Fields */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                         Monthly Price ($ USD) *
@@ -502,7 +528,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                   </div>
 
                   {/* Promotional Offers */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                         Introductory Offer (Optional)
@@ -533,8 +559,8 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                   </div>
 
                   {/* Plan Visibility Toggle */}
-                  <div className="flex items-center justify-between p-3 bg-[#18181c] rounded-xl border border-[#26262b]">
-                    <div>
+                  <div className="flex items-center justify-between gap-3 p-3 bg-[#18181c] rounded-xl border border-[#26262b]">
+                    <div className="min-w-0">
                       <div className="text-xs font-semibold text-white">Plan Active Status</div>
                       <div className="text-[11px] text-neutral-400">
                         Active plans appear on your profile and in the subscription selector.
@@ -543,7 +569,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                     <button
                       type="button"
                       onClick={() => setIsActive(!isActive)}
-                      className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                      className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                         isActive ? 'bg-[#d4af37]' : 'bg-neutral-700'
                       }`}
                     >
@@ -587,18 +613,18 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                     <label className="block text-xs font-semibold text-neutral-300 mb-1">
                       Add Custom Perk
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col xs:flex-row gap-2">
                       <input
                         type="text"
                         value={customPerkInput}
                         onChange={(e) => setCustomPerkInput(e.target.value)}
                         placeholder="e.g. Free admission to Berlin workshop..."
-                        className="flex-1 bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                        className="flex-1 min-w-0 bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={handleAddCustomPerk}
-                        className="px-3 py-2 bg-[#22222a] hover:bg-[#2b2b36] border border-[#33333f] text-neutral-200 text-xs font-semibold rounded-xl cursor-pointer"
+                        className="px-3 py-2 bg-[#22222a] hover:bg-[#2b2b36] border border-[#33333f] text-neutral-200 text-xs font-semibold rounded-xl cursor-pointer shrink-0"
                       >
                         Add
                       </button>
@@ -629,7 +655,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
                     </div>
 
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold font-mono text-white">
+                      <span className="text-3xl font-bold font-mono text-white tabular-nums">
                         ${monthlyPrice.toFixed(2)}
                       </span>
                       <span className="text-xs text-neutral-400">/ month</span>
@@ -663,7 +689,7 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
               </div>
 
               {/* Modal Footer Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#26262b]">
+              <div className="flex flex-wrap items-center justify-end gap-2.5 pt-4 border-t border-[#26262b]">
                 <button
                   type="button"
                   onClick={() => setIsEditorOpen(false)}

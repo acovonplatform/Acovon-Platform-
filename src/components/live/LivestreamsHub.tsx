@@ -22,15 +22,26 @@ import {
   ArrowRight,
   BarChart2,
   Film,
-  Eye
+  Eye,
+  Search,
+  X
 } from 'lucide-react';
 
-export const LivestreamsHub: React.FC = () => {
+interface LivestreamsHubProps {
+  searchQuery?: string;
+  onClearSearch?: () => void;
+}
+
+export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
+  searchQuery = '',
+  onClearSearch
+}) => {
   const {
     livestreams,
     setActiveLivestreamId,
     setIsCreateLiveModalOpen,
     currentUser,
+    isAuthenticated,
     activeRole,
     canUserAccessLivestream,
     canUserAccessReplay,
@@ -38,7 +49,7 @@ export const LivestreamsHub: React.FC = () => {
     showDemoBadges
   } = useApp();
 
-  const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator = isAuthenticated && (currentUser.role === 'creator' || activeRole === 'creator');
 
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedModeFilter, setSelectedModeFilter] = useState<string>('all');
@@ -46,7 +57,22 @@ export const LivestreamsHub: React.FC = () => {
   const [hubFeedback, setHubFeedback] = useState<string>('');
 
   // Filter streams
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const matchesLiveSearch = (stream: (typeof livestreams)[number]) => {
+    if (!normalizedSearch) return true;
+    const cleanQ = normalizedSearch.replace(/^[@#]/, '');
+    return (
+      stream.title.toLowerCase().includes(normalizedSearch) ||
+      stream.description.toLowerCase().includes(normalizedSearch) ||
+      stream.creatorName.toLowerCase().includes(normalizedSearch) ||
+      stream.creatorUsername.toLowerCase().includes(cleanQ) ||
+      stream.category.toLowerCase().includes(normalizedSearch) ||
+      stream.accessMode.replace(/_/g, ' ').toLowerCase().includes(normalizedSearch)
+    );
+  };
+
   const filteredStreams = livestreams.filter(stream => {
+    if (!matchesLiveSearch(stream)) return false;
     if (selectedCategory !== 'All Categories' && stream.category !== selectedCategory) {
       return false;
     }
@@ -69,18 +95,22 @@ export const LivestreamsHub: React.FC = () => {
       s.recordingSettings.mode !== 'disabled' &&
       s.recordingStatus !== 'removed' &&
       (s.isReplayPublished !== false ||
-        s.purchasedReplayUserIds?.includes(currentUser.id) ||
-        s.creatorId === currentUser.id)
+        (isAuthenticated &&
+          (s.purchasedReplayUserIds?.includes(currentUser.id) ||
+            s.creatorId === currentUser.id)))
   );
-  const myPurchasedReplays = livestreams.filter(
-    s =>
-      s.status === 'ended' &&
-      (s.purchasedReplayUserIds?.includes(currentUser.id) ||
-        (s.recordingSettings?.includeReplayWithLiveTicket &&
-          s.purchasedViewerIds?.includes(currentUser.id)))
-  );
+  const myPurchasedReplays = isAuthenticated
+    ? livestreams.filter(
+        s =>
+          matchesLiveSearch(s) &&
+          s.status === 'ended' &&
+          (s.purchasedReplayUserIds?.includes(currentUser.id) ||
+            (s.recordingSettings?.includeReplayWithLiveTicket &&
+              s.purchasedViewerIds?.includes(currentUser.id)))
+      )
+    : [];
   const displayedReplays =
-    replayTabFilter === 'my_purchased' ? myPurchasedReplays : recordedReplayStreams;
+    isAuthenticated && replayTabFilter === 'my_purchased' ? myPurchasedReplays : recordedReplayStreams;
 
   const getModeBadge = (mode: LivestreamAccessMode, ppvPrice?: number) => {
     switch (mode) {
@@ -126,17 +156,17 @@ export const LivestreamsHub: React.FC = () => {
     <div className="space-y-8 pb-16">
       
       {/* HERO BANNER: ACOVON LIVE */}
-      <div className="relative rounded-3xl overflow-hidden border border-zinc-800 bg-gradient-to-r from-zinc-950 via-[#141418] to-zinc-950 p-6 sm:p-10 shadow-2xl">
+      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-zinc-800 bg-gradient-to-r from-zinc-950 via-[#141418] to-zinc-950 p-5 sm:p-10 shadow-2xl">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-10 w-80 h-80 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 max-w-2xl space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-bold uppercase tracking-wider">
+        <div className="relative z-10 max-w-2xl space-y-3 sm:space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-300 text-[11px] sm:text-xs font-bold uppercase tracking-wider">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
             Acovon Live Broadcast Network
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
             Real-Time Creator Experience &amp; Monetization
           </h1>
 
@@ -225,12 +255,33 @@ export const LivestreamsHub: React.FC = () => {
         </div>
       )}
 
+      {normalizedSearch.length > 0 && (
+        <div className="px-3.5 py-2 rounded-xl bg-[#141418] border border-[#27272a] flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <Search className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+            <span>
+              Filtering live &amp; replays by <strong className="text-[#fce7b0]">&ldquo;{searchQuery.trim()}&rdquo;</strong> ({filteredStreams.length} {filteredStreams.length === 1 ? 'broadcast' : 'broadcasts'})
+            </span>
+          </div>
+          {onClearSearch && (
+            <button
+              type="button"
+              onClick={onClearSearch}
+              className="px-2 py-0.5 rounded-lg bg-[#1f1f26] hover:bg-[#2a2a34] text-neutral-300 hover:text-white flex items-center gap-1 cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+              <span>Clear</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* SECTION 1: LIVE NOW */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse" />
-            <h2 className="text-xl font-bold text-white tracking-wide">Live Now</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide">Live Now</h2>
             <span className="text-xs text-zinc-500 font-mono">({liveNowStreams.length})</span>
           </div>
           <span className="text-xs text-zinc-400">Broadcasting in real-time</span>
@@ -241,17 +292,19 @@ export const LivestreamsHub: React.FC = () => {
             <Radio className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-white">No streams currently live</h3>
             <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
-              There are no live broadcasts matching your current filter. Start your own broadcast or check scheduled events.
+              There are no live broadcasts matching your current filter. Check scheduled events or replays below.
             </p>
-            <button
-              onClick={() => setIsCreateLiveModalOpen(true)}
-              className="mt-4 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition-colors"
-            >
-              Start Broadcast
-            </button>
+            {isCreator && (
+              <button
+                onClick={() => setIsCreateLiveModalOpen(true)}
+                className="mt-4 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+              >
+                Start Broadcast
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4 sm:gap-6">
             {liveNowStreams.map(stream => {
               const access = canUserAccessLivestream(stream);
               const isLocked = !access.canAccess;
@@ -274,7 +327,7 @@ export const LivestreamsHub: React.FC = () => {
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111114] via-black/20 to-black/60" />
 
                     {/* Live Badge & Viewers (Top Left & Right) */}
-                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                    <div className="absolute top-2.5 left-2.5 right-20 flex flex-wrap items-center gap-1.5">
                       <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-600 text-white shadow-md animate-pulse">
                         <Radio className="w-3 h-3" />
                         Live
@@ -336,10 +389,12 @@ export const LivestreamsHub: React.FC = () => {
                           className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
                         />
                         <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
-                          <span className="truncate">{stream.creatorName}</span>
-                          <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
-                            @{stream.creatorUsername}
+                          <span className="inline-flex items-center gap-1 truncate">
+                            <span className="truncate">{stream.creatorName}</span>
                             <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-normal">
+                            @{stream.creatorUsername}
                           </span>
                         </span>
                         <span className="text-[11px] text-zinc-500 font-mono ml-auto">
@@ -380,10 +435,10 @@ export const LivestreamsHub: React.FC = () => {
 
       {/* SECTION 2: SCHEDULED LIVESTREAMS */}
       <div className="space-y-4 pt-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-[#d4af37]" />
-            <h2 className="text-xl font-bold text-white tracking-wide">Upcoming Live Events</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide">Upcoming Live Events</h2>
             <span className="text-xs text-zinc-500 font-mono">({scheduledStreams.length})</span>
           </div>
           <span className="text-xs text-zinc-400">Pre-order tickets or set reminders</span>
@@ -394,17 +449,17 @@ export const LivestreamsHub: React.FC = () => {
             No upcoming scheduled broadcasts at this time. Check back soon!
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 3xl:grid-cols-3 gap-4">
             {scheduledStreams.map(stream => (
               <div
                 key={stream.id}
                 onClick={() => setActiveLivestreamId(stream.id)}
-                className="p-4 rounded-2xl bg-[#111114] border border-zinc-800 hover:border-[#d4af37]/60 transition-all cursor-pointer flex gap-4 items-center group"
+                className="p-3.5 sm:p-4 rounded-2xl bg-[#111114] border border-zinc-800 hover:border-[#d4af37]/60 transition-all cursor-pointer flex flex-col xs:flex-row gap-3 sm:gap-4 xs:items-center group"
               >
                 <img
                   src={stream.coverImage}
                   alt={stream.title}
-                  className="w-28 h-20 rounded-xl object-cover"
+                  className="w-full xs:w-28 h-32 xs:h-20 rounded-xl object-cover shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -417,11 +472,13 @@ export const LivestreamsHub: React.FC = () => {
                     {stream.title}
                   </h4>
                   <div className="flex items-center gap-1.5 mt-1 text-[11px] text-zinc-400">
-                    <span className="inline-flex items-center gap-1 text-zinc-200 font-medium">
-                      <span>{stream.creatorName}</span>
-                      <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
-                        @{stream.creatorUsername}
+                    <span className="inline-flex items-center gap-1.5 text-zinc-200 font-medium">
+                      <span className="inline-flex items-center gap-1">
+                        <span>{stream.creatorName}</span>
                         <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-normal">
+                        @{stream.creatorUsername}
                       </span>
                     </span>
                     <span>·</span>
@@ -460,7 +517,7 @@ export const LivestreamsHub: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setReplayTabFilter('all_replays')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -471,36 +528,39 @@ export const LivestreamsHub: React.FC = () => {
             >
               All Official Replays ({recordedReplayStreams.length})
             </button>
-            <button
-              onClick={() => setReplayTabFilter('my_purchased')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                replayTabFilter === 'my_purchased'
-                  ? 'bg-[#d4af37] text-black shadow-md'
-                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white'
-              }`}
-            >
-              My Purchased Replays ({myPurchasedReplays.length})
-            </button>
+            {isAuthenticated && (
+              <button
+                onClick={() => setReplayTabFilter('my_purchased')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  replayTabFilter === 'my_purchased'
+                    ? 'bg-[#d4af37] text-black shadow-md'
+                    : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                My Purchased Replays ({myPurchasedReplays.length})
+              </button>
+            )}
           </div>
         </div>
 
         {displayedReplays.length === 0 ? (
           <div className="p-10 text-center rounded-2xl bg-zinc-950/40 border border-zinc-800/60 text-xs text-zinc-500">
-            {replayTabFilter === 'my_purchased'
+            {isAuthenticated && replayTabFilter === 'my_purchased'
               ? 'You have not purchased any paid livestream recordings yet. Unlock an official replay below to add it to your permanent library.'
               : 'No completed livestream recordings match your current category filter.'}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4 sm:gap-6">
             {displayedReplays.map(stream => {
               const replayCheck = canUserAccessReplay(stream);
               const isUnlocked = replayCheck.canAccess;
               const recMode = stream.recordingSettings?.mode || 'free';
               const recPrice = stream.recordingSettings?.price || 9.99;
               const isPurchasedByMe = Boolean(
-                stream.purchasedReplayUserIds?.includes(currentUser.id) ||
-                  (stream.recordingSettings?.includeReplayWithLiveTicket &&
-                    stream.purchasedViewerIds?.includes(currentUser.id))
+                isAuthenticated &&
+                  (stream.purchasedReplayUserIds?.includes(currentUser.id) ||
+                    (stream.recordingSettings?.includeReplayWithLiveTicket &&
+                      stream.purchasedViewerIds?.includes(currentUser.id)))
               );
 
               return (
@@ -519,7 +579,7 @@ export const LivestreamsHub: React.FC = () => {
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111114] via-black/25 to-black/60" />
 
                     {/* Top Left Badges */}
-                    <div className="absolute top-3 left-3 flex items-center gap-2 flex-wrap">
+                    <div className="absolute top-2.5 left-2.5 right-20 flex items-center gap-1.5 flex-wrap">
                       <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded bg-zinc-900/90 border border-[#d4af37]/50 text-[#fce7b0]">
                         <Film className="w-3 h-3 text-[#d4af37]" />
                         Official Replay
@@ -576,10 +636,12 @@ export const LivestreamsHub: React.FC = () => {
                           className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
                         />
                         <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
-                          <span className="truncate">{stream.creatorName}</span>
-                          <span className="text-[10px] text-zinc-400 font-normal inline-flex items-center gap-0.5">
-                            @{stream.creatorUsername}
+                          <span className="inline-flex items-center gap-1 truncate">
+                            <span className="truncate">{stream.creatorName}</span>
                             <VerifiedBadge creatorId={stream.creatorId} size="xs" />
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-normal">
+                            @{stream.creatorUsername}
                           </span>
                         </span>
                         <span className="text-[10px] text-zinc-500 font-mono ml-auto">

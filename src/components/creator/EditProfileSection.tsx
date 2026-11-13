@@ -165,7 +165,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onNavigateToBranding && (
             <button
               type="button"
@@ -207,7 +207,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
       <form onSubmit={handleSave} className="space-y-6">
         
         {/* Card 1: Identity & Bio */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-5">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-5">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <User className="w-4 h-4 text-[#d4af37]" />
             <span>Public Identity & Biography</span>
@@ -314,8 +314,8 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
         </div>
 
         {/* Card 2: Creator Categories */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#d4af37]" />
               <span>Showcase Categories</span>
@@ -352,7 +352,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
         </div>
 
         {/* Card 3: Social Media Links */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Globe className="w-4 h-4 text-[#d4af37]" />
             <span>Social Media Channels & External Links</span>
@@ -421,8 +421,8 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
         </div>
 
         {/* Card 4: Verification & Trust Status */}
-        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[#d4af37]" />
               <span>Identity & Trust Standards</span>
@@ -432,22 +432,22 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
             </span>
           </div>
 
-          <div className="p-4 bg-[#18181c] rounded-xl border border-[#26262b] space-y-2 text-xs">
-            <div className="flex items-center justify-between text-neutral-300">
+          <div className="p-4 bg-[#18181c] rounded-xl border border-[#26262b] space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-300">
               <span className="font-semibold text-white">Government ID Verification</span>
               <span className="text-emerald-400 font-mono flex items-center gap-1">
                 <Check className="w-3.5 h-3.5" />
                 <span>Verified Active</span>
               </span>
             </div>
-            <div className="flex items-center justify-between text-neutral-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-300">
               <span className="font-semibold text-white">Verified Creator Gold Badge</span>
               <span className="text-[#fce7b0] font-mono flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#d4af37] fill-[#d4af37]" />
                 <span>Active Showcase</span>
               </span>
             </div>
-            <div className="flex items-center justify-between text-neutral-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-300">
               <span className="font-semibold text-white">Last Profile Update</span>
               <span className="text-neutral-400 font-mono">
                 {creator.profileUpdatedAt ? new Date(creator.profileUpdatedAt).toLocaleDateString() : 'Initial Launch'}
@@ -457,7 +457,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
         </div>
 
         {/* Bottom Action Bar */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <button
             type="button"
             onClick={handleReset}

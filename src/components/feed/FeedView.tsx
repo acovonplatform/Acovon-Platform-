@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, FeedActivityFilterType, RecommendedPostResult } from '../../types';
 import { CATEGORIES } from '../../data/mockData';
@@ -55,6 +55,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     posts, 
     creators, 
     currentUser, 
+    isAuthenticated,
     isCurrentUserApprovedCreator,
     isSubscribedTo, 
     following,
@@ -79,6 +80,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [feedFilter, setFeedFilter] = useState<FeedActivityFilterType>('all');
   const feedSearchQuery = searchQuery;
   const [showPersonalizationInspector, setShowPersonalizationInspector] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated && (feedFilter === 'following' || feedFilter === 'subscribed')) {
+      setFeedFilter('all');
+    }
+  }, [isAuthenticated, feedFilter]);
   const [showCategoriesFilterPanel, setShowCategoriesFilterPanel] = useState(false);
   const [discoveryFilters, setDiscoveryFilters] = useState<DiscoveryFilterState>({
     categories: [],
@@ -174,28 +181,38 @@ export const FeedView: React.FC<FeedViewProps> = ({
     if (feedFilter === 'for_you' || feedFilter === 'free_posts') {
       return recommendedResults
         .map(r => r.post)
-        .filter(p => !p.isDeletedByCreator && p.moderationStatus !== 'removed' && (p.creatorId === currentUser.id || p.visibility !== 'private'))
+        .filter(
+          p =>
+            !p.isDeletedByCreator &&
+            p.moderationStatus !== 'removed' &&
+            ((isAuthenticated && p.creatorId === currentUser.id) || p.visibility !== 'private')
+        )
         .filter(matchesQueryAndTaxonomy);
     }
 
-    const hiddenCreators = new Set(activeFanInterestProfile?.hiddenCreatorIds || []);
-    const hiddenPosts = new Set([
-      ...(activeFanInterestProfile?.notInterestedPostIds || []),
-      ...(activeFanInterestProfile?.reportedPostIds || [])
-    ]);
+    const hiddenCreators = isAuthenticated
+      ? new Set(activeFanInterestProfile?.hiddenCreatorIds || [])
+      : new Set<string>();
+    const hiddenPosts = isAuthenticated
+      ? new Set([
+          ...(activeFanInterestProfile?.notInterestedPostIds || []),
+          ...(activeFanInterestProfile?.reportedPostIds || [])
+        ])
+      : new Set<string>();
 
     return posts.filter(post => {
+      const isOwnPost = isAuthenticated && post.creatorId === currentUser.id;
       if (post.isDeletedByCreator || post.moderationStatus === 'removed') return false;
-      if (post.isDraft && post.creatorId !== currentUser.id) return false;
-      if (post.visibility === 'private' && post.creatorId !== currentUser.id) return false;
+      if (post.isDraft && !isOwnPost) return false;
+      if (post.visibility === 'private' && !isOwnPost) return false;
       if (suspendedCreatorIds.has(post.creatorId)) return false;
       if (hiddenPosts.has(post.id)) return false;
-      if (hiddenCreators.has(post.creatorId) && post.creatorId !== currentUser.id) return false;
+      if (hiddenCreators.has(post.creatorId) && !isOwnPost) return false;
       if (!matchesQueryAndTaxonomy(post)) return false;
 
       if (feedFilter === 'all') return true;
-      if (feedFilter === 'following') return following.includes(post.creatorId) || post.creatorId === currentUser.id;
-      if (feedFilter === 'subscribed') return isSubscribedTo(post.creatorId) || post.creatorId === currentUser.id;
+      if (feedFilter === 'following') return isAuthenticated && (following.includes(post.creatorId) || isOwnPost);
+      if (feedFilter === 'subscribed') return isAuthenticated && (isSubscribedTo(post.creatorId) || isOwnPost);
       if (feedFilter === 'ppv') return post.visibility === 'pay_per_view';
       return true;
     });
@@ -212,6 +229,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     activeFanInterestProfile,
     following,
     isSubscribedTo,
+    isAuthenticated,
     currentUser.id
   ]);
 
@@ -240,8 +258,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
       .slice(0, 4);
   }, [activeFanInterestProfile.categoryScores]);
 
-  const isCreator = isCurrentUserApprovedCreator;
-  const isSubscribedToAnyone = creators.some(c => isSubscribedTo(c.id));
+  const isCreator = isAuthenticated && isCurrentUserApprovedCreator;
+  const isSubscribedToAnyone = isAuthenticated && creators.some(c => isSubscribedTo(c.id));
 
   // Sort creators so those with active stories are shown first
   const sortedCreators = [...creators]
@@ -260,7 +278,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const userActiveStatuses = isCreator ? getActiveCreatorStatuses(currentUser.id) : [];
 
-  const availableCategories = CATEGORIES.filter(c => c !== 'All Categories');
+  const availableCategories = Array.from(
+    new Set(CATEGORIES.filter(c => c !== 'All Categories'))
+  );
 
   const handleToggleColdStartCategory = (cat: string) => {
     const current = activeFanInterestProfile.onboardingCategories || [];
@@ -271,43 +291,58 @@ export const FeedView: React.FC<FeedViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 overflow-x-hidden">
+    <div className="w-full max-w-2xl xl:max-w-[740px] mx-auto px-3 sm:px-4 py-4 sm:py-6 overflow-x-clip">
       {/* Horizontal Status / Stories Bar */}
       <div className="flex items-center gap-3 sm:gap-3.5 overflow-x-auto pb-3.5 mb-5 no-scrollbar border-b border-[#26262b]">
-        {/* Creator's Own Story Button if user is a creator */}
+        {/* Creator's Own Story & Quick Create Button */}
         {isCreator && (
-          <button
-            onClick={() => {
-              if (userActiveStatuses.length > 0) {
-                onOpenStatusViewer(currentUser.id);
-              } else if (onOpenCreateStatus) {
-                onOpenCreateStatus();
-              }
-            }}
-            className="flex flex-col items-center gap-1.5 shrink-0 group cursor-pointer focus:outline-none"
-            title={userActiveStatuses.length > 0 ? "View your active story" : "Post a new story"}
-          >
+          <div className="flex flex-col items-center gap-1.5 shrink-0">
             <div className="relative p-0.5 rounded-full">
-              <div className={`p-0.5 rounded-full ${
-                userActiveStatuses.length > 0 
-                  ? 'bg-gradient-to-tr from-[#d4af37] via-[#fce7b0] to-[#997819]' 
-                  : 'border border-dashed border-neutral-600'
-              }`}>
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.name}
-                  referrerPolicy="no-referrer"
-                  className="w-14 h-14 rounded-full object-cover border-2 border-[#09090b]"
-                />
-              </div>
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-amber-400 text-black text-[11px] font-black rounded-full flex items-center justify-center border-2 border-[#09090b] shadow">
+              <button
+                type="button"
+                onClick={() => {
+                  if (userActiveStatuses.length > 0) {
+                    onOpenStatusViewer(currentUser.id);
+                  } else if (onOpenCreateStatus) {
+                    onOpenCreateStatus();
+                  }
+                }}
+                className="block rounded-full group cursor-pointer focus:outline-none"
+                title={userActiveStatuses.length > 0 ? 'View your active story' : 'Post a new story'}
+                aria-label={userActiveStatuses.length > 0 ? 'View your active story' : 'Post a new story'}
+              >
+                <div className={`p-0.5 rounded-full ${
+                  userActiveStatuses.length > 0 
+                    ? 'bg-gradient-to-tr from-[#d4af37] via-[#fce7b0] to-[#997819]' 
+                    : 'border border-dashed border-neutral-600'
+                }`}>
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-full object-cover border-2 border-[#09090b] group-hover:scale-105 transition-transform"
+                  />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenCreateStatus) {
+                    onOpenCreateStatus();
+                  }
+                }}
+                title="Post a new story"
+                aria-label="Post a new story"
+                className="absolute bottom-0 right-0 w-5 h-5 bg-amber-400 hover:bg-amber-300 text-black text-[12px] font-black rounded-full flex items-center justify-center border-2 border-[#09090b] shadow cursor-pointer transition-transform hover:scale-110 z-10 focus:outline-none"
+              >
                 +
-              </span>
+              </button>
             </div>
             <span className="text-[11px] text-amber-300/90 font-medium truncate max-w-[64px]">
               Your Story
             </span>
-          </button>
+          </div>
         )}
 
         {/* Creators Stories Items */}
@@ -321,10 +356,15 @@ export const FeedView: React.FC<FeedViewProps> = ({
           return (
             <button
               key={c.id}
+              type="button"
               onClick={() => {
-                onOpenStatusViewer(c.id);
+                if (hasStories) {
+                  onOpenStatusViewer(c.id);
+                } else {
+                  onNavigateToCreator(c.id);
+                }
               }}
-              className="flex flex-col items-center gap-1.5 shrink-0 group cursor-pointer focus:outline-none"
+              className="flex flex-col items-center gap-1.5 shrink-0 group cursor-pointer focus:outline-none touch-manipulation"
               title={hasStories ? `${c.name}'s story (${activeStories.length} updates)` : `${c.name}'s profile`}
             >
               <div 
@@ -349,10 +389,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-[#09090b]" />
                 )}
               </div>
-              <span className={`text-[11px] font-medium truncate max-w-[84px] inline-flex items-center gap-0.5 transition-colors ${
+              <span className={`text-[11px] font-medium max-w-[92px] inline-flex items-center gap-1 transition-colors ${
                 isUnseen ? 'text-amber-200 font-semibold' : 'text-neutral-300 group-hover:text-white'
               }`}>
-                <span className="truncate">@{c.username}</span>
+                <span className="truncate">{c.name}</span>
                 <VerifiedBadge creatorId={c.id} size="xs" />
               </span>
             </button>
@@ -381,105 +421,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
         </div>
       )}
 
-      {/* Activity-Filter Bar — Exact 6 Filters in Required Order */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-5">
-        <div className="flex items-center gap-1 p-1 bg-[#141418] border border-[#27272a] rounded-xl text-xs overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setFeedFilter('all')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-              feedFilter === 'all' ? 'bg-[#27272a] text-white shadow-sm font-semibold' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            All Activity
-          </button>
-          <button
-            onClick={() => setFeedFilter('for_you')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-              feedFilter === 'for_you'
-                ? 'bg-gradient-to-r from-[#d4af37] to-[#b89225] text-black font-bold shadow-sm'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Sparkles className={`w-3 h-3 ${feedFilter === 'for_you' ? 'text-black' : 'text-[#d4af37]'}`} />
-            <span>For You</span>
-          </button>
-          <button
-            onClick={() => setFeedFilter('following')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-              feedFilter === 'following' ? 'bg-[#27272a] text-[#fce7b0] shadow-sm font-semibold' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Following
-          </button>
-          <button
-            onClick={() => setFeedFilter('subscribed')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-              feedFilter === 'subscribed' ? 'bg-[#27272a] text-white shadow-sm font-semibold' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Subscribed
-          </button>
-          <button
-            onClick={() => setFeedFilter('free_posts')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1 ${
-              feedFilter === 'free_posts'
-                ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 font-bold shadow-sm'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Unlock className={`w-3 h-3 ${feedFilter === 'free_posts' ? 'text-emerald-300' : 'text-emerald-400'}`} />
-            <span>Free Posts</span>
-          </button>
-          <button
-            onClick={() => setFeedFilter('ppv')}
-            className={`px-3 py-1.5 font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-              feedFilter === 'ppv' ? 'bg-[#27272a] text-white shadow-sm font-semibold' : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Pay-To-View Vault
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowCategoriesFilterPanel(prev => !prev)}
-            aria-expanded={showCategoriesFilterPanel}
-            className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
-              showCategoriesFilterPanel ||
-              discoveryFilters.categories.length > 0 ||
-              discoveryFilters.videoCountries.length > 0 ||
-              discoveryFilters.creatorCountries.length > 0
-                ? 'bg-[#d4af37] border-[#d4af37] text-black font-bold shadow-sm'
-                : 'bg-[#1a1812] border-[#d4af37]/40 text-[#fce7b0] hover:bg-[#d4af37] hover:text-black'
-            }`}
-            title="Open or close Category & Country filters"
-          >
-            <Grid className="w-3 h-3 text-current" />
-            <span>Categories</span>
-          </button>
-          <span className="text-xs text-neutral-500 font-mono">
-            {filteredPosts.length} posts
-          </span>
-        </div>
-      </div>
-
-      {/* Combined Category, Video Country & Creator Country Discovery Filter Bar (Opens & Closes via Categories button) */}
-      {showCategoriesFilterPanel && (
-        <DiscoveryFilterBar
-          appliedFilters={discoveryFilters}
-          onApplyFilters={setDiscoveryFilters}
-          totalMatchingCount={filteredPosts.length}
-          resultUnitLabel="posts"
-          onNavigateToCategoriesHub={onNavigate ? () => onNavigate('categories') : undefined}
-        />
-      )}
-
       {/* Contextual Smart Feed Header & Persona Switcher for For You / Free Posts / Inspector */}
       {(feedFilter === 'for_you' || feedFilter === 'free_posts' || showPersonalizationInspector) && (
         <div className="mb-6 p-4 rounded-2xl bg-[#121216] border border-[#2a2a34] space-y-3.5 text-xs animate-in fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[#22222a]">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {feedFilter === 'free_posts' ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-bold text-[11px]">
                   <Unlock className="w-3 h-3" />
@@ -509,32 +455,34 @@ export const FeedView: React.FC<FeedViewProps> = ({
             </button>
           </div>
 
-          {/* Fan Persona Switcher (Jordan Cross + Test Cases Fan A - Fan F) */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-neutral-400 font-medium">Active Fan Interest Persona (Switch to verify personalized ranking):</span>
-              <span className="font-mono text-[#d4af37]">{activeFanInterestProfile.personaLabel}</span>
+          {/* Fan Persona Switcher (Authenticated Demo Mode Only) */}
+          {isAuthenticated && (
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                <span className="text-neutral-400 font-medium">Active Fan Interest Persona (Switch to verify personalized ranking):</span>
+                <span className="font-mono text-[#d4af37]">{activeFanInterestProfile.personaLabel}</span>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {Object.values(fanInterestProfiles).map(prof => {
+                  const isSelected = prof.fanId === activeRecommendationFanId;
+                  return (
+                    <button
+                      key={prof.fanId}
+                      type="button"
+                      onClick={() => switchRecommendationFanPersona(prof.fanId)}
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-[#d4af37] text-black font-bold border-[#d4af37] shadow-sm'
+                          : 'bg-[#18181f] border-[#272730] text-neutral-300 hover:text-white hover:border-neutral-600'
+                      }`}
+                    >
+                      {prof.fanName}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              {Object.values(fanInterestProfiles).map(prof => {
-                const isSelected = prof.fanId === activeRecommendationFanId;
-                return (
-                  <button
-                    key={prof.fanId}
-                    type="button"
-                    onClick={() => switchRecommendationFanPersona(prof.fanId)}
-                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer border ${
-                      isSelected
-                        ? 'bg-[#d4af37] text-black font-bold border-[#d4af37] shadow-sm'
-                        : 'bg-[#18181f] border-[#272730] text-neutral-300 hover:text-white hover:border-neutral-600'
-                    }`}
-                  >
-                    {prof.fanName}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          )}
 
           {/* Live Inferred Interest Scores Bar */}
           {topInferredCategories.length > 0 ? (
@@ -559,7 +507,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
           ) : (
             /* Cold Start Onboarding Interest Picker (e.g. Fan F or after Reset) */
             <div className="p-3 rounded-xl bg-[#17171f] border border-[#d4af37]/30 space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <span className="font-semibold text-[#fce7b0] text-xs">
                   New Fan Cold-Start Mode — Select categories to personalize your feed immediately:
                 </span>
@@ -618,7 +566,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
       {/* Posts Feed with AdSense / AdMob Placements for Free Users */}
       {filteredPosts.length === 0 ? (
-        <div className="p-10 rounded-2xl bg-[#121215] border border-[#26262b] text-center space-y-3">
+        <div className="p-6 sm:p-10 rounded-2xl bg-[#121215] border border-[#26262b] text-center space-y-3">
           <p className="text-sm font-semibold text-white">No posts match this feed filter right now.</p>
           <p className="text-xs text-neutral-400 max-w-md mx-auto">
             {feedFilter === 'free_posts'

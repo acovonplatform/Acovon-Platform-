@@ -41,6 +41,7 @@ import {
   resolveCategoryRecord,
   resolveCountryRecord
 } from './globalTaxonomy';
+import { getLocalSampleThumbnails } from '../utils/videoFrameExtractor';
 export { DEMO_STATS, OFFICIAL_CATEGORIES, OFFICIAL_COUNTRIES };
 
 export const INITIAL_COMMISSION_SETTINGS: CommissionSettings = {
@@ -863,27 +864,31 @@ export const MOCK_POSTS: Post[] = DEMO_POSTS.map((rawPost, idx) => {
   return {
     ...post,
     fileSize: optBytes,
-    media: post.media.map(m =>
-      m.type === 'video'
-        ? {
-            ...m,
-            videoMediaId: `vmedia_${post.id}`,
-            availableResolutions: resolutions,
-            availableCodecs: ['H.264', 'H.265/HEVC', 'AV1'],
-            streamingManifestRef: `https://cdn.acovon.media/hls/${post.id}/master.m3u8`,
-            streamingProtocol: 'HLS',
-            originalFileSize: origBytes,
-            optimizedFileSize: optBytes,
-            compressionRatio: 0.62,
-            vmafScore: is4K ? 97.4 : 96.1,
-            width,
-            height,
-            aspectRatio: '16:9',
-            orientation: 'landscape',
-            frameRate: is4K ? 60 : 30
-          }
-        : m
-    )
+    media: post.media.map(m => {
+      if (m.type !== 'video') return m;
+      const sampleMeta = getLocalSampleThumbnails(m.url || m.previewUrl);
+      const realThumb = sampleMeta?.thumbnailUrl || m.thumbnailUrl;
+      const realFrames = sampleMeta?.previewFrames || m.previewFrames;
+      return {
+        ...m,
+        thumbnailUrl: realThumb,
+        previewFrames: realFrames,
+        videoMediaId: `vmedia_${post.id}`,
+        availableResolutions: resolutions,
+        availableCodecs: ['H.264', 'H.265/HEVC', 'AV1'],
+        streamingManifestRef: `https://cdn.acovon.media/hls/${post.id}/master.m3u8`,
+        streamingProtocol: 'HLS',
+        originalFileSize: origBytes,
+        optimizedFileSize: optBytes,
+        compressionRatio: 0.62,
+        vmafScore: is4K ? 97.4 : 96.1,
+        width: sampleMeta?.width || width,
+        height: sampleMeta?.height || height,
+        aspectRatio: sampleMeta ? `${sampleMeta.width}:${sampleMeta.height}` : '16:9',
+        orientation: 'landscape',
+        frameRate: is4K ? 60 : 30
+      };
+    })
   };
 });
 
@@ -1160,7 +1165,7 @@ export const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
       price: 25.00,
       isUnlocked: false,
       mediaUrl: '/videos/sample2.mp4',
-      mediaThumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=70',
+      mediaThumbnailUrl: '/videos/thumbs/sample2_frame_2.webp',
       mediaFileName: 'Private_Runway_Walkthrough_4K.mp4',
       mediaDescription: 'Full 4K backstage runway rehearsal video with live audio notes.',
       mediaType: 'video',
@@ -1171,7 +1176,7 @@ export const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
           fileType: 'video',
           fileSizeFormatted: '18.2 MB',
           url: '/videos/sample3.mp4',
-          thumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=70',
+          thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
           description: 'Full 4K backstage runway rehearsal video',
           isPaid: true,
           price: 25.00,
@@ -1979,15 +1984,15 @@ export const MOCK_VIDEO_MEDIA_RECORDS: VideoMediaRecord[] = [
     availableCodecs: ['H.264', 'H.265/HEVC', 'AV1'],
     streamingProtocol: 'HLS',
     streamingManifestRef: 'https://cdn.acovon.media/hls/vmedia_post_ppv_elena_1/master.m3u8',
-    thumbnailRef: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+    thumbnailRef: '/videos/thumbs/sample1_frame_2.webp',
     previewFrames: [
-      '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
-      'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
-      'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80',
-      'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&q=80'
+      '/videos/thumbs/sample1_frame_1.webp',
+      '/videos/thumbs/sample1_frame_2.webp',
+      '/videos/thumbs/sample1_frame_3.webp',
+      '/videos/thumbs/sample1_frame_4.webp'
     ],
-    feedPreviewRef: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
-    profilePreviewRef: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+    feedPreviewRef: '/videos/thumbs/sample1_frame_2.webp',
+    profilePreviewRef: '/videos/thumbs/sample1_frame_2.webp',
     optimizedFileSize: 589719142, // ~562 MB (62% reduction)
     compressionRatio: 0.62,
     storageSavedBytes: 962173338,
@@ -2111,13 +2116,15 @@ export const MOCK_VIDEO_MEDIA_RECORDS: VideoMediaRecord[] = [
     availableCodecs: ['H.264', 'H.265/HEVC'],
     streamingProtocol: 'HLS',
     streamingManifestRef: 'https://cdn.acovon.media/hls/vmedia_post_marcus_free_1/master.m3u8',
-    thumbnailRef: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=800&q=80',
+    thumbnailRef: '/videos/thumbs/sample4_frame_2.webp',
     previewFrames: [
-      'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=600&q=80',
-      'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=600&q=80'
+      '/videos/thumbs/sample4_frame_1.webp',
+      '/videos/thumbs/sample4_frame_2.webp',
+      '/videos/thumbs/sample4_frame_3.webp',
+      '/videos/thumbs/sample4_frame_4.webp'
     ],
-    feedPreviewRef: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=800&q=80',
-    profilePreviewRef: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=400&q=80',
+    feedPreviewRef: '/videos/thumbs/sample4_frame_2.webp',
+    profilePreviewRef: '/videos/thumbs/sample4_frame_2.webp',
     optimizedFileSize: 154392330, // ~147 MB (64% reduction)
     compressionRatio: 0.64,
     storageSavedBytes: 274475254,
@@ -2215,12 +2222,15 @@ export const MOCK_VIDEO_MEDIA_RECORDS: VideoMediaRecord[] = [
     availableCodecs: ['H.264', 'H.265/HEVC', 'AV1'],
     streamingProtocol: 'HLS',
     streamingManifestRef: 'https://cdn.acovon.media/hls/vmedia_post_sarah_ppv_1/master.m3u8',
-    thumbnailRef: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
+    thumbnailRef: '/videos/thumbs/sample3_frame_2.webp',
     previewFrames: [
-      'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80'
+      '/videos/thumbs/sample3_frame_1.webp',
+      '/videos/thumbs/sample3_frame_2.webp',
+      '/videos/thumbs/sample3_frame_3.webp',
+      '/videos/thumbs/sample3_frame_4.webp'
     ],
-    feedPreviewRef: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
-    profilePreviewRef: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=400&q=80',
+    feedPreviewRef: '/videos/thumbs/sample3_frame_2.webp',
+    profilePreviewRef: '/videos/thumbs/sample3_frame_2.webp',
     optimizedFileSize: 681154969, // ~649 MB (65% reduction)
     compressionRatio: 0.65,
     storageSavedBytes: 1265002087,
@@ -2290,13 +2300,16 @@ export const MOCK_VIDEO_MEDIA_RECORDS: VideoMediaRecord[] = [
     availableCodecs: ['H.264', 'H.265/HEVC'],
     streamingProtocol: 'HLS',
     streamingManifestRef: 'https://cdn.acovon.media/hls/vmedia_status_elena_vertical/master.m3u8',
-    thumbnailRef: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
+    thumbnailRef: '/videos/thumbs/sample2_frame_2.webp',
     previewFrames: [
-      'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80'
+      '/videos/thumbs/sample2_frame_1.webp',
+      '/videos/thumbs/sample2_frame_2.webp',
+      '/videos/thumbs/sample2_frame_3.webp',
+      '/videos/thumbs/sample2_frame_4.webp'
     ],
-    feedPreviewRef: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=600&q=80',
-    profilePreviewRef: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=400&q=80',
-    statusPreviewRef: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=400&q=80',
+    feedPreviewRef: '/videos/thumbs/sample2_frame_2.webp',
+    profilePreviewRef: '/videos/thumbs/sample2_frame_2.webp',
+    statusPreviewRef: '/videos/thumbs/sample2_frame_2.webp',
     optimizedFileSize: 28521267, // ~27.2 MB (68% reduction)
     compressionRatio: 0.68,
     storageSavedBytes: 60607693,
@@ -2335,7 +2348,7 @@ export const MOCK_VIDEO_MEDIA_RECORDS: VideoMediaRecord[] = [
     availableCodecs: [],
     streamingProtocol: 'HLS',
     streamingManifestRef: '',
-    thumbnailRef: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+    thumbnailRef: '',
     previewFrames: [],
     feedPreviewRef: '',
     profilePreviewRef: '',

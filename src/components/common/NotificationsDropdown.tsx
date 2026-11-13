@@ -13,6 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { AnnouncementCenterModal } from './AnnouncementExperience';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface NotificationsDropdownProps {
   onNavigate: (tab: string, creatorId?: string) => void;
@@ -30,6 +31,8 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   const {
     currentUser,
     activeRole,
+    creators,
+    isCreatorVerifiedBadgeActive,
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
@@ -123,7 +126,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
 
         {/* Notifications & Announcements Dropdown Window */}
         {isOpen && (
-          <div className="fixed left-3 right-3 top-[60px] w-auto max-w-[calc(100vw-1.5rem)] sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[410px] sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
+          <div className="fixed left-3 right-3 top-[calc(var(--acovon-header-height,58px)+4px)] w-auto max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[410px] sm:max-w-none bg-[#121215] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 backdrop-blur-xl">
             {/* Header & Tab Switcher */}
             <div className="flex items-center justify-between gap-2 pb-2.5 mb-2 border-b border-[#27272a] px-1">
               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -279,42 +282,58 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
                     No notifications yet.
                   </div>
                 ) : (
-                  roleFilteredNotifications.map(n => (
-                    <div
-                      key={n.id}
-                      onClick={() => handleNotificationClick(n.id, n.linkUrl, n.announcementId)}
-                      className={`p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 ${
-                        !n.read
-                          ? 'bg-[#18181f] border border-[#d4af37]/30 hover:bg-[#202028]'
-                          : 'bg-[#141418] hover:bg-[#1a1a20] border border-transparent'
-                      }`}
-                    >
-                      <div className="p-2 rounded-lg bg-[#202028] shrink-0 mt-0.5">
-                        {getNotifIcon(n.type)}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={`text-xs font-semibold truncate ${
-                              !n.read ? 'text-[#fce7b0]' : 'text-neutral-200'
-                            }`}
-                          >
-                            {n.title}
-                          </span>
-                          {!n.read && (
-                            <span className="w-2 h-2 rounded-full bg-[#d4af37] shrink-0" />
-                          )}
+                  roleFilteredNotifications.map(n => {
+                    const matchedCreator = creators.find(
+                      c =>
+                        (n.userId && c.id === n.userId) ||
+                        n.title.includes(c.name) ||
+                        n.message.includes(c.name)
+                    );
+                    const showCreatorBadge =
+                      matchedCreator && isCreatorVerifiedBadgeActive(matchedCreator.id);
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n.id, n.linkUrl, n.announcementId)}
+                        className={`p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 ${
+                          !n.read
+                            ? 'bg-[#18181f] border border-[#d4af37]/30 hover:bg-[#202028]'
+                            : 'bg-[#141418] hover:bg-[#1a1a20] border border-transparent'
+                        }`}
+                      >
+                        <div className="p-2 rounded-lg bg-[#202028] shrink-0 mt-0.5">
+                          {getNotifIcon(n.type)}
                         </div>
-                        <p className="text-[11px] text-neutral-400 leading-snug line-clamp-2 mt-0.5">
-                          {n.message}
-                        </p>
-                        <span className="text-[10px] text-neutral-500 mt-1 block">
-                          {n.createdAt}
-                        </span>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`text-xs font-semibold truncate ${
+                                !n.read ? 'text-[#fce7b0]' : 'text-neutral-200'
+                              }`}
+                            >
+                              {n.title}
+                            </span>
+                            {!n.read && (
+                              <span className="w-2 h-2 rounded-full bg-[#d4af37] shrink-0" />
+                            )}
+                          </div>
+                          {showCreatorBadge && matchedCreator && (
+                            <div className="flex items-center gap-1 mt-0.5 text-[11px] font-medium text-white">
+                              <span className="truncate">{matchedCreator.name}</span>
+                              <VerifiedBadge creatorId={matchedCreator.id} size="xs" />
+                            </div>
+                          )}
+                          <p className="text-[11px] text-neutral-400 leading-snug line-clamp-2 mt-0.5">
+                            {n.message}
+                          </p>
+                          <span className="text-[10px] text-neutral-500 mt-1 block">
+                            {n.createdAt}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}

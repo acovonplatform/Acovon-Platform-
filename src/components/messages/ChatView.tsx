@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ChatAttachmentItem, CustomVideoRequest, ChatMessage } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
@@ -40,7 +40,9 @@ import {
   Play,
   Plus,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Smile,
+  ArrowDown
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -192,16 +194,90 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const [chatContainerHeight, setChatContainerHeight] = useState<number | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
   const deliveryVideoInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
+  const isNearBottomRef = useRef<boolean>(true);
+  const prevMobileShowChatRef = useRef<boolean>(mobileShowChat);
+  const prevConvStateRef = useRef<{ recipientId: string; count: number; lastId?: string }>({
+    recipientId: selectedRecipientId,
+    count: 0,
+    lastId: undefined
+  });
 
   const triggerToast = (msg: string) => {
     setActionToast(msg);
     setTimeout(() => setActionToast(null), 3500);
   };
+
+  // Close composer emoji popover & header menu on outside click or Escape
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) {
+        setShowHeaderMenu(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowEmojiPicker(false);
+        setShowHeaderMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Track exact available height via visualViewport so mobile virtual keyboard never hides the composer
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateAvailableHeight = () => {
+      const vv = window.visualViewport;
+      const viewportHeight = vv ? vv.height : window.innerHeight;
+      const headerEl = document.querySelector('header');
+      const headerHeight = headerEl ? headerEl.getBoundingClientRect().height : 60;
+      const mobileNavEl = document.querySelector('nav[aria-label="Mobile bottom navigation"]');
+      const isMobile = window.innerWidth < 768;
+      const mobileNavHeight = isMobile && mobileNavEl ? mobileNavEl.getBoundingClientRect().height : 0;
+
+      const available = Math.max(260, Math.floor(viewportHeight - headerHeight - mobileNavHeight));
+      setChatContainerHeight(available);
+    };
+
+    updateAvailableHeight();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', updateAvailableHeight);
+    vv?.addEventListener('scroll', updateAvailableHeight);
+    window.addEventListener('resize', updateAvailableHeight);
+
+    const observer = typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(() => requestAnimationFrame(updateAvailableHeight))
+      : null;
+    observer?.observe(document.body, { childList: true, subtree: true, attributes: false });
+
+    return () => {
+      vv?.removeEventListener('resize', updateAvailableHeight);
+      vv?.removeEventListener('scroll', updateAvailableHeight);
+      window.removeEventListener('resize', updateAvailableHeight);
+      observer?.disconnect();
+    };
+  }, [mobileShowChat]);
 
   // Message requests mock (preserved & connected to Pending Requests filter)
   const [messageRequests, setMessageRequests] = useState([
@@ -227,6 +303,113 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
   const recipientCreator = creators.find(c => c.id === selectedRecipientId) || creators[0];
   const conversation = messages[selectedRecipientId] || [];
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    isNearBottomRef.current = true;
+    setNewMessagesCount(0);
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom <= 96;
+    isNearBottomRef.current = nearBottom;
+    if (nearBottom) {
+      setNewMessagesCount(0);
+    }
+  }, []);
+
+  // Scroll to latest messages on conversation open/switch; preserve scroll & show New Messages indicator if user scrolled up
+  useEffect(() => {
+    const lastMsg = conversation[conversation.length - 1];
+    const prev = prevConvStateRef.current;
+    const openedMobileChat = !prevMobileShowChatRef.current && mobileShowChat;
+    prevMobileShowChatRef.current = mobileShowChat;
+
+    const switchedConversation = prev.recipientId !== selectedRecipientId || openedMobileChat;
+
+    if (switchedConversation) {
+      prevConvStateRef.current = {
+        recipientId: selectedRecipientId,
+        count: conversation.length,
+        lastId: lastMsg?.id
+      };
+      setNewMessagesCount(0);
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => {
+        const el = messagesScrollRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+      return;
+    }
+
+    // Initial mount for the active thread
+    if (prev.count === 0 && conversation.length > 0 && !prev.lastId) {
+      prevConvStateRef.current = {
+        recipientId: selectedRecipientId,
+        count: conversation.length,
+        lastId: lastMsg?.id
+      };
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => {
+        const el = messagesScrollRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+      return;
+    }
+
+    const addedCount = Math.max(0, conversation.length - prev.count);
+    const hasNewLastMessage = !!lastMsg && lastMsg.id !== prev.lastId;
+
+    if (addedCount > 0 || hasNewLastMessage) {
+      const sentByCurrentUser = lastMsg?.senderId === currentUser.id;
+      if (sentByCurrentUser || isNearBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom('smooth'));
+      } else {
+        setNewMessagesCount(curr => curr + Math.max(1, addedCount));
+      }
+    }
+
+    prevConvStateRef.current = {
+      recipientId: selectedRecipientId,
+      count: conversation.length,
+      lastId: lastMsg?.id
+    };
+  }, [selectedRecipientId, mobileShowChat, conversation, currentUser.id, scrollToBottom]);
+
+  // Auto-expand multiline textarea smoothly as the user types
+  useEffect(() => {
+    const ta = composerTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(ta.scrollHeight, 38), 128);
+    ta.style.height = `${nextHeight}px`;
+  }, [inputText]);
+
+  const handleInsertEmoji = (emoji: string) => {
+    const ta = composerTextareaRef.current;
+    if (!ta) {
+      setInputText(prev => `${prev}${emoji}`);
+      return;
+    }
+    const start = ta.selectionStart ?? inputText.length;
+    const end = ta.selectionEnd ?? inputText.length;
+    const next = `${inputText.slice(0, start)}${emoji}${inputText.slice(end)}`;
+    setInputText(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const cursor = start + emoji.length;
+      ta.setSelectionRange(cursor, cursor);
+    });
+  };
 
   // Requests belonging to this conversation thread
   const threadCustomRequests = useMemo(() => {
@@ -401,9 +584,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   };
 
   // Send message (text or multi-attachment or paid text)
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const submitCurrentMessage = () => {
     // Case 1: Sending staged media attachments
     if (stagedAttachments.length > 0) {
       const validAttachments = stagedAttachments.filter(a => !a.uploadError && a.url);
@@ -465,6 +646,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
       setStagedAttachments([]);
       setShowMediaPanel(false);
+      setShowEmojiPicker(false);
       setInputText('');
       triggerToast(anyPaid ? `Sent paid media ($${totalBundlePrice.toFixed(2)})` : 'Media sent!');
       return;
@@ -487,7 +669,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       sendMessage(selectedRecipientId, inputText.trim());
     }
 
+    setShowEmojiPicker(false);
     setInputText('');
+  };
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitCurrentMessage();
   };
 
   const handleUnlock = (messageId: string, attachmentId?: string) => {
@@ -695,7 +883,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-4 h-[calc(100dvh-8.25rem)] md:h-[calc(100dvh-5.5rem)] min-h-[420px] md:min-h-[580px] flex gap-3 sm:gap-4 relative">
+    <div
+      style={chatContainerHeight ? { height: `${chatContainerHeight}px` } : undefined}
+      className="w-full max-w-[1600px] mx-auto px-2 sm:px-4 py-1.5 sm:py-3 h-[calc(100dvh-var(--acovon-header-height,60px)-var(--acovon-mobile-nav-height,64px))] landscape-short:h-[calc(100dvh-var(--acovon-header-height,48px)-var(--acovon-mobile-nav-height,48px))] md:h-[calc(100dvh-var(--acovon-header-height,60px))] min-h-0 flex gap-3 sm:gap-4 relative overflow-hidden"
+    >
       {/* Toast Feedback Banner */}
       {actionToast && (
         <div className="fixed bottom-20 left-3 right-3 sm:left-auto sm:right-6 z-50 px-4 py-2.5 rounded-xl bg-[#18181c] border border-[#d4af37] text-[#fce7b0] text-xs font-semibold shadow-2xl flex items-center gap-2">
@@ -708,7 +899,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* LEFT COLUMN: INBOX CONVERSATIONS & FILTER HUB                     */}
       {/* ================================================================= */}
       <div
-        className={`w-full md:w-88 lg:w-96 bg-[#121215] border border-[#27272a] rounded-2xl p-3 sm:p-3.5 flex flex-col shrink-0 ${
+        className={`w-full md:w-72 lg:w-88 xl:w-96 h-full min-h-0 overflow-hidden bg-[#121215] border border-[#27272a] rounded-2xl p-3 sm:p-3.5 flex flex-col shrink-0 ${
           mobileShowChat ? 'hidden md:flex' : 'flex'
         }`}
       >
@@ -867,10 +1058,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-semibold text-xs text-white truncate flex items-center gap-1.5">
                         <span className="truncate">{c.name}</span>
-                        <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
-                          @{c.username}
-                          <VerifiedBadge creatorId={c.id} size="xs" />
-                        </span>
+                        <VerifiedBadge creatorId={c.id} size="xs" />
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         {pendingReqsForCreator.length > 0 && (
@@ -919,7 +1107,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                       <img src={req.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
                       <div>
                         <div className="font-semibold text-white">{req.senderName}</div>
-                        <div className="text-[10px] text-neutral-400">{req.handle}</div>
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-[#fce7b0] font-bold">+${req.offeredFee.toFixed(2)}</span>
@@ -953,17 +1140,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* RIGHT COLUMN: ACTIVE CONVERSATION THREAD & TOOLBAR                */}
       {/* ================================================================= */}
       <div
-        className={`flex-1 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-col overflow-hidden ${
+        className={`flex-1 h-full min-h-0 min-w-0 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-col overflow-hidden relative ${
           !mobileShowChat ? 'hidden md:flex' : 'flex'
         }`}
       >
-        {/* 1. CONVERSATION HEADER WITH VIDEO CALL BUTTON & STATUS */}
-        <div className="p-2.5 sm:p-3.5 border-b border-[#26262b] flex items-center justify-between bg-[#141418] gap-2">
+        {/* 1. CONVERSATION HEADER WITH VIDEO CALL BUTTON & STATUS (Pinned/Sticky at top) */}
+        <div className="sticky top-0 z-20 shrink-0 p-2 sm:p-3.5 border-b border-[#26262b] flex items-center justify-between bg-[#141418] gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <button
               type="button"
               onClick={() => setMobileShowChat(false)}
-              className="md:hidden p-1.5 -ml-1 text-neutral-300 hover:text-white rounded-lg bg-[#1c1c22] border border-[#27272a] shrink-0"
+              className="md:hidden p-1.5 -ml-0.5 text-neutral-300 hover:text-white rounded-lg bg-[#1c1c22] border border-[#27272a] shrink-0 cursor-pointer"
               title="Back to Conversations"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -983,12 +1170,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1 sm:gap-1.5 font-bold text-xs sm:text-sm text-white min-w-0">
+              <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-white min-w-0">
                 <span className="truncate">{recipientCreator.name}</span>
-                <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
-                  @{recipientCreator.username}
-                  <VerifiedBadge creatorId={recipientCreator.id} size="xs" />
-                </span>
+                <VerifiedBadge creatorId={recipientCreator.id} size="sm" />
                 {isCreatorRole && (
                   <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shrink-0">
                     Creator View
@@ -1057,11 +1241,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             )}
 
             {/* Conversation Options Menu */}
-            <div className="relative">
+            <div className="relative" ref={headerMenuRef}>
               <button
                 type="button"
                 onClick={() => setShowHeaderMenu(!showHeaderMenu)}
-                className="p-1.5 text-neutral-400 hover:text-white rounded-lg bg-[#18181c] border border-[#27272a]"
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg bg-[#18181c] border border-[#27272a] cursor-pointer"
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
@@ -1102,7 +1286,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
         {/* INCOMING VIDEO CALL BANNER INSIDE INBOX (When a call is requesting) */}
         {videoCallSession && videoCallSession.status === 'requesting' && (
-          <div className="px-4 py-3 bg-gradient-to-r from-emerald-950/90 via-emerald-900/60 to-[#141418] border-b border-emerald-500/40 flex items-center justify-between gap-4">
+          <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-950/90 via-emerald-900/60 to-[#141418] border-b border-emerald-500/40 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-300 animate-pulse">
                 <PhoneIncoming className="w-5 h-5" />
@@ -1144,8 +1328,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           </div>
         )}
 
-        {/* 2. MESSAGE THREAD HISTORY (Messages, Paid Media, Custom Video Request Cards, Call Logs) */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-4">
+        {/* 2. MESSAGE THREAD HISTORY (Independently scrollable Messages, Paid Media, Custom Requests, Call Logs) */}
+        <div
+          ref={messagesScrollRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overscroll-contain space-y-3.5 sm:space-y-4 relative"
+        >
           {conversation.map(msg => {
             const isMine = msg.senderId === currentUser.id;
             const linkedRequest = msg.customRequestId
@@ -1162,14 +1350,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
               return (
                 <div key={msg.id} className="my-2">
-                  <div className="max-w-lg mx-auto rounded-2xl bg-gradient-to-b from-[#1a1a22] to-[#141418] border border-[#d4af37]/40 p-4 shadow-xl space-y-3">
-                    <div className="flex items-center justify-between gap-2 border-b border-[#27272a] pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 rounded-xl bg-[#d4af37]/15 text-[#d4af37]">
+                  <div className="max-w-lg mx-auto rounded-2xl bg-gradient-to-b from-[#1a1a22] to-[#141418] border border-[#d4af37]/40 p-3 sm:p-4 shadow-xl space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#27272a] pb-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="p-2 rounded-xl bg-[#d4af37]/15 text-[#d4af37] shrink-0">
                           <Clapperboard className="w-4 h-4" />
                         </div>
-                        <div>
-                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white flex flex-wrap items-center gap-1.5">
                             <span>Custom Video Request</span>
                             <span className="font-mono text-[10px] text-neutral-400">#{linkedRequest.id}</span>
                           </div>
@@ -1178,7 +1366,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${statusInfo.color}`}>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border shrink-0 ${statusInfo.color}`}>
                         {statusInfo.label}
                       </span>
                     </div>
@@ -1190,7 +1378,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
+                    <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 pt-1 text-[11px]">
                       <div className="p-2 rounded-xl bg-[#121215] border border-[#25252c]">
                         <div className="text-neutral-500 text-[10px]">Proposed Budget</div>
                         <div className="font-mono font-bold text-[#fce7b0] text-sm">
@@ -1252,7 +1440,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
                     {/* Creator Actions: Approve / Decline / Deliver */}
                     {isCreatorRole && isPendingForCreator && (
-                      <div className="flex items-center gap-2 pt-2 border-t border-[#27272a]">
+                      <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 pt-2 border-t border-[#27272a]">
                         <button
                           onClick={() => {
                             setApprovingRequest(linkedRequest);
@@ -1354,16 +1542,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                 <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
                   <div className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl max-w-md w-full space-y-3 shadow-xl">
                     {/* Creator Header Badge */}
-                    <div className="flex items-center justify-between text-xs border-b border-[#26262b] pb-2">
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs border-b border-[#26262b] pb-2">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                         <span className="font-bold text-white flex items-center gap-1.5">
                           <span>{isMine ? 'You' : recipientCreator.name}</span>
-                          {!isMine && (
-                            <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
-                              @{recipientCreator.username}
-                              <VerifiedBadge creatorId={recipientCreator.id} size="xs" />
-                            </span>
-                          )}
+                          {!isMine && <VerifiedBadge creatorId={recipientCreator.id} size="xs" />}
                         </span>
                         {msg.isPaid ? (
                           <span
@@ -1460,16 +1643,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                                     </span>
                                   </div>
                                 ) : (
-                                  <div className="p-3 flex items-center justify-between bg-[#18181c] rounded-lg">
-                                    <div className="flex items-center gap-2 text-xs text-white">
-                                      <FileText className="w-4 h-4 text-[#d4af37]" />
-                                      <span>{att.fileName}</span>
+                                  <div className="p-3 flex flex-wrap items-center justify-between gap-2 bg-[#18181c] rounded-lg">
+                                    <div className="flex items-center gap-2 text-xs text-white min-w-0">
+                                      <FileText className="w-4 h-4 text-[#d4af37] shrink-0" />
+                                      <span className="truncate">{att.fileName}</span>
                                     </div>
                                     <a
                                       href={att.url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-[11px] text-[#d4af37] underline"
+                                      className="text-[11px] text-[#d4af37] underline shrink-0"
                                     >
                                       Open File
                                     </a>
@@ -1544,7 +1727,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
 
                     {/* Payment Confirmation Receipt */}
                     {msg.paymentConfirmation && (
-                      <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between text-[10px] text-emerald-300">
+                      <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-emerald-300">
                         <span className="flex items-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Payment Confirmed ({msg.paymentConfirmation.itemLabel})</span>
@@ -1646,16 +1829,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           })}
         </div>
 
+        {/* Floating New Messages Indicator when user is scrolled up reading older messages */}
+        {newMessagesCount > 0 && (
+          <div className="relative z-20 flex justify-center pointer-events-none h-0">
+            <button
+              type="button"
+              onClick={() => scrollToBottom('smooth')}
+              className="pointer-events-auto -translate-y-11 px-3.5 py-1.5 rounded-full bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs shadow-xl border border-black/15 flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+              <span>
+                {newMessagesCount === 1 ? 'New Message' : `${newMessagesCount} New Messages`}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* 3. MULTI-ATTACHMENT & PAID MEDIA SENDING PANEL */}
         {showMediaPanel && (
-          <div className="p-3.5 bg-[#16161c] border-t border-[#27272a] space-y-3 max-h-80 overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+          <div className="shrink-0 p-2.5 sm:p-3.5 bg-[#16161c] border-t border-[#27272a] space-y-2.5 sm:space-y-3 max-h-56 sm:max-h-80 overflow-y-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <span className="text-xs font-bold text-white">
                   Private Media Attachments ({stagedAttachments.length})
                 </span>
                 {isCreatorRole && stagedAttachments.length > 1 && (
-                  <div className="flex items-center gap-1 bg-[#111115] p-0.5 rounded-lg border border-[#27272a] text-[10px]">
+                  <div className="flex flex-wrap items-center gap-1 bg-[#111115] p-0.5 rounded-lg border border-[#27272a] text-[10px]">
                     <button
                       type="button"
                       onClick={() => setPricingMode('individual')}
@@ -1684,7 +1883,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                   setStagedAttachments([]);
                   setShowMediaPanel(false);
                 }}
-                className="text-xs text-neutral-400 hover:text-white flex items-center gap-1"
+                className="text-xs text-neutral-400 hover:text-white flex items-center gap-1 shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Cancel</span>
@@ -1881,8 +2080,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           </div>
         )}
 
-        {/* 4. MESSAGE INPUT TOOLBAR */}
-        <form onSubmit={handleSend} className="p-3 bg-[#141418] border-t border-[#26262b] space-y-2">
+        {/* 4. MESSAGE INPUT TOOLBAR (Fixed/Anchored at bottom of conversation column) */}
+        <form
+          onSubmit={handleSend}
+          data-chat-composer="true"
+          className="shrink-0 p-2 sm:p-3 bg-[#141418] border-t border-[#26262b] space-y-2 relative z-20"
+        >
           {/* Creator Paid Text Message Bar (Preserving Existing Functionality) */}
           {isCreatorRole && (
             <div className="flex items-center justify-between flex-wrap gap-2 text-xs px-1">
@@ -1912,7 +2115,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                 )}
               </div>
 
-              <span className="text-[10px] text-neutral-500">
+              <span className="text-[10px] text-neutral-500 hidden sm:inline">
                 Attach photos/videos below to send Free or Paid media with custom pricing
               </span>
             </div>
@@ -1943,7 +2146,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             className="hidden"
           />
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-end gap-1 sm:gap-2 min-w-0">
             {/* Photo Attachment Button */}
             <button
               type="button"
@@ -1951,7 +2154,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                 setShowMediaPanel(true);
                 photoInputRef.current?.click();
               }}
-              className="p-2.5 rounded-xl bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-neutral-300 hover:text-[#d4af37] transition cursor-pointer"
+              className="p-1.5 sm:p-2.5 rounded-xl bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-neutral-300 hover:text-[#d4af37] transition cursor-pointer shrink-0 min-h-[36px] sm:min-h-[38px] flex items-center justify-center"
               title="Attach Photos (Free or Paid)"
             >
               <ImageIcon className="w-4 h-4" />
@@ -1964,7 +2167,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                 setShowMediaPanel(true);
                 videoInputRef.current?.click();
               }}
-              className="p-2.5 rounded-xl bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-neutral-300 hover:text-[#d4af37] transition cursor-pointer"
+              className="p-1.5 sm:p-2.5 rounded-xl bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-neutral-300 hover:text-[#d4af37] transition cursor-pointer shrink-0 min-h-[36px] sm:min-h-[38px] flex items-center justify-center"
               title="Attach Videos (Free or Paid)"
             >
               <VideoIcon className="w-4 h-4" />
@@ -1974,7 +2177,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             <button
               type="button"
               onClick={() => setShowMediaPanel(!showMediaPanel)}
-              className={`p-2.5 rounded-xl border transition cursor-pointer ${
+              className={`p-1.5 sm:p-2.5 rounded-xl border transition cursor-pointer shrink-0 min-h-[36px] sm:min-h-[38px] flex items-center justify-center ${
                 showMediaPanel
                   ? 'bg-[#d4af37]/20 border-[#d4af37] text-[#fce7b0]'
                   : 'bg-[#18181c] hover:bg-[#22222a] border-[#27272a] text-neutral-300'
@@ -1984,11 +2187,64 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               <Paperclip className="w-4 h-4" />
             </button>
 
-            {/* Text Input */}
-            <input
-              type="text"
+            {/* Emoji Picker Button & Popover */}
+            <div className="shrink-0" ref={emojiPickerRef}>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(prev => !prev)}
+                className={`p-1.5 sm:p-2.5 rounded-xl border transition cursor-pointer min-h-[36px] sm:min-h-[38px] flex items-center justify-center ${
+                  showEmojiPicker
+                    ? 'bg-[#d4af37]/20 border-[#d4af37] text-[#fce7b0]'
+                    : 'bg-[#18181c] hover:bg-[#22222a] border-[#27272a] text-neutral-300 hover:text-[#d4af37]'
+                }`}
+                title="Insert Emoji"
+                aria-label="Insert Emoji"
+              >
+                <Smile className="w-4 h-4" />
+              </button>
+
+              {showEmojiPicker && (
+                <div className="absolute bottom-full left-2 right-2 sm:right-auto sm:left-28 mb-2 sm:w-64 max-w-[calc(100vw-2rem)] p-2.5 rounded-2xl bg-[#18181c] border border-[#27272a] shadow-2xl z-30">
+                  <div className="flex items-center justify-between px-1 pb-1.5 mb-1.5 border-b border-[#27272a]">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                      Quick Reactions
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(false)}
+                      className="text-neutral-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-6 gap-1">
+                    {['😊', '😍', '🔥', '❤️', '👏', '🎉', '🙌', '✨', '💎', '🎬', '📸', '💬', '🙏', '😘', '🥳', '👍', '🤩', '💯'].map(emoji => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => handleInsertEmoji(emoji)}
+                        className="h-8 rounded-lg hover:bg-[#262630] flex items-center justify-center text-base cursor-pointer transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Auto-Expanding Multiline Composer Input */}
+            <textarea
+              ref={composerTextareaRef}
+              rows={1}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitCurrentMessage();
+                }
+              }}
               placeholder={
                 stagedAttachments.length > 0
                   ? 'Add a message with your attached media...'
@@ -1996,13 +2252,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                   ? `Write locked paid message ($${lockPrice})...`
                   : `Message ${recipientCreator.name}...`
               }
-              className="flex-1 bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
+              className="flex-1 min-w-0 bg-[#18181c] border border-[#27272a] rounded-xl px-2.5 sm:px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37] resize-none min-h-[36px] sm:min-h-[38px] max-h-32 overflow-y-auto leading-relaxed"
             />
 
             {/* Send Button */}
             <button
               type="submit"
-              className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+              className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[36px] sm:min-h-[38px]"
             >
               <Send className="w-4 h-4" />
               <span className="hidden sm:inline">Send</span>
@@ -2015,8 +2271,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 1: VIDEO CALL RATE & CONFIRMATION MODAL                     */}
       {/* ================================================================= */}
       {showCallConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel">
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">
@@ -2075,7 +2331,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowCallConfirmModal(false)}
@@ -2100,10 +2356,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 2: FAN CREATE CUSTOM VIDEO REQUEST INSIDE INBOX             */}
       {/* ================================================================= */}
       {showNewRequestModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <form
             onSubmit={handleSubmitCustomRequest}
-            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel"
           >
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <div className="flex items-center gap-2">
@@ -2183,7 +2439,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowNewRequestModal(false)}
@@ -2206,10 +2462,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 3: CREATOR APPROVE REQUEST MODAL                            */}
       {/* ================================================================= */}
       {approvingRequest && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <form
             onSubmit={handleCreatorApproveRequest}
-            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel"
           >
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <h3 className="font-bold text-white text-sm">Approve Custom Video Request</h3>
@@ -2272,10 +2528,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 4: CREATOR DECLINE REQUEST MODAL                            */}
       {/* ================================================================= */}
       {decliningRequest && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <form
             onSubmit={handleCreatorDeclineRequest}
-            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel"
           >
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <h3 className="font-bold text-white text-sm">Decline Custom Video Request</h3>
@@ -2322,10 +2578,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 5: CREATOR DELIVER CUSTOM VIDEO MODAL                       */}
       {/* ================================================================= */}
       {deliveringRequest && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <form
             onSubmit={handleCreatorDeliverRequest}
-            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel"
           >
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <h3 className="font-bold text-white text-sm">Deliver Custom Video</h3>
@@ -2433,7 +2689,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => {
@@ -2460,10 +2716,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* MODAL 6: TIP MODAL                                                */}
       {/* ================================================================= */}
       {showTipModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-5 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 space-y-4 acovon-modal-panel">
             <h4 className="font-semibold text-sm text-white">Send Direct Tip to {recipientCreator.name}</h4>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
               {['5', '10', '20', '50'].map(amt => (
                 <button
                   key={amt}
@@ -2509,15 +2765,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {lightboxMedia && (
         <div
           onClick={() => setLightboxMedia(null)}
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-2.5 sm:p-4"
         >
           <button
             onClick={() => setLightboxMedia(null)}
-            className="absolute top-5 right-5 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
           >
             <X className="w-6 h-6" />
           </button>
-          <div onClick={e => e.stopPropagation()} className="max-w-4xl max-h-[85vh] flex flex-col items-center">
+          <div onClick={e => e.stopPropagation()} className="max-w-4xl w-full max-h-[85dvh] flex flex-col items-center">
             {lightboxMedia.type === 'video' ? (
               <video
                 src={lightboxMedia.url || '/videos/sample1.mp4'}
@@ -2530,10 +2786,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                     el.load();
                   }
                 }}
-                className="max-h-[78vh] rounded-xl"
+                className="max-h-[78dvh] max-w-full rounded-xl"
               />
             ) : (
-              <img src={lightboxMedia.url} alt="" className="max-h-[78vh] object-contain rounded-xl" />
+              <img src={lightboxMedia.url} alt="" className="max-h-[78dvh] max-w-full object-contain rounded-xl" />
             )}
             {lightboxMedia.title && (
               <p className="text-xs text-neutral-300 mt-3">{lightboxMedia.title}</p>

@@ -26,13 +26,13 @@ export const LivePollOverlay: React.FC<LivePollOverlayProps> = ({
   isCreator,
   onOpenCreatePoll
 }) => {
-  const { currentUser, voteLivePoll, endLivePoll } = useApp();
+  const { currentUser, isAuthenticated, requireAuth, voteLivePoll, endLivePoll } = useApp();
   const [isMinimized, setIsMinimized] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(poll.durationSeconds || 180);
   const [justVotedId, setJustVotedId] = useState<string | null>(null);
 
-  const hasVoted = Boolean(poll.votedUserIds?.[currentUser.id]);
-  const userVotedOptionId = poll.votedUserIds?.[currentUser.id];
+  const hasVoted = isAuthenticated && Boolean(poll.votedUserIds?.[currentUser.id]);
+  const userVotedOptionId = isAuthenticated ? poll.votedUserIds?.[currentUser.id] : undefined;
 
   // Countdown timer
   useEffect(() => {
@@ -53,9 +53,9 @@ export const LivePollOverlay: React.FC<LivePollOverlayProps> = ({
     return () => clearInterval(timer);
   }, [poll.isActive, streamId, isCreator, endLivePoll]);
 
-  // Gentle live audience simulation: random audience votes tick in every 5 seconds
+  // Gentle live audience simulation: only runs when signed in so guests never mutate poll records
   useEffect(() => {
-    if (!poll.isActive) return;
+    if (!poll.isActive || !isAuthenticated) return;
     const interval = setInterval(() => {
       if (Math.random() > 0.35 && poll.options.length > 0) {
         const randomOpt = poll.options[Math.floor(Math.random() * poll.options.length)];
@@ -68,10 +68,11 @@ export const LivePollOverlay: React.FC<LivePollOverlayProps> = ({
     }, 4500);
 
     return () => clearInterval(interval);
-  }, [poll.isActive, poll.id, poll.options, streamId, currentUser.id, voteLivePoll]);
+  }, [poll.isActive, poll.id, poll.options, streamId, currentUser.id, isAuthenticated, voteLivePoll]);
 
   const handleVote = (optionId: string) => {
     if (!poll.isActive) return;
+    if (!requireAuth('vote in live polls')) return;
     setJustVotedId(optionId);
     voteLivePoll(streamId, poll.id, optionId);
     setTimeout(() => setJustVotedId(null), 1000);
@@ -88,10 +89,10 @@ export const LivePollOverlay: React.FC<LivePollOverlayProps> = ({
   // Minimized Floating Pill
   if (isMinimized) {
     return (
-      <div className="absolute bottom-16 left-4 z-30 animate-in fade-in slide-in-from-bottom-2">
+      <div className="absolute bottom-14 sm:bottom-16 left-2.5 sm:left-4 z-30 animate-in fade-in slide-in-from-bottom-2 max-w-[calc(100%-1.25rem)]">
         <button
           onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/90 hover:bg-black border border-[#d4af37]/60 text-xs font-semibold text-[#fce7b0] shadow-2xl backdrop-blur-md transition-all group"
+          className="flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full bg-black/90 hover:bg-black border border-[#d4af37]/60 text-xs font-semibold text-[#fce7b0] shadow-2xl backdrop-blur-md transition-all group max-w-full"
         >
           <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-ping" />
           <BarChart2 className="w-3.5 h-3.5 text-[#d4af37]" />
@@ -104,8 +105,8 @@ export const LivePollOverlay: React.FC<LivePollOverlayProps> = ({
   }
 
   return (
-    <div className="absolute bottom-16 sm:bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm z-30 animate-in zoom-in-95 fade-in duration-200">
-      <div className="bg-[#0e0e12]/95 border border-[#d4af37]/45 rounded-2xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.85)] backdrop-blur-xl text-white">
+    <div className="absolute bottom-14 sm:bottom-20 left-2.5 right-2.5 sm:left-4 sm:right-auto sm:max-w-sm max-h-[calc(100%-5.25rem)] overflow-y-auto z-30 animate-in zoom-in-95 fade-in duration-200 rounded-2xl">
+      <div className="bg-[#0e0e12]/95 border border-[#d4af37]/45 rounded-2xl p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.85)] backdrop-blur-xl text-white">
         
         {/* Header */}
         <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-zinc-800/80">

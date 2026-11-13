@@ -306,10 +306,10 @@ export const ImportantAnnouncementPopupModal: React.FC<AnnouncementActionProps> 
   const status = getUserAnnouncementStatus(activePopupAnnouncement.id);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-[#121217] border border-[#d4af37]/50 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in">
+      <div className="bg-[#121217] border border-[#d4af37]/50 rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl acovon-modal-panel">
         {activePopupAnnouncement.imageUrl && (
-          <div className="h-44 w-full bg-black relative">
+          <div className="h-36 sm:h-44 w-full bg-black relative shrink-0">
             <img
               src={activePopupAnnouncement.imageUrl}
               alt={activePopupAnnouncement.title}
@@ -319,8 +319,8 @@ export const ImportantAnnouncementPopupModal: React.FC<AnnouncementActionProps> 
           </div>
         )}
 
-        <div className="p-6 space-y-4 text-xs">
-          <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider bg-[#d4af37]/20 text-[#fce7b0] border border-[#d4af37]/40">
                 {activePopupAnnouncement.audience === 'fans_only'
@@ -492,8 +492,8 @@ export const AnnouncementCenterModal: React.FC<
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
-      <div className="bg-[#121216] border border-[#2c2c38] rounded-2xl max-w-5xl w-full max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden shadow-2xl text-xs">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-[#121216] border border-[#2c2c38] rounded-2xl max-w-5xl w-full max-h-[92dvh] sm:max-h-[88dvh] flex flex-col overflow-hidden shadow-2xl text-xs acovon-modal-panel">
         {/* Header */}
         <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[#25252f] bg-[#15151c] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -670,7 +670,7 @@ export const AnnouncementCenterModal: React.FC<
           </div>
 
           {/* Right Pane: Selected Announcement Full Reader */}
-          <div className="md:col-span-7 overflow-y-auto p-6 space-y-4">
+          <div className="md:col-span-7 overflow-y-auto p-4 sm:p-6 space-y-4">
             {!activeAnnouncement ? (
               <div className="py-16 text-center text-neutral-500">
                 Select an announcement from the left to read its full content.

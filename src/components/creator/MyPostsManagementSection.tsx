@@ -80,11 +80,19 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
     currentUser.role === 'creator' || isCurrentUserApprovedCreator || activeRole === 'creator';
 
   const availableCategories = useMemo(() => {
-    const set = new Set<string>(['All Categories']);
-    (activeCategories || []).forEach(c => set.add(c.name));
-    (platformConfig?.contentCategories || []).forEach(c => set.add(c));
-    CATEGORIES.forEach(c => set.add(c));
-    return Array.from(set);
+    const seen = new Set<string>(['all categories']);
+    const out: string[] = ['All Categories'];
+    const addUnique = (val: string) => {
+      const trimmed = typeof val === 'string' ? val.trim() : '';
+      const norm = trimmed.toLowerCase();
+      if (!norm || seen.has(norm)) return;
+      seen.add(norm);
+      out.push(trimmed);
+    };
+    (activeCategories || []).forEach(c => addUnique(c.name));
+    (platformConfig?.contentCategories || []).forEach(c => addUnique(c));
+    CATEGORIES.forEach(c => addUnique(c));
+    return out;
   }, [activeCategories, platformConfig?.contentCategories]);
 
   // All non-deleted posts owned by the logged-in creator
@@ -201,24 +209,24 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
       </div>
 
       {/* Summary Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
         <div className="p-3.5 rounded-xl bg-[#121215] border border-[#27272a]">
           <div className="text-[11px] text-neutral-400">Total Published Posts</div>
-          <div className="text-xl font-bold font-mono text-white mt-0.5">{creatorOwnedPosts.length}</div>
+          <div className="text-xl font-bold font-mono text-white mt-0.5 tabular-nums">{creatorOwnedPosts.length}</div>
         </div>
         <div className="p-3.5 rounded-xl bg-[#121215] border border-[#27272a]">
           <div className="text-[11px] text-neutral-400">Videos / Photos</div>
-          <div className="text-xl font-bold font-mono text-[#fce7b0] mt-0.5">
+          <div className="text-xl font-bold font-mono text-[#fce7b0] mt-0.5 tabular-nums">
             {totalVideos} / {totalPhotos}
           </div>
         </div>
         <div className="p-3.5 rounded-xl bg-[#121215] border border-[#27272a]">
           <div className="text-[11px] text-neutral-400">Pay-To-View Releases</div>
-          <div className="text-xl font-bold font-mono text-amber-300 mt-0.5">{totalPPV}</div>
+          <div className="text-xl font-bold font-mono text-amber-300 mt-0.5 tabular-nums">{totalPPV}</div>
         </div>
         <div className="p-3.5 rounded-xl bg-[#121215] border border-[#27272a]">
           <div className="text-[11px] text-neutral-400">Total Post Likes</div>
-          <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5">
+          <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5 tabular-nums">
             {totalLikes.toLocaleString()}
           </div>
         </div>
@@ -363,7 +371,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4 sm:gap-5">
           {filteredPosts.map(p => {
             const firstMedia = p.media?.[0];
             const isVideo = firstMedia?.type === 'video';
@@ -394,7 +402,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
                                 !firstMedia.previewUrl.includes('cdn.acovon.media') &&
                                 !firstMedia.previewUrl.endsWith('.m3u8')
                               ? firstMedia.previewUrl
-                              : '/videos/sample1.mp4'
+                              : ''
                           }
                           poster={
                             firstMedia.thumbnailUrl && firstMedia.thumbnailUrl !== firstMedia.url
@@ -404,13 +412,6 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
                           controls
                           playsInline
                           preload="metadata"
-                          onError={e => {
-                            const el = e.currentTarget;
-                            if (!el.src.includes('/videos/sample1.mp4')) {
-                              el.src = '/videos/sample1.mp4';
-                              el.load();
-                            }
-                          }}
                           className="w-full h-full object-contain"
                         />
                       ) : (
@@ -464,7 +465,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
                       </button>
 
                       {isMenuOpen && (
-                        <div className="absolute right-0 top-9 w-44 bg-[#14141a] border border-[#2c2c38] rounded-xl shadow-2xl p-1.5 text-xs space-y-0.5 z-30">
+                        <div className="absolute right-0 top-9 w-44 max-w-[calc(100vw-2rem)] bg-[#14141a] border border-[#2c2c38] rounded-xl shadow-2xl p-1.5 text-xs space-y-0.5 z-30">
                           <button
                             type="button"
                             onClick={() => {
@@ -532,7 +533,7 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
 
                     {p.tags && p.tags.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#fce7b0]/90">
-                        {p.tags.slice(0, 5).map(t => (
+                        {Array.from(new Set(p.tags)).slice(0, 5).map(t => (
                           <span key={t}>#{t.replace(/^#/, '')}</span>
                         ))}
                       </div>
@@ -542,8 +543,8 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
 
                 {/* Engagement Stats & Direct Edit/Delete Controls Footer */}
                 <div className="px-4 py-3 bg-[#15151a] border-t border-[#23232b] space-y-2.5">
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-400 font-mono tabular-nums">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="inline-flex items-center gap-1" title="Views">
                         <Eye className="w-3.5 h-3.5 text-[#d4af37]" />
                         {viewsCount.toLocaleString()}
@@ -566,11 +567,11 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setEditingPost(p)}
-                      className="flex-1 py-1.5 px-3 rounded-xl bg-[#1e1e26] hover:bg-[#282834] border border-[#2f2f3d] text-neutral-100 hover:text-[#fce7b0] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="flex-1 min-w-[110px] py-1.5 px-3 rounded-xl bg-[#1e1e26] hover:bg-[#282834] border border-[#2f2f3d] text-neutral-100 hover:text-[#fce7b0] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5 text-[#d4af37]" />
                       <span>Edit Post</span>

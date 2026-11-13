@@ -5,6 +5,7 @@ import {
   CreatorTier,
   Post,
   PostEditAuditRecord,
+  PostRevision,
   UpdatePostPayload,
   Subscription,
   ContentPurchase,
@@ -100,6 +101,7 @@ import {
   DEFAULT_BRANDING_THEME,
   applyThemeToDocument
 } from '../data/brandingThemes';
+import { getLocalSampleThumbnails } from '../utils/videoFrameExtractor';
 import {
   SupportedLanguageCode,
   LanguagePreferenceMode,
@@ -251,9 +253,11 @@ interface AppContextType {
   
   // Actions
   toggleLikePost: (postId: string) => void;
-  createPost: (newPost: Omit<Post, 'id' | 'likesCount' | 'commentsCount' | 'createdAt'>) => void;
+  createPost: (newPost: Omit<Post, 'id' | 'likesCount' | 'commentsCount' | 'createdAt'>) => string | undefined;
   updateCreatorPost: (postId: string, updates: UpdatePostPayload) => Promise<{ success: boolean; error?: string; requiresPurchaseWarning?: boolean; updatedPost?: Post }>;
   deleteCreatorPost: (postId: string, reason?: string) => Promise<{ success: boolean; error?: string; hadPurchases?: boolean; purchaseCount?: number }>;
+  getPostRevisions: (postId: string) => Promise<{ success: boolean; revisions: PostRevision[]; currentVersion?: number; error?: string }>;
+  restorePostRevision: (postId: string, revisionId: string) => Promise<{ success: boolean; restoredPost?: Post; error?: string }>;
   getPostPurchaseCount: (postId: string) => number;
   getPostPurchases: (postId: string) => ContentPurchase[];
   postAuditLogs: PostEditAuditRecord[];
@@ -558,7 +562,6 @@ interface AppContextType {
     keepBadgeAuthorizedReason?: string
   ) => { success: boolean; error?: string };
   adminTriggerVerificationExpiry: (creatorId: string) => { success: boolean; error?: string };
-  resetCreatorVerificationForTest: (creatorId: string, targetStatus?: PaidVerificationStatus) => void;
 
   // Personalized Content Recommendation, Discovery & Smart Feed Engine
   recommendationConfig: RecommendationEngineConfig;
@@ -711,9 +714,14 @@ interface AppContextType {
   deleteCustomBrandingTheme: (customThemeId: string) => { success: boolean; error?: string };
   toggleAdminBrandingPermission: (targetAdminId: string) => { success: boolean; granted?: boolean; error?: string };
 
-  // Guest vs Authenticated State (Landing page shown only to guests; once logged in/signed up, Home is Feed)
+  // Guest vs Authenticated State & Interaction Prompt
   isAuthenticated: boolean;
   isCurrentUserApprovedCreator: boolean;
+  anonymousSessionId: string;
+  guestAuthPrompt: { isOpen: boolean; actionLabel?: string };
+  openGuestAuthPrompt: (actionLabel?: string) => void;
+  closeGuestAuthPrompt: () => void;
+  requireAuth: (actionLabel?: string) => boolean;
   loginUser: (role?: UserRole, specificId?: string) => void;
   logoutUser: () => void;
   registerAccount: (input: {
@@ -814,6 +822,9 @@ interface AppContextType {
     categoryId: string,
     updates: Partial<CategoryRecord>
   ) => Promise<{ success: boolean; error?: string; category?: CategoryRecord }>;
+  adminDeleteCategory: (
+    categoryId: string
+  ) => Promise<{ success: boolean; error?: string }>;
   adminToggleCountryActive: (
     countryId: string,
     is_active: boolean
@@ -1083,6 +1094,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [activeRole, setActiveRole] = useState<UserRole>(currentUser.role);
+
+  // Anonymous browsing session identifier (persisted without creating any user account)
+  const [anonymousSessionId] = useState<string>(() => {
+    try {
+      const existing = localStorage.getItem('acovon_anon_session_id');
+      if (existing && existing.trim()) return existing;
+      const created = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('acovon_anon_session_id', created);
+      return created;
+    } catch {
+      return `anon_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    }
+  });
+
+  // Centralized "Join ACOVON" prompt modal state for guest interaction gating
+  const [guestAuthPrompt, setGuestAuthPrompt] = useState<{ isOpen: boolean; actionLabel?: string }>({
+    isOpen: false
+  });
+
+  const openGuestAuthPrompt = (actionLabel?: string) => {
+    setGuestAuthPrompt({ isOpen: true, actionLabel });
+  };
+
+  const closeGuestAuthPrompt = () => {
+    setGuestAuthPrompt({ isOpen: false, actionLabel: undefined });
+  };
+
+  const requireAuth = (actionLabel?: string): boolean => {
+    if (isAuthenticated) return true;
+    openGuestAuthPrompt(actionLabel);
+    return false;
+  };
   const [users, setUsers] = useState<Record<string, User>>(() => {
     try {
       const saved = localStorage.getItem('acovon_users_v2');
@@ -1739,13 +1782,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [creators]);
   const [showDemoBadges, setShowDemoBadges] = useState<boolean>(true);
+  const sanitizeLoadedPosts = (rawPosts: Post[]): Post[] => {
+    const mockById = new Map(MOCK_POSTS.map(mp => [mp.id, mp]));
+    const isDeadUrl = (u?: string) =>
+      !u ||
+      typeof u !== 'string' ||
+      u.trim().toLowerCase().startsWith('blob:') ||
+      u.trim().toLowerCase().startsWith('s3://');
+
+    return rawPosts.map(p => {
+      if (!p || !Array.isArray(p.media)) return p;
+      const baseline = mockById.get(p.id);
+      const cleanedMedia = p.media.map((m, idx) => {
+        if (!m || m.type !== 'video') return m;
+        const baseAsset = baseline?.media?.[idx];
+        const cleanUrl = isDeadUrl(m.url) ? (baseAsset?.url || '') : m.url;
+        const cleanPreview = isDeadUrl(m.previewUrl)
+          ? baseAsset?.previewUrl
+          : m.previewUrl;
+        const cleanThumb = isDeadUrl(m.thumbnailUrl)
+          ? (baseAsset?.thumbnailUrl || '')
+          : m.thumbnailUrl;
+        return {
+          ...m,
+          url: cleanUrl,
+          previewUrl: cleanPreview,
+          thumbnailUrl: cleanThumb
+        };
+      });
+      return { ...p, media: cleanedMedia };
+    });
+  };
+
   const [posts, setPosts] = useState<Post[]>(() => {
     try {
       const saved = localStorage.getItem('acovon_posts');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return sanitizeLoadedPosts(parsed);
         }
       }
     } catch {
@@ -1757,43 +1832,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [deletingPost, setDeletingPost] = useState<Post | null>(null);
 
-  // Sync persisted creator post edits & deletions from backend on mount
+  // Helper: Merge authoritative server posts state (created + updated + deleted) without losing or duplicating posts
+  const applyAuthoritativePostsState = (data: any) => {
+    if (!data || !data.success) return;
+    const createdMap: Record<string, Post> =
+      data.createdPosts && typeof data.createdPosts === 'object' ? data.createdPosts : {};
+    const updatedMap: Record<string, Post> =
+      data.updatedPosts && typeof data.updatedPosts === 'object' ? data.updatedPosts : {};
+    const deletedIds: string[] = Array.isArray(data.deletedPostIds) ? data.deletedPostIds : [];
+
+    if (Array.isArray(data.postAuditLogs)) {
+      setPostAuditLogs(data.postAuditLogs);
+    }
+
+    setPosts(prev => {
+      const byId = new Map<string, Post>();
+      const orderedIds: string[] = [];
+
+      // 1. Add server-persisted created posts first (newest first by createdAtIso)
+      const serverCreatedList = Object.values(createdMap).sort((a, b) => {
+        const tA = a.createdAtIso ? Date.parse(a.createdAtIso) : 0;
+        const tB = b.createdAtIso ? Date.parse(b.createdAtIso) : 0;
+        return tB - tA;
+      });
+      for (const cp of serverCreatedList) {
+        if (!cp || !cp.id || byId.has(cp.id)) continue;
+        const override = updatedMap[cp.id];
+        const isDel = deletedIds.includes(cp.id) || Boolean(override?.isDeletedByCreator) || Boolean(cp.isDeletedByCreator);
+        const finalCreated: Post = {
+          ...cp,
+          ...(override || {}),
+          id: cp.id,
+          isDeletedByCreator: isDel,
+          moderationStatus: isDel
+            ? ('removed' as ContentModerationStatus)
+            : ((override?.moderationStatus || cp.moderationStatus) as ContentModerationStatus)
+        };
+        byId.set(cp.id, finalCreated);
+        orderedIds.push(cp.id);
+      }
+
+      // 2. Merge existing posts (local + baseline) preserving order and deduplicating by ID
+      for (const p of prev) {
+        if (!p || !p.id || byId.has(p.id)) continue;
+        const override = updatedMap[p.id];
+        const isDel = deletedIds.includes(p.id) || Boolean(override?.isDeletedByCreator);
+        if (override) {
+          byId.set(p.id, {
+            ...p,
+            ...override,
+            id: p.id,
+            isDeletedByCreator: Boolean(isDel),
+            moderationStatus: isDel
+              ? ('removed' as ContentModerationStatus)
+              : ((override.moderationStatus || p.moderationStatus) as ContentModerationStatus)
+          });
+        } else if (isDel) {
+          byId.set(p.id, {
+            ...p,
+            isDeletedByCreator: true,
+            moderationStatus: 'removed' as ContentModerationStatus
+          });
+        } else {
+          byId.set(p.id, p);
+        }
+        orderedIds.push(p.id);
+      }
+
+      // 3. Ensure any baseline MOCK_POSTS missing from prev (e.g. partial localStorage) are included once
+      for (const base of MOCK_POSTS) {
+        if (byId.has(base.id)) continue;
+        const override = updatedMap[base.id];
+        const isDel = deletedIds.includes(base.id) || Boolean(override?.isDeletedByCreator);
+        byId.set(base.id, {
+          ...base,
+          ...(override || {}),
+          id: base.id,
+          isDeletedByCreator: isDel,
+          moderationStatus: isDel
+            ? ('removed' as ContentModerationStatus)
+            : ((override?.moderationStatus || base.moderationStatus) as ContentModerationStatus)
+        });
+        orderedIds.push(base.id);
+      }
+
+      return sanitizeLoadedPosts(orderedIds.map(id => byId.get(id)!).filter(Boolean));
+    });
+  };
+
+  // Sync persisted creator created posts, edits & deletions from backend on mount
   useEffect(() => {
     let active = true;
-    fetch('/api/posts/state')
+    fetch('/api/posts/state', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!active || !data || !data.success) return;
-        const updatedMap = data.updatedPosts || {};
-        const deletedIds: string[] = Array.isArray(data.deletedPostIds) ? data.deletedPostIds : [];
-        if (Array.isArray(data.postAuditLogs)) {
-          setPostAuditLogs(data.postAuditLogs);
-        }
-        if (Object.keys(updatedMap).length > 0 || deletedIds.length > 0) {
-          setPosts(prev => {
-            const merged = prev.map(p => {
-              const override = updatedMap[p.id];
-              const isDel = deletedIds.includes(p.id) || override?.isDeletedByCreator;
-              if (override) {
-                return {
-                  ...p,
-                  ...override,
-                  isDeletedByCreator: Boolean(isDel),
-                  moderationStatus: isDel ? ('removed' as ContentModerationStatus) : (override.moderationStatus || p.moderationStatus)
-                };
-              }
-              if (isDel) {
-                return {
-                  ...p,
-                  isDeletedByCreator: true,
-                  moderationStatus: 'removed' as ContentModerationStatus
-                };
-              }
-              return p;
-            });
-            return merged;
-          });
-        }
+        applyAuthoritativePostsState(data);
       })
       .catch(() => {
         // ignore offline fallback
@@ -1816,6 +1950,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLivestreams(MOCK_LIVESTREAMS);
     setStatuses(INITIAL_STATUSES);
     setViewedStatusIds([]);
+    fetch('/api/posts/state', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data && data.success) applyAuthoritativePostsState(data);
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -1832,7 +1972,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const nowMs = Date.now();
+          const activeUserStatuses = parsed.filter(
+            (s: CreatorStatus) => s && !s.isDemo && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
+          );
+          const activeDemoStatuses = parsed.filter(
+            (s: CreatorStatus) => s && s.isDemo && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
+          );
+          if (activeDemoStatuses.length > 0) {
+            const existingDemoIds = new Set(activeDemoStatuses.map((s: CreatorStatus) => s.id));
+            const missingFreshDemos = INITIAL_STATUSES.filter(d => !existingDemoIds.has(d.id));
+            return [...activeUserStatuses, ...activeDemoStatuses, ...missingFreshDemos];
+          }
+          return [...activeUserStatuses, ...INITIAL_STATUSES];
         }
       }
     } catch {
@@ -1971,14 +2123,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
+          const dedupeStrs = (arr: unknown, fallback: string[]): string[] => {
+            if (!Array.isArray(arr)) return fallback;
+            const seen = new Set<string>();
+            const out: string[] = [];
+            for (const item of arr) {
+              if (typeof item !== 'string') continue;
+              const trimmed = item.trim();
+              const norm = trimmed.toLowerCase();
+              if (!norm || seen.has(norm)) continue;
+              seen.add(norm);
+              out.push(trimmed);
+            }
+            return out;
+          };
           return {
             ...INITIAL_PLATFORM_CONFIG,
             ...parsed,
             featuredCreatorIds: Array.isArray(parsed.featuredCreatorIds) ? parsed.featuredCreatorIds : INITIAL_PLATFORM_CONFIG.featuredCreatorIds,
             featuredPostIds: Array.isArray(parsed.featuredPostIds) ? parsed.featuredPostIds : INITIAL_PLATFORM_CONFIG.featuredPostIds,
-            contentCategories: Array.isArray(parsed.contentCategories) ? parsed.contentCategories : INITIAL_PLATFORM_CONFIG.contentCategories,
-            videoCategories: Array.isArray(parsed.videoCategories) ? parsed.videoCategories : INITIAL_PLATFORM_CONFIG.videoCategories,
-            livestreamCategories: Array.isArray(parsed.livestreamCategories) ? parsed.livestreamCategories : INITIAL_PLATFORM_CONFIG.livestreamCategories,
+            contentCategories: dedupeStrs(parsed.contentCategories, INITIAL_PLATFORM_CONFIG.contentCategories),
+            videoCategories: dedupeStrs(parsed.videoCategories, INITIAL_PLATFORM_CONFIG.videoCategories),
+            livestreamCategories: dedupeStrs(parsed.livestreamCategories, INITIAL_PLATFORM_CONFIG.livestreamCategories),
             notificationTemplates: {
               ...INITIAL_PLATFORM_CONFIG.notificationTemplates,
               ...(parsed.notificationTemplates || {})
@@ -2167,6 +2333,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return MOCK_VERIFICATION_AUDIT_LOGS;
   });
 
+  const [serverVerifiedBadgeMap, setServerVerifiedBadgeMap] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     try {
       localStorage.setItem('acovon_verification_settings', JSON.stringify(verificationSettings));
@@ -2198,6 +2366,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
   }, [verificationAuditLogs]);
+
+  const applyAuthoritativeVerificationPayload = (payload: {
+    settings?: VerificationSettings;
+    records?: CreatorVerificationRecord[];
+    transactions?: VerificationTransaction[];
+    auditLogs?: VerificationAuditLog[];
+    verifiedBadgeMap?: Record<string, boolean>;
+  }) => {
+    if (payload.settings) {
+      setVerificationSettings(payload.settings);
+    }
+    if (Array.isArray(payload.records)) {
+      setCreatorVerificationRecords(payload.records);
+    }
+    if (Array.isArray(payload.transactions)) {
+      setVerificationTransactions(payload.transactions);
+    }
+    if (Array.isArray(payload.auditLogs)) {
+      setVerificationAuditLogs(payload.auditLogs);
+    }
+    if (payload.verifiedBadgeMap && typeof payload.verifiedBadgeMap === 'object') {
+      const badgeMap = payload.verifiedBadgeMap;
+      setServerVerifiedBadgeMap(badgeMap);
+      setCreators(prev =>
+        prev.map(c => {
+          const rec = payload.records?.find(r => r.creatorId === c.id);
+          const isVerifiedNow = Object.prototype.hasOwnProperty.call(badgeMap, c.id)
+            ? Boolean(badgeMap[c.id])
+            : c.isVerified;
+          return {
+            ...c,
+            isVerified: isVerifiedNow,
+            ...(rec
+              ? {
+                  verificationStatus: rec.status,
+                  verificationPurchaseDate: rec.purchaseDate,
+                  verificationExpiresAt: rec.expirationDate,
+                  verificationLastRenewalDate: rec.lastRenewalDate,
+                  verificationPlanName: rec.planName
+                }
+              : {})
+          };
+        })
+      );
+      setCurrentUser(prev => {
+        if (prev.role !== 'creator') return prev;
+        const rec = payload.records?.find(r => r.creatorId === prev.id);
+        const isVerifiedNow = Object.prototype.hasOwnProperty.call(badgeMap, prev.id)
+          ? Boolean(badgeMap[prev.id])
+          : prev.isVerified;
+        return {
+          ...prev,
+          isVerified: isVerifiedNow,
+          ...(rec
+            ? {
+                verificationPurchaseDate: rec.purchaseDate,
+                verificationExpiresAt: rec.expirationDate,
+                verificationLastRenewalDate: rec.lastRenewalDate,
+                verificationPlanName: rec.planName
+              }
+            : {})
+        };
+      });
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/verification/state')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!active || !data || !data.success) return;
+        applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {
+        // Offline / fallback uses strict local verification records
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Personalized Recommendation Engine State
   const [recommendationConfig, setRecommendationConfig] = useState<RecommendationEngineConfig>(() => {
@@ -3419,7 +3668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logoutFromSupabase().catch(() => {});
     setIsAuthenticated(false);
     setActiveRole('fan');
-    setCurrentUser(MOCK_USERS.fan1);
+    setCurrentUser(MOCK_USERS.fan_jordan);
   };
 
   // Sync appearance and language preferences to Supabase when authenticated
@@ -3481,12 +3730,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Single-video feed playback authority
   const [activePlayingVideoId, setActivePlayingVideoId] = useState<string | null>(null);
 
-  // Follow helpers
+  // Follow helpers (strictly false when unauthenticated)
   const isFollowing = (creatorId: string) => {
+    if (!isAuthenticated) return false;
     return following.includes(creatorId);
   };
 
   const toggleFollowCreator = (creatorId: string) => {
+    if (!requireAuth('follow creators')) {
+      return { success: false, isFollowing: false };
+    }
     const alreadyFollowing = following.includes(creatorId);
     const creator = creators.find(c => c.id === creatorId);
 
@@ -3525,9 +3778,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const isPostSaved = (postId: string) => savedPostIds.includes(postId);
+  const isPostSaved = (postId: string) => {
+    if (!isAuthenticated) return false;
+    return savedPostIds.includes(postId);
+  };
 
   const toggleSavePost = (postId: string) => {
+    if (!requireAuth('save posts to your library')) return false;
     const isSaved = savedPostIds.includes(postId);
     if (isSaved) {
       setSavedPostIds(prev => prev.filter(id => id !== postId));
@@ -3539,6 +3796,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const forwardPostInMessage = (postId: string, recipientId: string, customNote?: string) => {
+    if (!requireAuth('share content via ACOVON messaging')) {
+      return { success: false, error: 'Authentication required' };
+    }
     const post = posts.find(p => p.id === postId);
     if (!post) return { success: false, error: 'Post not found' };
 
@@ -3554,19 +3814,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const isPostPurchased = (postId: string) => {
+    if (!isAuthenticated) return false;
     return purchases.some(p => p.postId === postId && p.userId === currentUser.id);
   };
 
   const isSubscribedTo = (creatorId: string) => {
+    if (!isAuthenticated) return false;
     return subscriptions.some(s => s.creatorId === creatorId && s.fanId === currentUser.id && s.status === 'active');
   };
 
   const getSubscriptionTier = (creatorId: string) => {
+    if (!isAuthenticated) return undefined;
     return subscriptions.find(s => s.creatorId === creatorId && s.fanId === currentUser.id && s.status === 'active');
   };
 
   // Post interactions
   const toggleLikePost = (postId: string) => {
+    if (!requireAuth('like this post')) return;
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
         const isLiked = !p.isLiked;
@@ -3580,14 +3844,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const createPost = (newPostData: Omit<Post, 'id' | 'likesCount' | 'commentsCount' | 'createdAt'>) => {
+  const createPost = (newPostData: Omit<Post, 'id' | 'likesCount' | 'commentsCount' | 'createdAt'>): string | undefined => {
     // Role Authorization Guard: Only approved, active creator accounts can create or publish posts
     if (!isCurrentUserApprovedCreator) {
       console.warn('Authorization Denied: Only approved, active creator accounts can publish content.');
-      return;
+      return undefined;
     }
 
-    const postId = `post_${Date.now()}`;
+    const postId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `post_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const nowIso = new Date().toISOString();
+
     const resolvedVideoCountry =
       resolveCountryRecord(newPostData.video_country_id, countries) ||
       resolveCountryRecord(newPostData.country, countries);
@@ -3599,6 +3868,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newPost: Post = {
       ...newPostData,
       id: postId,
+      creatorId: newPostData.creatorId || currentUser.id,
       country: resolvedVideoCountry?.name || newPostData.country || 'United States',
       video_country_id: resolvedVideoCountry?.id || newPostData.video_country_id || 'country_us',
       categories:
@@ -3612,25 +3882,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       likesCount: 0,
       commentsCount: 0,
       createdAt: 'Just now',
+      createdAtIso: nowIso,
+      updatedAt: nowIso.replace('T', ' ').slice(0, 16),
+      version: 1,
+      revisionCount: 1,
+      lastEditedBy: currentUser.id,
       isLiked: false,
+      isDemo: false,
       publicationStatus: newPostData.isDraft ? 'draft' : newPostData.scheduledFor ? 'scheduled' : 'published'
     };
-    setPosts(prev => [newPost, ...prev]);
 
-    // Persist post categories & video country in backend database
-    fetch('/api/posts/register-taxonomy', {
+    // Guard against duplicate IDs in local state
+    setPosts(prev => [newPost, ...prev.filter(p => p.id !== postId)]);
+
+    // Sync selected cover frame back into matching VideoMediaRecords
+    const mediaUpdatesById = new Map(
+      (newPost.media || [])
+        .filter(m => m.type === 'video' && m.videoMediaId && m.thumbnailUrl)
+        .map(m => [m.videoMediaId as string, m])
+    );
+    if (mediaUpdatesById.size > 0) {
+      setVideoMediaRecords(prev =>
+        prev.map(rec => {
+          const matched = mediaUpdatesById.get(rec.id);
+          if (!matched || !matched.thumbnailUrl) return rec;
+          return {
+            ...rec,
+            thumbnailRef: matched.thumbnailUrl,
+            feedPreviewRef: matched.thumbnailUrl,
+            profilePreviewRef: matched.thumbnailUrl,
+            previewFrames:
+              matched.previewFrames && matched.previewFrames.length > 0
+                ? matched.previewFrames
+                : rec.previewFrames
+          };
+        })
+      );
+    }
+
+    // Persist authoritative post record + immutable v1 revision snapshot in backend database
+    fetch('/api/posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         actorId: currentUser.id,
+        actorName: currentUser.name,
         actorRole: currentUser.role,
         isApprovedCreator: isCurrentUserApprovedCreator,
-        postId,
-        creatorId: currentUser.id,
-        categories: newPost.categories,
-        videoCountry: newPost.country
+        post: newPost
       })
-    }).catch(() => {});
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success && data?.post) {
+          const confirmedPost: Post = data.post;
+          setPosts(prev => prev.map(p => (p.id === postId ? confirmedPost : p)));
+          if (data.auditEntry) {
+            setPostAuditLogs(prev => [data.auditEntry, ...prev]);
+          }
+        }
+      })
+      .catch(() => {});
+
+    return postId;
   };
 
   const getPostPurchases = (postId: string): ContentPurchase[] => {
@@ -3694,6 +4008,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const serverUpdatedPost: Post = data.updatedPost;
       setPosts(prev => prev.map(p => (p.id === postId ? { ...p, ...serverUpdatedPost } : p)));
+
+      // Keep associated VideoMediaRecords in sync when a creator changes cover frame or replaces video
+      const updatedFirstVid = serverUpdatedPost.media?.find(m => m.type === 'video');
+      if (updatedFirstVid && updatedFirstVid.thumbnailUrl) {
+        const targetMediaId = updatedFirstVid.videoMediaId || existingPost.media?.[0]?.videoMediaId;
+        if (targetMediaId) {
+          setVideoMediaRecords(prev =>
+            prev.map(rec =>
+              rec.id === targetMediaId
+                ? {
+                    ...rec,
+                    thumbnailRef: updatedFirstVid.thumbnailUrl || rec.thumbnailRef,
+                    feedPreviewRef: updatedFirstVid.thumbnailUrl || rec.feedPreviewRef,
+                    profilePreviewRef: updatedFirstVid.thumbnailUrl || rec.profilePreviewRef,
+                    previewFrames:
+                      updatedFirstVid.previewFrames && updatedFirstVid.previewFrames.length > 0
+                        ? updatedFirstVid.previewFrames
+                        : rec.previewFrames
+                  }
+                : rec
+            )
+          );
+        }
+      }
+
       if (data.auditEntry) {
         setPostAuditLogs(prev => [data.auditEntry, ...prev]);
       }
@@ -3807,8 +4146,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const getPostRevisions = async (
+    postId: string
+  ): Promise<{ success: boolean; revisions: PostRevision[]; currentVersion?: number; error?: string }> => {
+    try {
+      const params = new URLSearchParams({
+        actorId: currentUser.id,
+        actorRole: currentUser.role
+      });
+      const response = await fetch(`/api/posts/${encodeURIComponent(postId)}/revisions?${params.toString()}`, {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, revisions: [], error: data?.error || 'Failed to load post revisions.' };
+      }
+      return {
+        success: true,
+        revisions: Array.isArray(data.revisions) ? data.revisions : [],
+        currentVersion: data.currentVersion
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error loading revisions.';
+      return { success: false, revisions: [], error: msg };
+    }
+  };
+
+  const restorePostRevision = async (
+    postId: string,
+    revisionId: string
+  ): Promise<{ success: boolean; restoredPost?: Post; error?: string }> => {
+    try {
+      const response = await fetch(
+        `/api/posts/${encodeURIComponent(postId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actorId: currentUser.id,
+            actorName: currentUser.name,
+            actorRole: currentUser.role,
+            isApprovedCreator: isCurrentUserApprovedCreator
+          })
+        }
+      );
+      const data = await response.json();
+      if (!response.ok || !data.success || !data.restoredPost) {
+        return { success: false, error: data?.error || 'Failed to restore selected post version.' };
+      }
+      const restored: Post = data.restoredPost;
+      setPosts(prev => prev.map(p => (p.id === postId ? restored : p)));
+      if (data.auditEntry) {
+        setPostAuditLogs(prev => [data.auditEntry, ...prev]);
+      }
+      return { success: true, restoredPost: restored };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error restoring version.';
+      return { success: false, error: msg };
+    }
+  };
+
   // Pay-per-view unlock with genuine server/wallet simulation & commission splitting
   const unlockPPVPost = (postId: string) => {
+    if (!requireAuth('purchase and unlock Pay-Per-View content')) {
+      return { success: false, error: 'Please sign in or create an account to unlock this content.' };
+    }
     const post = posts.find(p => p.id === postId);
     if (!post || !post.ppvPrice) return { success: false, error: 'Post or price not found' };
     if (post.isDeletedByCreator || post.moderationStatus === 'removed') {
@@ -3883,6 +4285,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Subscriptions
   const subscribeToCreator = (creatorId: string, tierId: string) => {
+    if (!requireAuth('subscribe to this creator')) {
+      return { success: false, error: 'Please sign in or create an account to subscribe.' };
+    }
     const creator = creators.find(c => c.id === creatorId);
     if (!creator) return { success: false, error: 'Creator not found' };
     const tier = creator.tiers.find(t => t.id === tierId);
@@ -3958,6 +4363,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Wallet
   const depositFunds = (amount: number) => {
+    if (!requireAuth('add funds to your wallet')) return;
     setCurrentUser(prev => ({
       ...prev,
       walletBalance: Number((prev.walletBalance + amount).toFixed(2))
@@ -3976,6 +4382,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const withdrawFunds = (amount: number, method: string) => {
+    if (!requireAuth('withdraw funds')) {
+      return { success: false, error: 'Authentication required.' };
+    }
     if (amount < commissionSettings.minWithdrawalAmount) {
       return { success: false, error: `Minimum withdrawal amount is $${commissionSettings.minWithdrawalAmount.toFixed(2)}.` };
     }
@@ -4031,6 +4440,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const tipCreator = (creatorId: string, amount: number, note?: string) => {
+    if (!requireAuth('send a tip to this creator')) {
+      return { success: false, error: 'Please sign in or create an account to send a tip.' };
+    }
     const creator = creators.find(c => c.id === creatorId);
     if (!creator) return { success: false, error: 'Creator not found' };
 
@@ -4100,6 +4512,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deliveryDeadline?: string;
     referenceFileUrl?: string;
   }) => {
+    if (!requireAuth('request a custom video')) {
+      return { success: false, error: 'Please sign in or create an account to request a custom video.' };
+    }
     const creator = creators.find(c => c.id === data.creatorId);
     if (!creator) return { success: false, error: 'Creator not found' };
 
@@ -4340,6 +4755,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Paid Video Calling
   const initiateVideoCall = (creatorId: string, spendingLimit: number) => {
+    if (!requireAuth('start a 1-on-1 video call')) {
+      return { success: false, error: 'Please sign in or create an account to start a video call.' };
+    }
     const creator = creators.find(c => c.id === creatorId);
     if (!creator) return { success: false, error: 'Creator not found' };
     if (!creator.isLiveForCalls) return { success: false, error: 'Creator is currently unavailable or busy for live video calls.' };
@@ -4542,6 +4960,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       pricingMode?: 'individual' | 'bundle';
     }
   ) => {
+    if (!requireAuth('send a direct message')) return;
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       senderId: currentUser.id,
@@ -4574,6 +4993,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const unlockPaidMessage = (otherUserId: string, messageId: string, attachmentId?: string) => {
+    if (!requireAuth('unlock paid messages')) {
+      return { success: false, error: 'Authentication required.' };
+    }
     const chatList = messages[otherUserId] || [];
     const msg = chatList.find(m => m.id === messageId);
     if (!msg) return { success: false, error: 'Message not found' };
@@ -4972,6 +5394,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const applyToBecomeCreator = (data: CreatorApplicationData) => {
+    if (!requireAuth('apply to become a creator')) {
+      return { success: false, error: 'Please sign in or create an account first.' };
+    }
     if (!platformConfig.allowCreatorApplications) {
       return { success: false, error: 'Creator applications are currently paused by platform administration.' };
     }
@@ -5707,8 +6132,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Unauthorized: Platform configuration requires Super Admin or Admin role.' };
     }
 
+    const dedupeStringList = (items?: string[]) => {
+      if (!Array.isArray(items)) return items;
+      const seen = new Set<string>();
+      const result: string[] = [];
+      for (const raw of items) {
+        if (typeof raw !== 'string') continue;
+        const trimmed = raw.trim();
+        const norm = trimmed.toLowerCase();
+        if (!norm || seen.has(norm)) continue;
+        seen.add(norm);
+        result.push(trimmed);
+      }
+      return result;
+    };
+
+    const sanitizedUpdates: Partial<PlatformConfig> = {
+      ...updates,
+      ...(updates.contentCategories ? { contentCategories: dedupeStringList(updates.contentCategories) } : {}),
+      ...(updates.videoCategories ? { videoCategories: dedupeStringList(updates.videoCategories) } : {}),
+      ...(updates.livestreamCategories ? { livestreamCategories: dedupeStringList(updates.livestreamCategories) } : {})
+    };
+
     setPlatformConfig(prev => {
-      const next = { ...prev, ...updates };
+      const next = { ...prev, ...sanitizedUpdates };
       return next;
     });
 
@@ -6090,12 +6537,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const canUserViewStatus = (status: CreatorStatus, userId?: string): { canView: boolean; reason?: 'follower_only' | 'subscriber_only' | 'tier_only' } => {
-    const user = userId ? (users[userId] || creators.find(c => c.id === userId) || currentUser) : currentUser;
-    if (user.id === status.creatorId || user.role === 'admin' || user.role === 'moderator') {
+    if (status.audience === 'public') {
       return { canView: true };
     }
 
-    if (status.audience === 'public') {
+    if (!userId && !isAuthenticated) {
+      if (status.audience === 'followers') return { canView: false, reason: 'follower_only' };
+      if (status.audience === 'selected_plan') return { canView: false, reason: 'tier_only' };
+      return { canView: false, reason: 'subscriber_only' };
+    }
+
+    const user = userId ? (users[userId] || creators.find(c => c.id === userId) || currentUser) : currentUser;
+    if (user.id === status.creatorId || user.role === 'admin' || user.role === 'moderator') {
       return { canView: true };
     }
 
@@ -6112,9 +6565,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { canView: false, reason: 'subscriber_only' };
     }
 
-    if (status.audience === 'selected_plan') {
+    if (status.audience === 'selected_plan' || status.audience === 'tier_specific') {
       const activeSub = subscriptions.find(s => s.fanId === user.id && s.creatorId === status.creatorId && s.status === 'active');
-      const allowedTiers = status.allowedTierIds || [];
+      const allowedTiers = status.allowedTierIds || (status.allowedTierId ? [status.allowedTierId] : []);
       if (activeSub && (allowedTiers.length === 0 || allowedTiers.includes(activeSub.tierId))) {
         return { canView: true };
       }
@@ -6127,7 +6580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const publishStatus = (
     statusData: Omit<CreatorStatus, 'id' | 'createdAt' | 'expiresAt' | 'viewsCount' | 'uniqueViews' | 'reactions' | 'replies'>
   ): { success: boolean; error?: string; status?: CreatorStatus } => {
-    const isCreatorRole = currentUser.role === 'creator' || activeRole === 'creator';
+    const isCreatorRole = isAuthenticated && (currentUser.role === 'creator' || activeRole === 'creator');
     if (!isCreatorRole) {
       return { success: false, error: 'Only approved creator accounts can publish stories.' };
     }
@@ -6175,6 +6628,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markStatusViewed = (statusId: string) => {
     setViewedStatusIds(prev => prev.includes(statusId) ? prev : [...prev, statusId]);
 
+    if (!isAuthenticated) {
+      const target = statuses.find(s => s.id === statusId);
+      if (target) {
+        trackEngagementEvent({
+          eventType: 'creator_status_viewed',
+          contentType: 'status',
+          contentId: statusId,
+          creatorId: target.creatorId,
+          sourceSurface: 'status'
+        });
+      }
+      return;
+    }
+
     setStatuses(prev => prev.map(s => {
       if (s.id === statusId) {
         const alreadyViewed = s.uniqueViews.some(v => v.userId === currentUser.id);
@@ -6196,6 +6663,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const reactToStatus = (statusId: string, emoji: string): { success: boolean; error?: string } => {
+    if (!requireAuth('react to stories')) return { success: false, error: 'Authentication required' };
     const targetStatus = statuses.find(s => s.id === statusId);
     if (!targetStatus) return { success: false, error: 'Status not found' };
 
@@ -6235,6 +6703,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const replyToStatus = (statusId: string, replyText: string): { success: boolean; error?: string } => {
+    if (!requireAuth('reply to stories')) return { success: false, error: 'Authentication required' };
     if (!replyText.trim()) return { success: false, error: 'Reply text cannot be empty' };
     const targetStatus = statuses.find(s => s.id === statusId);
     if (!targetStatus) return { success: false, error: 'Status not found' };
@@ -6302,6 +6771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const reportStatus = (statusId: string, reason: string): { success: boolean } => {
+    if (!requireAuth('report this story')) return { success: false };
     setStatuses(prev => prev.map(s => s.id === statusId ? { ...s, isReported: true, reportReason: reason } : s));
     const newReport: ModerationReport = {
       id: `report_status_${Date.now()}`,
@@ -6327,15 +6797,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Acovon Live Handlers
   const canUserAccessLivestream = (stream: Livestream, userId?: string) => {
+    // Mode 1: Public
+    if (stream.accessMode === 'public') {
+      return { canAccess: true };
+    }
+
+    // Guests cannot bypass gated livestreams
+    if (!userId && !isAuthenticated) {
+      if (stream.accessMode === 'all_subscribers') {
+        return { canAccess: false, reason: 'subscription_required' as const };
+      }
+      if (stream.accessMode === 'selected_plan') {
+        const allowedTiers = stream.allowedTierIds || [];
+        const streamCreator = creators.find(c => c.id === stream.creatorId);
+        const tierNames = streamCreator?.tiers
+          .filter(t => allowedTiers.includes(t.id))
+          .map(t => t.name) || ['Eligible Tier'];
+        return {
+          canAccess: false,
+          reason: 'tier_upgrade_required' as const,
+          requiredTierNames: tierNames
+        };
+      }
+      if (stream.accessMode === 'pay_per_view') {
+        return {
+          canAccess: false,
+          reason: 'ppv_purchase_required' as const,
+          price: stream.ppvTicketPrice || 9.99
+        };
+      }
+      return { canAccess: false, reason: 'invite_required' as const };
+    }
+
     const user = userId ? (users[userId] || creators.find(c => c.id === userId) || currentUser) : currentUser;
     
     // Creator of the stream or platform staff always has access
     if (user.id === stream.creatorId || user.role === 'admin' || user.role === 'moderator') {
-      return { canAccess: true };
-    }
-
-    // Mode 1: Public
-    if (stream.accessMode === 'public') {
       return { canAccess: true };
     }
 
@@ -6393,6 +6890,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const purchaseLivestreamTicket = (streamId: string) => {
+    if (!requireAuth('purchase a livestream ticket')) {
+      return { success: false, error: 'Please sign in or create an account to purchase livestream tickets.' };
+    }
     const stream = livestreams.find(s => s.id === streamId);
     if (!stream) return { success: false, error: 'Livestream not found' };
     const price = stream.ppvTicketPrice || 9.99;
@@ -6467,6 +6967,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const unlockInviteStream = (streamId: string, passcode: string) => {
+    if (!requireAuth('join an invite-only livestream')) {
+      return { success: false, error: 'Please sign in or create an account first.' };
+    }
     const stream = livestreams.find(s => s.id === streamId);
     if (!stream) return { success: false, error: 'Livestream not found' };
     if (!stream.privatePasscode) {
@@ -6487,6 +6990,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     amountPaid: number = 0,
     giftData?: VirtualGift
   ) => {
+    if (!requireAuth('participate in livestream chat and gifts')) {
+      return { success: false, error: 'Please sign in or create an account to chat or send gifts.' };
+    }
     const stream = livestreams.find(s => s.id === streamId);
     if (!stream) return { success: false, error: 'Livestream not found' };
 
@@ -6754,6 +7260,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const canUserAccessReplay = (stream: Livestream, userId?: string) => {
+    if (!userId && !isAuthenticated) {
+      if (!stream.recordingSettings || stream.recordingSettings.mode === 'disabled' || stream.recordingStatus === 'removed') {
+        return { canAccess: false, reason: 'recording_disabled' as const };
+      }
+      if (stream.isReplayPublished === false || stream.recordingStatus === 'unpublished') {
+        return { canAccess: false, reason: 'recording_unpublished' as const };
+      }
+      if (stream.recordingSettings.mode === 'paid' || stream.recordingSettings.replayPermission === 'paid') {
+        return {
+          canAccess: false,
+          reason: 'replay_purchase_required' as const,
+          price: stream.recordingSettings.price || 9.99
+        };
+      }
+      const perm = stream.recordingSettings.replayPermission || 'public';
+      if (perm === 'public') return { canAccess: true };
+      if (perm === 'followers') return { canAccess: false, reason: 'follower_required' as const };
+      if (perm === 'subscribers') return { canAccess: false, reason: 'subscription_required' as const };
+      if (perm === 'selected_plan') {
+        const allowedTiers = stream.recordingSettings.allowedReplayTierIds || stream.allowedTierIds || [];
+        const streamCreator = creators.find(c => c.id === stream.creatorId);
+        const tierNames = streamCreator?.tiers
+          .filter(t => allowedTiers.includes(t.id))
+          .map(t => t.name) || ['VIP Tier'];
+        return {
+          canAccess: false,
+          reason: 'tier_upgrade_required' as const,
+          requiredTierNames: tierNames
+        };
+      }
+      return { canAccess: false, reason: 'invite_required' as const };
+    }
+
     const user = userId ? (users[userId] || creators.find(c => c.id === userId) || currentUser) : currentUser;
 
     // Creator of stream or admin/moderator always has full replay access
@@ -6841,6 +7380,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const purchaseLivestreamRecording = (streamId: string): { success: boolean; error?: string } => {
+    if (!requireAuth('unlock this official livestream recording')) {
+      return { success: false, error: 'Please sign in or create an account to purchase this recording.' };
+    }
     const stream = livestreams.find(s => s.id === streamId);
     if (!stream) return { success: false, error: 'Livestream recording not found.' };
     if (!stream.recordingSettings || stream.recordingSettings.mode === 'disabled') {
@@ -7041,12 +7583,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createLivestreamClip = (streamId: string, clipTitle: string) => {
+    if (!requireAuth('create a livestream highlight clip')) {
+      return { success: false, error: 'Authentication required' };
+    }
     const stream = livestreams.find(s => s.id === streamId);
     if (!stream) return { success: false, error: 'Livestream not found' };
 
     const defaultTitle = `${stream.creatorName} Live Highlight · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const sanitizedTitle = clipTitle.trim() || defaultTitle;
-    const clipId = `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const clipId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `clip_${crypto.randomUUID()}`
+        : `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const nowIso = new Date().toISOString();
 
     const newClipPost: Post = {
       id: clipId,
@@ -7073,11 +7622,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isLiked: false,
       isPinned: false,
       createdAt: 'Just now',
-      tags: ['Highlight', 'Clip', 'AcovonLive', stream.category]
+      createdAtIso: nowIso,
+      version: 1,
+      revisionCount: 1,
+      tags: ['Highlight', 'Clip', 'AcovonLive', stream.category],
+      categories: [stream.category || 'Entertainment']
     };
 
-    // Save clip to creator's content gallery (posts)
-    setPosts(prev => [newClipPost, ...prev]);
+    // Save clip to creator's content gallery (posts) and persist permanently to backend
+    setPosts(prev => [newClipPost, ...prev.filter(p => p.id !== clipId)]);
+    fetch('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actorId: stream.creatorId,
+        actorName: stream.creatorName,
+        actorRole: 'creator',
+        isApprovedCreator: true,
+        post: newClipPost
+      })
+    }).catch(() => {});
 
     // Send a live chat notification event
     const chatMsg: LiveChatMessage = {
@@ -7167,6 +7731,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const voteLivePoll = (streamId: string, pollId: string, optionId: string) => {
+    if (!isAuthenticated) {
+      openGuestAuthPrompt('vote in live polls');
+      return { success: false, error: 'Please log in to vote.' };
+    }
     let success = false;
     setLivestreams(prev => prev.map(s => {
       if (s.id === streamId && s.activePoll && s.activePoll.id === pollId) {
@@ -7493,10 +8061,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanFormat = (params.format || params.mimeType || 'MP4').replace('video/', '').toUpperCase();
     const contentHash = `hash_${params.creatorId}_${params.fileName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${params.fileSize}_${Math.round(params.durationSeconds || 60)}`;
 
-    // 1. Check Duplicate Upload Prevention (Content Hash Deduplication)
+    // 1. Check Duplicate Upload Prevention ONLY when exact URL also matches (never mutate existing media URLs!)
     if (videoProcessingConfig.enableDeduplication && !params.simulateFailure) {
       const existingRecord = videoMediaRecords.find(
-        r => r.contentHash === contentHash && r.processingStatus === 'ready'
+        r =>
+          r.contentHash === contentHash &&
+          r.processingStatus === 'ready' &&
+          (!params.sourceUrl || r.originalStorageRef === params.sourceUrl)
       );
       if (existingRecord) {
         const existingJob: VideoProcessingJob =
@@ -7530,14 +8101,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const updatedRecord: VideoMediaRecord = {
           ...existingRecord,
-          reusedCount: (existingRecord.reusedCount || 1) + 1,
-          ...(params.sourceUrl
-            ? {
-                originalStorageRef: params.sourceUrl,
-                streamingManifestRef: params.sourceUrl,
-                masterPlaylistUrl: params.sourceUrl
-              }
-            : {})
+          reusedCount: (existingRecord.reusedCount || 1) + 1
         };
 
         setVideoMediaRecords(prev =>
@@ -7567,18 +8131,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       orientation === 'square' ? '1:1' : orientation === 'portrait' ? '9:16' : '16:9';
 
     const ladder = computeAdaptiveLadder(w, h);
-    const defaultThumb =
-      params.thumbnailUrl ||
-      'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
+    const playableSourceUrl =
+      params.sourceUrl &&
+      (params.sourceUrl.startsWith('http') ||
+        params.sourceUrl.startsWith('blob:') ||
+        params.sourceUrl.startsWith('/'))
+        ? params.sourceUrl
+        : `/videos/sample2.mp4`;
+
+    const sampleMeta = getLocalSampleThumbnails(playableSourceUrl);
+    const defaultThumb = params.thumbnailUrl || sampleMeta?.thumbnailUrl || '';
+    const resolvedPreviewFrames =
+      params.previewFrames && params.previewFrames.length > 0
+        ? params.previewFrames
+        : sampleMeta?.previewFrames || (defaultThumb ? [defaultThumb] : []);
 
     const retentionDate = new Date();
     retentionDate.setDate(retentionDate.getDate() + videoProcessingConfig.originalFileRetentionDays);
-
-    const playableSourceUrl =
-      params.sourceUrl &&
-      (params.sourceUrl.startsWith('http') || params.sourceUrl.startsWith('blob:'))
-        ? params.sourceUrl
-        : `/videos/sample2.mp4`;
 
     const newRecord: VideoMediaRecord = {
       id: mediaId,
@@ -7604,7 +8173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       streamingManifestRef: playableSourceUrl,
       masterPlaylistUrl: playableSourceUrl,
       thumbnailRef: defaultThumb,
-      previewFrames: params.previewFrames && params.previewFrames.length > 0 ? params.previewFrames : [defaultThumb],
+      previewFrames: resolvedPreviewFrames,
       feedPreviewRef: defaultThumb,
       profilePreviewRef: defaultThumb,
       statusPreviewRef: orientation === 'portrait' ? defaultThumb : undefined,
@@ -7865,9 +8434,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Check authorization if linked to a gated post
     if (post) {
-      const isCreatorOwner = currentUser.id === post.creatorId;
-      const isAdminViewer = activeRole === 'admin';
+      const isCreatorOwner = isAuthenticated && currentUser.id === post.creatorId;
+      const isAdminViewer = isAuthenticated && (activeRole === 'admin' || currentUser.role === 'admin' || currentUser.role === 'moderator');
       const isPublic = post.visibility === 'public';
+      const isFollowersOk = post.visibility === 'followers' && isAuthenticated && (following.includes(post.creatorId) || isSubscribedTo(post.creatorId));
       const isSub = isSubscribedTo(post.creatorId);
       const isPurchased = isPostPurchased(post.id);
 
@@ -7875,10 +8445,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isCreatorOwner ||
         isAdminViewer ||
         isPublic ||
+        isFollowersOk ||
         (post.visibility === 'subscribers' && isSub) ||
         (post.visibility === 'pay_per_view' && isPurchased);
 
-      if (!canFullStream && !post.previewDurationSeconds) {
+      if (!canFullStream && !(post.visibility === 'pay_per_view' && post.previewDurationSeconds)) {
         return {
           authorized: false,
           signedUrl: '',
@@ -7887,6 +8458,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           reason:
             post.visibility === 'pay_per_view'
               ? 'Pay-Per-View unlock required for full-length adaptive stream.'
+              : post.visibility === 'followers'
+              ? 'Follow this creator to stream this video.'
+              : post.visibility === 'private'
+              ? 'Private post.'
               : 'Active creator subscription required for full-length adaptive stream.'
         };
       }
@@ -7894,7 +8469,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const effectiveRawUrl = rawUrl || '/videos/sample1.mp4';
     const separator = effectiveRawUrl.includes('?') ? '&' : '?';
-    const tokenHash = btoa(`${currentUser.id}:${postOrMediaId}:${chosenRes}`).slice(0, 16);
+    const actorTokenId = isAuthenticated ? currentUser.id : anonymousSessionId;
+    const tokenHash = btoa(`${actorTokenId}:${postOrMediaId}:${chosenRes}`).slice(0, 16);
     const signedUrl = `${effectiveRawUrl}${separator}acv_res=${chosenRes}&acv_codec=${encodeURIComponent(chosenCodec)}&acv_token=${tokenHash}`;
 
     return {
@@ -7977,14 +8553,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!creatorIdOrUsername) return false;
 
     // 1. Strict Role Guard: Fans or non-creators can NEVER display the creator verification badge
-    const matchedFanUser = Object.values(users).find(
+    const matchedNonCreatorUser = Object.values(users).find(
       u => u.id === creatorIdOrUsername || u.username === creatorIdOrUsername || u.name === creatorIdOrUsername
     );
-    if (matchedFanUser && matchedFanUser.role === 'fan') {
+    if (matchedNonCreatorUser && matchedNonCreatorUser.role !== 'creator') {
       return false;
     }
 
-    // 2. Match Creator Profile
+    // 2. Match Registered Creator Profile
     const creator = creators.find(
       c => c.id === creatorIdOrUsername || c.username === creatorIdOrUsername || c.name === creatorIdOrUsername
     );
@@ -7992,22 +8568,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    // 3. Check Central Verification Record
-    const record = creatorVerificationRecords.find(r => r.creatorId === creator.id);
-    if (record) {
-      if (record.status !== 'verified') {
-        return false;
-      }
-      if (record.expirationDate) {
-        const expTime = new Date(record.expirationDate.replace(' ', 'T')).getTime();
-        if (!isNaN(expTime) && expTime <= Date.now()) {
-          return false;
-        }
-      }
-      return true;
+    // 3. Authoritative Backend Badge Map Check (if synced from backend authority)
+    if (
+      Object.prototype.hasOwnProperty.call(serverVerifiedBadgeMap, creator.id) &&
+      !serverVerifiedBadgeMap[creator.id]
+    ) {
+      return false;
     }
 
-    return Boolean(creator.isVerified && creator.verificationStatus !== 'suspended' && creator.verificationStatus !== 'revoked');
+    // 4. Strict Central Verification Record Lifecycle Validation
+    const record = creatorVerificationRecords.find(r => r.creatorId === creator.id);
+    if (!record || record.status !== 'verified') {
+      return false;
+    }
+
+    // 5. Expiration Guard
+    if (record.expirationDate) {
+      const expTime = new Date(record.expirationDate.replace(' ', 'T')).getTime();
+      if (!isNaN(expTime) && expTime <= Date.now()) {
+        return false;
+      }
+    }
+
+    // 6. Confirmed Payment Guard (where fee > 0) or explicit Admin restoration
+    if (verificationSettings.price > 0) {
+      const hasConfirmedPayment = verificationTransactions.some(
+        t =>
+          t.creatorId === creator.id &&
+          t.paymentStatus === 'completed' &&
+          t.refundStatus !== 'completed'
+      );
+      const restoredByAdmin = Boolean(
+        (record.statusReason && record.statusReason.toLowerCase().includes('admin')) ||
+          verificationAuditLogs.some(
+            l =>
+              l.creatorId === creator.id &&
+              l.newStatus === 'verified' &&
+              ['super_admin', 'admin', 'moderator', 'finance_admin'].includes(l.adminRole)
+          )
+      );
+      if (!hasConfirmedPayment && !restoredByAdmin) {
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const logVerificationAudit = (entry: Omit<VerificationAuditLog, 'id' | 'timestamp'>) => {
@@ -8184,10 +8789,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const exists = prev.some(r => r.creatorId === creator.id);
         return exists ? prev.map(r => (r.creatorId === creator.id ? updatedRecord : r)) : [updatedRecord, ...prev];
       });
+      setServerVerifiedBadgeMap(prev => ({ ...prev, [creator.id]: false }));
       syncCreatorBlueBadgeState(creator.id, 'payment_pending', {
         purchaseDate: nowStr,
         planName: verificationSettings.planName
       });
+      void fetch('/api/verification/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorId: creator.id,
+          paymentProvider: options.paymentProvider,
+          idempotencyKey: idemKey,
+          isRenewal: options.isRenewal,
+          simulateOutcome: outcome
+        })
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+          if (data?.success) applyAuthoritativeVerificationPayload(data);
+        })
+        .catch(() => {});
 
       const pendingNotif: AppNotification = {
         id: `notif_verif_pend_${Date.now()}`,
@@ -8282,6 +8904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === creator.id);
       return exists ? prev.map(r => (r.creatorId === creator.id ? verifiedRecord : r)) : [verifiedRecord, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [creator.id]: true }));
 
     syncCreatorBlueBadgeState(creator.id, 'verified', {
       purchaseDate: verifiedRecord.purchaseDate,
@@ -8289,6 +8912,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastRenewalDate: verifiedRecord.lastRenewalDate,
       planName: verificationSettings.planName
     });
+
+    void fetch('/api/verification/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        creatorId: creator.id,
+        paymentProvider: options.paymentProvider,
+        idempotencyKey: idemKey,
+        isRenewal: options.isRenewal,
+        simulateOutcome: outcome
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: 'system_payment_webhook',
@@ -8372,12 +9012,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === tx.creatorId);
       return exists ? prev.map(r => (r.creatorId === tx.creatorId ? updatedRecord : r)) : [updatedRecord, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [tx.creatorId]: true }));
 
     syncCreatorBlueBadgeState(tx.creatorId, 'verified', {
       purchaseDate: updatedRecord.purchaseDate || nowStr,
       expiresAt: expirationDate,
       planName: updatedRecord.planName
     });
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'confirm_payment',
+        transactionId,
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8441,6 +9099,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setVerificationSettings(nextSettings);
 
+    void fetch('/api/verification/admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel,
+        updates
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
+
     logVerificationAudit({
       adminId: currentUser.id,
       adminName: currentUser.name,
@@ -8495,8 +9169,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === creatorId);
       return exists ? prev.map(r => (r.creatorId === creatorId ? updated : r)) : [updated, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [creatorId]: false }));
 
     syncCreatorBlueBadgeState(creatorId, 'suspended');
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'suspend',
+        creatorId,
+        reason: reason.trim(),
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8564,8 +9257,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === creatorId);
       return exists ? prev.map(r => (r.creatorId === creatorId ? updated : r)) : [updated, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [creatorId]: true }));
 
     syncCreatorBlueBadgeState(creatorId, 'verified');
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'restore',
+        creatorId,
+        reason: reason.trim(),
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8636,8 +9348,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === creatorId);
       return exists ? prev.map(r => (r.creatorId === creatorId ? updated : r)) : [updated, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [creatorId]: false }));
 
     syncCreatorBlueBadgeState(creatorId, 'revoked');
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'revoke',
+        creatorId,
+        reason: reason.trim(),
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8737,6 +9468,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCreatorVerificationRecords(prev =>
           prev.map(r => (r.creatorId === tx.creatorId ? suspendedRecord : r))
         );
+        setServerVerifiedBadgeMap(prev => ({ ...prev, [tx.creatorId]: false }));
         syncCreatorBlueBadgeState(tx.creatorId, 'suspended');
       }
     } else if (refundStatus === 'completed') {
@@ -8784,9 +9516,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCreatorVerificationRecords(prev =>
           prev.map(r => (r.creatorId === tx.creatorId ? revokedByRefund : r))
         );
+        setServerVerifiedBadgeMap(prev => ({ ...prev, [tx.creatorId]: false }));
         syncCreatorBlueBadgeState(tx.creatorId, 'not_verified');
       }
     }
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'refund',
+        transactionId,
+        refundStatus,
+        reason: reason.trim(),
+        keepBadgeAuthorizedReason: keepBadgeAuthorizedReason?.trim(),
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8846,8 +9599,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const exists = prev.some(r => r.creatorId === creatorId);
       return exists ? prev.map(r => (r.creatorId === creatorId ? updated : r)) : [updated, ...prev];
     });
+    setServerVerifiedBadgeMap(prev => ({ ...prev, [creatorId]: false }));
 
     syncCreatorBlueBadgeState(creatorId, nextStatus, { expiresAt: nowStr });
+
+    void fetch('/api/verification/admin/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType: 'expire',
+        creatorId,
+        adminId: currentUser.id,
+        adminName: currentUser.name,
+        adminRole: activeAdminPermissionLevel
+      })
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data?.success) applyAuthoritativeVerificationPayload(data);
+      })
+      .catch(() => {});
 
     logVerificationAudit({
       adminId: currentUser.id,
@@ -8875,32 +9646,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
 
     return { success: true };
-  };
-
-  const resetCreatorVerificationForTest = (
-    creatorId: string,
-    targetStatus: PaidVerificationStatus = 'not_verified'
-  ) => {
-    const existing = getCreatorVerificationRecord(creatorId);
-    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    const updated: CreatorVerificationRecord = {
-      ...existing,
-      status: targetStatus,
-      expirationDate:
-        targetStatus === 'renewal_required' || targetStatus === 'expired' ? nowStr : existing.expirationDate,
-      statusReason:
-        targetStatus === 'not_verified'
-          ? undefined
-          : `Switched state to ${targetStatus} for interactive verification workflow testing.`,
-      updatedAt: nowStr
-    };
-
-    setCreatorVerificationRecords(prev => {
-      const exists = prev.some(r => r.creatorId === creatorId);
-      return exists ? prev.map(r => (r.creatorId === creatorId ? updated : r)) : [updated, ...prev];
-    });
-
-    syncCreatorBlueBadgeState(creatorId, targetStatus);
   };
 
   // ============================================================================
@@ -8975,8 +9720,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return true;
     }
 
-    // 2. Free follower-only posts WHEN the fan follows the creator
+    // 2. Free follower-only posts WHEN the fan is signed in and follows the creator
     if (post.visibility === 'followers' && (!post.ppvPrice || post.ppvPrice === 0)) {
+      if (!isAuthenticated) return false;
       const isFollowedInMainState = following.includes(post.creatorId);
       const hasHighPersonaCreatorAffinity = (profile?.creatorAffinityScores?.[post.creatorId] || 0) >= 65;
       return isFollowedInMainState || hasHighPersonaCreatorAffinity || post.creatorId === currentUser.id;
@@ -9006,10 +9752,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sourceSurface?: EngagementSurface | string;
     surface?: EngagementSurface | string;
   }) => {
-    const sw = recommendationConfig.signalPointWeights;
     const effectiveCompletion = params.completionPercentage ?? params.completionPercent;
     const effectiveContentId = params.contentId || params.postId;
     const effectiveSurface = (params.sourceSurface || params.surface || 'for_you') as EngagementSurface;
+
+    // Privacy-conscious guest analytics: record anonymous views, watch duration & searches
+    // via anonymousSessionId without creating accounts or mutating registered user profiles
+    if (!isAuthenticated) {
+      fetch('/api/analytics/guest-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          anonymousSessionId,
+          eventType: params.eventType,
+          contentType: params.contentType,
+          contentId: effectiveContentId,
+          creatorId: params.creatorId,
+          category: params.category,
+          searchQuery: params.searchQuery,
+          watchDurationSeconds: params.watchDurationSeconds,
+          completionPercentage: effectiveCompletion,
+          sourceSurface: effectiveSurface
+        })
+      }).catch(() => {});
+      return;
+    }
+
+    const sw = recommendationConfig.signalPointWeights;
     const effectiveContentType =
       params.contentType ||
       (params.eventType.includes('video')
@@ -9432,7 +10202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Creator Affinity (0 - 100) — Note: Paid blue verification badge NEVER inflates organic ranking!
       const rawCreatorScore = profile.creatorAffinityScores[post.creatorId] || 0;
-      const isFollowed = following.includes(post.creatorId);
+      const isFollowed = isFollowing(post.creatorId);
       const isSubbed = isSubscribedTo(post.creatorId);
       const creatorAffinity = Math.max(
         5,
@@ -9468,7 +10238,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 4. Engagement Signals (0 - 100)
       const isShowMore = profile.showMorePostIds.includes(post.id);
-      const isSaved = savedPostIds.includes(post.id);
+      const isSaved = isPostSaved(post.id);
       const engagementRateScore = Math.min(45, (post.likesCount / 25) + (post.commentsCount / 3));
       const engagementLikelihood = Math.max(
         15,
@@ -9678,7 +10448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const eligibleCreators = creators.filter(c => {
       if (c.accountStatus === 'suspended' || c.accountStatus === 'banned') return false;
       if (profile.hiddenCreatorIds.includes(c.id)) return false;
-      if (c.id === currentUser.id) return false;
+      if (isAuthenticated && c.id === currentUser.id) return false;
       if (
         categoryFilter &&
         categoryFilter !== 'All Categories' &&
@@ -9693,7 +10463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const catScore = profile.categoryScores[creator.category] || 0;
       const recentCatScore = profile.recentCategoryScores[creator.category] || 0;
       const creatorAff = profile.creatorAffinityScores[creator.id] || 0;
-      const isFollowed = following.includes(creator.id);
+      const isFollowed = isFollowing(creator.id);
       const isSubbed = isSubscribedTo(creator.id);
 
       // Engagement quality score (Note: paid verification badge does NOT boost ranking score)
@@ -9744,6 +10514,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     feedbackType: 'not_interested' | 'show_less' | 'show_more' | 'hide_creator' | 'report_content',
     details?: string
   ): { success: boolean; message: string } => {
+    if (!requireAuth('personalize your feed or report content')) {
+      return { success: false, message: 'Sign in required.' };
+    }
     const targetPost = posts.find(p => p.id === postId);
     if (!targetPost) {
       return { success: false, message: 'Post not found.' };
@@ -11222,24 +11995,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ============================================================================
   // GLOBAL CATEGORIES & COUNTRIES DISCOVERY DATABASE STATE & ACTIONS
   // ============================================================================
+  const dedupeCategoryRecords = (list: CategoryRecord[]): CategoryRecord[] => {
+    const idMap = new Map<string, CategoryRecord>();
+    for (const c of list) {
+      if (c && c.id && c.name) {
+        idMap.set(c.id, { ...c, name: c.name.trim() });
+      }
+    }
+    const seenNames = new Set<string>();
+    const unique: CategoryRecord[] = [];
+    for (const c of Array.from(idMap.values()).sort((a, b) => a.display_order - b.display_order)) {
+      const norm = c.name.trim().toLowerCase();
+      if (!norm || seenNames.has(norm)) continue;
+      seenNames.add(norm);
+      unique.push(c);
+    }
+    return unique;
+  };
+
+  const [deletedCategoryIds, setDeletedCategoryIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('acovon_deleted_category_ids_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
   const [categories, setCategories] = useState<CategoryRecord[]>(() => {
+    let deletedSet = new Set<string>();
+    try {
+      const savedDel = localStorage.getItem('acovon_deleted_category_ids_v1');
+      if (savedDel) {
+        const parsedDel = JSON.parse(savedDel);
+        if (Array.isArray(parsedDel)) {
+          deletedSet = new Set(parsedDel.filter((id): id is string => typeof id === 'string'));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     try {
       const saved = localStorage.getItem('acovon_official_categories_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           const map = new Map<string, CategoryRecord>();
-          OFFICIAL_CATEGORIES.forEach(c => map.set(c.id, { ...c }));
-          parsed.forEach((c: CategoryRecord) => {
-            if (c && c.id && c.name) map.set(c.id, c);
+          OFFICIAL_CATEGORIES.forEach(c => {
+            if (!deletedSet.has(c.id)) {
+              map.set(c.id, { ...c });
+            }
           });
-          return Array.from(map.values()).sort((a, b) => a.display_order - b.display_order);
+          parsed.forEach((c: CategoryRecord) => {
+            if (c && c.id && c.name && !deletedSet.has(c.id)) {
+              map.set(c.id, c);
+            }
+          });
+          return dedupeCategoryRecords(Array.from(map.values()));
         }
       }
     } catch {
       // fallback
     }
-    return [...OFFICIAL_CATEGORIES].sort((a, b) => a.display_order - b.display_order);
+    return dedupeCategoryRecords(OFFICIAL_CATEGORIES.filter(c => !deletedSet.has(c.id)));
   });
 
   const [countries, setCountries] = useState<CountryRecord[]>(() => {
@@ -11275,6 +12100,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
+      localStorage.setItem('acovon_deleted_category_ids_v1', JSON.stringify(deletedCategoryIds));
+    } catch {
+      // ignore
+    }
+  }, [deletedCategoryIds]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem('acovon_official_countries_v1', JSON.stringify(countries));
     } catch {
       // ignore
@@ -11288,8 +12121,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (!active || !data || !data.success) return;
-        if (Array.isArray(data.categories) && data.categories.length > 0) {
-          setCategories(data.categories);
+        const serverDeletedIds: string[] = Array.isArray(data.deletedCategoryIds)
+          ? data.deletedCategoryIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [];
+        const deletedSet = new Set<string>(serverDeletedIds);
+        if (Array.isArray(data.deletedCategoryIds)) {
+          setDeletedCategoryIds(serverDeletedIds);
+        }
+        if (Array.isArray(data.categories)) {
+          setCategories(dedupeCategoryRecords(data.categories.filter((c: CategoryRecord) => c && !deletedSet.has(c.id))));
         }
         if (Array.isArray(data.countries) && data.countries.length > 0) {
           setCountries(data.countries);
@@ -11316,7 +12156,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (
           (data.postCountries && Object.keys(data.postCountries).length > 0) ||
-          (data.postCategories && Object.keys(data.postCategories).length > 0)
+          (data.postCategories && Object.keys(data.postCategories).length > 0) ||
+          deletedSet.size > 0
         ) {
           const pcMap = (data.postCountries || {}) as Record<
             string,
@@ -11324,6 +12165,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           >;
           const pCatMap = (data.postCategories || {}) as Record<string, string[]>;
           const catsList: CategoryRecord[] = Array.isArray(data.categories) ? data.categories : OFFICIAL_CATEGORIES;
+          const activeNamesLower = new Set(catsList.map(c => c.name.trim().toLowerCase()));
+          const deletedBaselineNamesLower = new Set(
+            OFFICIAL_CATEGORIES.filter(c => deletedSet.has(c.id) && !activeNamesLower.has(c.name.trim().toLowerCase())).map(
+              c => c.name.trim().toLowerCase()
+            )
+          );
 
           setPosts(prev =>
             prev.map(p => {
@@ -11338,14 +12185,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
               }
               if (Array.isArray(catIds) && catIds.length > 0) {
-                const resolvedNames = catIds
+                const filteredIds = catIds.filter(id => !deletedSet.has(id));
+                const resolvedNames = filteredIds
                   .map(id => catsList.find(c => c.id === id)?.name)
                   .filter((n): n is string => Boolean(n));
-                if (resolvedNames.length > 0) {
+                if (resolvedNames.length > 0 || filteredIds.length !== catIds.length) {
                   nextPost = {
                     ...nextPost,
-                    category_ids: catIds,
+                    category_ids: filteredIds,
                     categories: resolvedNames
+                  };
+                }
+              } else if (deletedSet.size > 0) {
+                const cleanedIds = (nextPost.category_ids || []).filter(id => !deletedSet.has(id));
+                const cleanedNames = (nextPost.categories || []).filter(
+                  name => !deletedBaselineNamesLower.has(name.trim().toLowerCase())
+                );
+                if (
+                  cleanedIds.length !== (nextPost.category_ids || []).length ||
+                  cleanedNames.length !== (nextPost.categories || []).length
+                ) {
+                  nextPost = {
+                    ...nextPost,
+                    category_ids: cleanedIds,
+                    categories: cleanedNames
                   };
                 }
               }
@@ -11436,10 +12299,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: data?.error || 'Failed to add category.' };
       }
       if (Array.isArray(data.categories)) {
-        setCategories(data.categories);
+        setCategories(dedupeCategoryRecords(data.categories));
       } else if (data.category) {
         setCategories(prev =>
-          [...prev, data.category].sort((a, b) => a.display_order - b.display_order)
+          dedupeCategoryRecords([...prev, data.category])
         );
       }
       return { success: true, category: data.category };
@@ -11460,7 +12323,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         created_at: new Date().toISOString().slice(0, 10)
       };
       setCategories(prev =>
-        [...prev, fallbackCat].sort((a, b) => a.display_order - b.display_order)
+        dedupeCategoryRecords([...prev, fallbackCat])
       );
       return { success: true, category: fallbackCat };
     }
@@ -11494,12 +12357,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: data?.error || 'Failed to update category.' };
       }
       if (Array.isArray(data.categories)) {
-        setCategories(data.categories);
+        setCategories(dedupeCategoryRecords(data.categories));
       } else if (data.category) {
         setCategories(prev =>
-          prev
-            .map(c => (c.id === categoryId ? data.category : c))
-            .sort((a, b) => a.display_order - b.display_order)
+          dedupeCategoryRecords(
+            prev.map(c => (c.id === categoryId ? data.category : c))
+          )
         );
       }
 
@@ -11530,17 +12393,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       let updatedCat: CategoryRecord | undefined;
       setCategories(prev =>
-        prev
-          .map(c => {
+        dedupeCategoryRecords(
+          prev.map(c => {
             if (c.id === categoryId) {
               updatedCat = { ...c, ...updates };
               return updatedCat;
             }
             return c;
           })
-          .sort((a, b) => a.display_order - b.display_order)
+        )
       );
       return { success: true, category: updatedCat };
+    }
+  };
+
+  const adminDeleteCategory = async (
+    categoryId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const isAdmin =
+      currentUser.role === 'admin' ||
+      activeRole === 'admin' ||
+      Boolean((currentUser as any)?.adminPermissionLevel);
+    if (!isAdmin) {
+      return { success: false, error: 'Forbidden: Only administrators can delete official categories.' };
+    }
+
+    const targetCat = categories.find(c => c.id === categoryId);
+    const cleanupInMemoryReferences = () => {
+      const targetNameLower = targetCat?.name.trim().toLowerCase();
+      setPosts(prev =>
+        prev.map(p => {
+          const hasId = Boolean(p.category_ids?.includes(categoryId));
+          const hasName = Boolean(
+            targetNameLower &&
+              p.categories?.some(cn => cn.trim().toLowerCase() === targetNameLower)
+          );
+          if (!hasId && !hasName) return p;
+          return {
+            ...p,
+            category_ids: (p.category_ids || []).filter(id => id !== categoryId),
+            categories: (p.categories || []).filter(
+              cn => !targetNameLower || cn.trim().toLowerCase() !== targetNameLower
+            )
+          };
+        })
+      );
+      if (targetNameLower) {
+        setCreators(prev =>
+          prev.map(c => {
+            if (!c.categories?.some(cn => cn.trim().toLowerCase() === targetNameLower)) return c;
+            return {
+              ...c,
+              categories: (c.categories || []).filter(
+                cn => cn.trim().toLowerCase() !== targetNameLower
+              )
+            };
+          })
+        );
+      }
+    };
+
+    try {
+      const res = await fetch(`/api/admin/categories/${encodeURIComponent(categoryId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRole: 'admin'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data?.error || 'Failed to delete category.' };
+      }
+      if (Array.isArray(data.deletedCategoryIds)) {
+        setDeletedCategoryIds(data.deletedCategoryIds);
+      } else {
+        setDeletedCategoryIds(prev => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
+      }
+      if (Array.isArray(data.categories)) {
+        setCategories(dedupeCategoryRecords(data.categories));
+      } else {
+        setCategories(prev => prev.filter(c => c.id !== categoryId));
+      }
+      cleanupInMemoryReferences();
+      return { success: true };
+    } catch {
+      setDeletedCategoryIds(prev => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+      cleanupInMemoryReferences();
+      return { success: true };
     }
   };
 
@@ -11658,6 +12601,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createPost,
         updateCreatorPost,
         deleteCreatorPost,
+        getPostRevisions,
+        restorePostRevision,
         getPostPurchaseCount,
         getPostPurchases,
         postAuditLogs,
@@ -11772,7 +12717,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRevokeCreatorVerification,
         adminManageVerificationRefund,
         adminTriggerVerificationExpiry,
-        resetCreatorVerificationForTest,
         recommendationConfig,
         fanInterestProfiles,
         activeRecommendationFanId,
@@ -11834,6 +12778,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleAdminBrandingPermission,
         isAuthenticated,
         isCurrentUserApprovedCreator,
+        anonymousSessionId,
+        guestAuthPrompt,
+        openGuestAuthPrompt,
+        closeGuestAuthPrompt,
+        requireAuth,
         loginUser,
         logoutUser,
         registerAccount,
@@ -11868,6 +12817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getCountryFlagAndName,
         adminAddCategory,
         adminUpdateCategory,
+        adminDeleteCategory,
         adminToggleCountryActive,
         updateCreatorCountry
       }}

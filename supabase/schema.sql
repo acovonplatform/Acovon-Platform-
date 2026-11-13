@@ -221,3 +221,86 @@ CREATE POLICY "Admins can insert audit logs"
   TO authenticated
   WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE uid = auth.uid() AND role = 'admin'));
 
+-- ============================================================================
+-- 7. CREATOR POSTS & IMMUTABLE POST REVISION HISTORY TABLES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  creator_id TEXT NOT NULL,
+  creator_name TEXT NOT NULL,
+  creator_username TEXT NOT NULL,
+  creator_avatar TEXT NOT NULL DEFAULT '',
+  caption TEXT NOT NULL DEFAULT '',
+  media JSONB NOT NULL DEFAULT '[]'::jsonb,
+  visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'followers', 'subscribers', 'pay_per_view', 'private')),
+  ppv_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  ppv_preview_duration INT NOT NULL DEFAULT 15,
+  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+  category_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  country TEXT NOT NULL DEFAULT 'United States',
+  video_country_id TEXT,
+  comments_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+  downloads_disabled BOOLEAN NOT NULL DEFAULT TRUE,
+  is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_draft BOOLEAN NOT NULL DEFAULT FALSE,
+  scheduled_for TEXT,
+  publication_status TEXT NOT NULL DEFAULT 'published',
+  moderation_status TEXT NOT NULL DEFAULT 'approved' CHECK (moderation_status IN ('approved', 'flagged', 'restricted', 'removed')),
+  is_deleted_by_creator BOOLEAN NOT NULL DEFAULT FALSE,
+  version INT NOT NULL DEFAULT 1,
+  original_content_hash TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.post_revisions (
+  revision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+  version INT NOT NULL,
+  change_type TEXT NOT NULL CHECK (change_type IN ('created', 'edited', 'media_replaced', 'restored', 'deleted')),
+  changed_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  editor_id TEXT NOT NULL,
+  editor_name TEXT NOT NULL,
+  editor_role TEXT NOT NULL DEFAULT 'creator',
+  reason TEXT,
+  restored_from_revision_id UUID,
+  snapshot JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_creator_id ON public.posts(creator_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON public.posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_revisions_post_id_version ON public.post_revisions(post_id, version DESC);
+
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_revisions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public and authorized users can read non-removed posts"
+  ON public.posts FOR SELECT
+  USING (is_deleted_by_creator = FALSE AND moderation_status <> 'removed');
+
+CREATE POLICY "Creators can insert their own posts"
+  ON public.posts FOR INSERT
+  TO authenticated
+  WITH CHECK (creator_id = auth.uid()::text);
+
+CREATE POLICY "Creators can update only their own posts"
+  ON public.posts FOR UPDATE
+  TO authenticated
+  USING (creator_id = auth.uid()::text)
+  WITH CHECK (creator_id = auth.uid()::text);
+
+CREATE POLICY "Creators and admins can read post revisions"
+  ON public.post_revisions FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.posts p
+      WHERE p.id = post_id AND p.creator_id = auth.uid()::text
+    )
+    OR EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role = 'admin')
+  );
+
+

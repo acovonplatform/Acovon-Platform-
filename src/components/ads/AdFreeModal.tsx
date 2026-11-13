@@ -26,8 +26,8 @@ export const AdFreeModal: React.FC<AdFreeModalProps> = ({ onClose, onExploreCrea
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative animate-in zoom-in-95 acovon-modal-panel">
         
         <button
           onClick={onClose}

@@ -3,8 +3,6 @@ import { useApp } from '../../context/AppContext';
 import { CreatorProfile, PaidVerificationStatus } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import {
-  CheckCircle2,
-  ShieldCheck,
   CreditCard,
   Wallet,
   Clock,
@@ -12,12 +10,9 @@ import {
   RefreshCw,
   Receipt,
   Lock,
-  Sparkles,
   Check,
   X,
-  ArrowRight,
-  Calendar,
-  Ban
+  ArrowRight
 } from 'lucide-react';
 
 interface GetVerifiedSectionProps {
@@ -86,15 +81,11 @@ const STATUS_BADGE_CONFIG: Record<
 export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNavigateToProfile }) => {
   const {
     currentUser,
-    creators,
-    switchUserRole,
     verificationSettings,
     getCreatorVerificationRecord,
     verificationTransactions,
     isCreatorVerifiedBadgeActive,
-    purchaseCreatorVerification,
-    confirmPendingVerificationPayment,
-    resetCreatorVerificationForTest
+    purchaseCreatorVerification
   } = useApp();
 
   const creator = currentUser as CreatorProfile;
@@ -109,7 +100,6 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
   const [selectedProvider, setSelectedProvider] = useState<'stripe_checkout' | 'acovon_wallet' | 'apple_pay'>(
     'stripe_checkout'
   );
-  const [simulateOutcome, setSimulateOutcome] = useState<'completed' | 'pending' | 'failed'>('completed');
   const [agreedTerms, setAgreedTerms] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState<string>('');
@@ -146,7 +136,6 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
   const openCheckoutModal = (renewal: boolean) => {
     setErrorBanner(null);
     setIsRenewalCheckout(renewal);
-    setSimulateOutcome('completed');
     setAgreedTerms(true);
     setCheckoutIdempotencyKey(
       `idem_${creator.id}_${renewal ? 'renew' : 'init'}_${Date.now()}`
@@ -167,7 +156,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
       const res = purchaseCreatorVerification({
         creatorId: creator.id,
         paymentProvider: selectedProvider,
-        simulateOutcome,
+        simulateOutcome: 'completed',
         idempotencyKey: checkoutIdempotencyKey,
         isRenewal: isRenewalCheckout
       });
@@ -192,71 +181,12 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
     }, 350);
   };
 
-  const handleSettlePendingWebhook = (txId: string) => {
-    const res = confirmPendingVerificationPayment(txId);
-    if (res.success) {
-      setJustVerifiedBanner(
-        'Congratulations! Your ACOVON account is now verified. Your official blue verification badge is active.'
-      );
-      setErrorBanner(null);
-    } else {
-      setErrorBanner(res.error || 'Could not settle pending transaction.');
-    }
-  };
-
   const activeCheckoutPrice = isRenewalCheckout
     ? verificationSettings.renewalPrice
     : verificationSettings.price;
 
   return (
     <div className="space-y-6">
-      {/* Top Interactive Creator Account & Verification State Switcher for Seamless Testing */}
-      <div className="p-4 rounded-xl bg-neutral-900/90 border border-neutral-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
-            Instant Automatic Paid Verification System
-          </div>
-          <p className="text-xs text-neutral-400">
-            No ID re-uploads, no application forms, and no manual review queue. Switch creator accounts or reset state below to test instant purchase, renewal, or pending webhook confirmation.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={creator.id}
-            onChange={e => {
-              setJustVerifiedBanner(null);
-              setErrorBanner(null);
-              switchUserRole('creator', e.target.value);
-            }}
-            aria-label="Switch Creator Account"
-            className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
-          >
-            {creators.map(c => {
-              const rec = getCreatorVerificationRecord(c.id);
-              return (
-                <option key={c.id} value={c.id}>
-                  {c.name} (@{c.username}) — [{rec.status.toUpperCase()}]
-                </option>
-              );
-            })}
-          </select>
-
-          {record.status !== 'not_verified' && (
-            <button
-              type="button"
-              onClick={() => {
-                setJustVerifiedBanner(null);
-                setErrorBanner(null);
-                resetCreatorVerificationForTest(creator.id, 'not_verified');
-              }}
-              className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition-colors"
-            >
-              Reset to Unverified (Test Purchase)
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Congratulations / Activation Banner */}
       {justVerifiedBanner && (
         <div className="p-5 rounded-xl bg-gradient-to-r from-sky-950/90 via-sky-900/40 to-neutral-900 border border-sky-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
@@ -267,7 +197,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
                 {justVerifiedBanner}
               </h3>
               <p className="text-xs text-sky-200/80 mt-1">
-                Your official blue verification badge is now visible beside your display name and @username across profiles, home feed posts, videos, comments, messages, status updates, and livestreams.
+                Your official blue verification badge is now visible immediately beside your display name across profiles, home feed posts, videos, comments, messages, status updates, and livestreams.
               </p>
             </div>
           </div>
@@ -301,7 +231,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
       )}
 
       {/* Current Verification Status Card */}
-      <div className="p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4">
+      <div className="p-4 sm:p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -312,11 +242,13 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
               />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">{creator.name}</h2>
+              <h2 className="text-lg font-bold text-white inline-flex items-center gap-1.5 flex-wrap">
+                <span>{creator.name}</span>
+                {badgeActive && <VerifiedBadge creatorId={creator.id} size="md" />}
+              </h2>
               <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
-                <span className="inline-flex items-center gap-1 font-medium text-neutral-200">
+                <span className="font-medium text-neutral-300">
                   @{creator.username}
-                  <VerifiedBadge creatorId={creator.id} size="xs" />
                 </span>
                 <span aria-hidden="true">·</span>
                 <span>Creator ID: {creator.id}</span>
@@ -385,19 +317,12 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
           </div>
         )}
 
-        {/* Pending Payment Action Bar */}
+        {/* Pending Payment Notice */}
         {record.status === 'payment_pending' && pendingTx && (
           <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs text-amber-200">
-              <span className="font-semibold">Pending Payment Reference:</span> {pendingTx.providerTransactionId} ({pendingTx.currency} {pendingTx.amount.toFixed(2)})
+              <span className="font-semibold">Pending Payment Reference:</span> {pendingTx.providerTransactionId} ({pendingTx.currency} {pendingTx.amount.toFixed(2)}) — Awaiting gateway settlement confirmation.
             </div>
-            <button
-              type="button"
-              onClick={() => handleSettlePendingWebhook(pendingTx.id)}
-              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-semibold text-xs transition-colors shrink-0"
-            >
-              Simulate Webhook Payment Confirmation
-            </button>
           </div>
         )}
       </div>
@@ -405,7 +330,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
       {/* Main "Get Your Blue Verification Badge" Offer & Benefits Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 7 Cols: Verification Offer Details & Benefits */}
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 flex flex-col justify-between space-y-6">
+        <div className="lg:col-span-7 p-4 sm:p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 flex flex-col justify-between space-y-6">
           <div className="space-y-5">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-sky-950/80 border border-sky-500/30 flex items-center justify-center shrink-0">
@@ -451,7 +376,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
         </div>
 
         {/* Right 5 Cols: Live Badge Preview & Instant Purchase Card */}
-        <div className="lg:col-span-5 p-6 rounded-2xl bg-gradient-to-b from-sky-950/30 via-neutral-900 to-neutral-900 border border-sky-500/30 flex flex-col justify-between space-y-6">
+        <div className="lg:col-span-5 p-4 sm:p-6 rounded-2xl bg-gradient-to-b from-sky-950/30 via-neutral-900 to-neutral-900 border border-sky-500/30 flex flex-col justify-between space-y-6">
           <div className="space-y-5">
             {/* Live Preview Box */}
             <div className="p-4 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-3">
@@ -469,13 +394,13 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
                   className="w-11 h-11 rounded-full object-cover"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold text-white truncate">
-                    {creator.name}
+                  <div className="text-sm font-bold text-white flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">{creator.name}</span>
+                    <VerifiedBadge forceShow size="sm" />
                   </div>
                   <div className="flex items-center gap-1 text-xs text-neutral-400 truncate">
-                    <span className="inline-flex items-center gap-1 font-medium text-neutral-200">
+                    <span className="font-medium text-neutral-300">
                       @{creator.username}
-                      <VerifiedBadge forceShow size="xs" />
                     </span>
                     <span aria-hidden="true">·</span>
                     <span className="text-neutral-400">Verified Creator</span>
@@ -505,7 +430,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
               <div className="flex items-baseline justify-between">
                 <div>
                   <div className="text-xs text-neutral-400">{verificationSettings.planName}</div>
-                  <div className="text-3xl font-extrabold text-white mt-1">
+                  <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1 tabular-nums">
                     {currencySymbol}
                     {verificationSettings.price.toFixed(2)}{' '}
                     <span className="text-xs font-semibold text-neutral-400">
@@ -582,18 +507,18 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
       </div>
 
       {/* Creator's Verification Payment & Receipt History */}
-      <div className="p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="p-4 sm:p-6 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-sky-400" />
+              <Receipt className="w-4 h-4 text-sky-400 shrink-0" />
               <span>Verification Payment & Receipt History</span>
             </h3>
             <p className="text-xs text-neutral-400 mt-0.5">
               Official transaction records for your creator verification badge purchases and renewals.
             </p>
           </div>
-          <span className="text-xs text-neutral-400">{myTransactions.length} Record(s)</span>
+          <span className="text-xs text-neutral-400 tabular-nums">{myTransactions.length} Record(s)</span>
         </div>
 
         {myTransactions.length === 0 ? (
@@ -602,7 +527,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs whitespace-nowrap tabular-nums">
               <thead>
                 <tr className="border-b border-neutral-800 text-neutral-400">
                   <th className="py-2.5 px-3 font-medium">Transaction ID</th>
@@ -664,14 +589,14 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
 
       {/* Payment Confirmation Checkout Modal */}
       {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col acovon-modal-panel my-auto">
             {/* Modal Header */}
-            <div className="p-5 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="p-4 sm:p-5 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
                 <VerifiedBadge forceShow size="md" />
-                <div>
-                  <h3 className="text-base font-bold text-white">
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate">
                     {isRenewalCheckout
                       ? 'Renew Creator Verification'
                       : 'Confirm Creator Verification Purchase'}
@@ -684,36 +609,37 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
               <button
                 type="button"
                 onClick={() => setIsCheckoutOpen(false)}
-                className="text-neutral-400 hover:text-white p-1"
+                className="text-neutral-400 hover:text-white p-1 shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto">
               {/* Summary Box */}
               <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-neutral-400">Creator Account</span>
-                  <span className="text-white font-semibold flex items-center gap-1.5">
-                    {creator.name} (@{creator.username})
+                  <span className="text-white font-semibold flex flex-wrap items-center gap-1.5">
+                    <span>{creator.name}</span>
                     <VerifiedBadge forceShow size="xs" />
+                    <span className="text-neutral-400 font-normal">(@{creator.username})</span>
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-neutral-400">Verification Plan</span>
                   <span className="text-neutral-200 font-medium">
                     {verificationSettings.planName}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-neutral-400">Validity Period</span>
                   <span className="text-sky-400 font-medium">{durationLabel}</span>
                 </div>
-                <div className="pt-2.5 border-t border-neutral-800 flex items-center justify-between text-sm">
+                <div className="pt-2.5 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="font-semibold text-white">Total Verification Fee</span>
-                  <span className="text-lg font-extrabold text-white">
+                  <span className="text-lg font-extrabold text-white tabular-nums">
                     {currencySymbol}
                     {activeCheckoutPrice.toFixed(2)} {verificationSettings.currency}
                   </span>
@@ -772,48 +698,6 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
                 </div>
               </div>
 
-              {/* Payment Gateway Confirmation Mode (Allows testing Confirmed vs Pending vs Failed) */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                  Payment Gateway Confirmation Mode
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSimulateOutcome('completed')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                      simulateOutcome === 'completed'
-                        ? 'bg-emerald-950/50 border-emerald-500/60 text-emerald-300'
-                        : 'bg-neutral-950 border-neutral-800 text-neutral-400'
-                    }`}
-                  >
-                    Confirmed (Instant)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSimulateOutcome('pending')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                      simulateOutcome === 'pending'
-                        ? 'bg-amber-950/50 border-amber-500/60 text-amber-300'
-                        : 'bg-neutral-950 border-neutral-800 text-neutral-400'
-                    }`}
-                  >
-                    Pending Webhook
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSimulateOutcome('failed')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                      simulateOutcome === 'failed'
-                        ? 'bg-rose-950/50 border-rose-500/60 text-rose-300'
-                        : 'bg-neutral-950 border-neutral-800 text-neutral-400'
-                    }`}
-                  >
-                    Simulate Decline
-                  </button>
-                </div>
-              </div>
-
               {/* Applicable Terms */}
               <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2">
                 <div className="text-[11px] text-neutral-400 leading-relaxed">
@@ -838,7 +722,7 @@ export const GetVerifiedSection: React.FC<GetVerifiedSectionProps> = ({ onNaviga
             </div>
 
             {/* Modal Footer */}
-            <div className="p-5 bg-neutral-950 border-t border-neutral-800 flex items-center justify-end gap-3">
+            <div className="p-4 sm:p-5 bg-neutral-950 border-t border-neutral-800 flex flex-wrap items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsCheckoutOpen(false)}

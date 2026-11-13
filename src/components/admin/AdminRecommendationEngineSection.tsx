@@ -179,7 +179,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
   return (
     <div className="space-y-6 text-xs">
       {/* Header Card */}
-      <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5 flex-wrap">
             <Sparkles className="w-5 h-5 text-[#d4af37]" />
@@ -205,7 +205,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
         </div>
 
         {/* Sub-navigation Tabs */}
-        <div className="flex items-center gap-1.5 bg-[#18181f] border border-[#272730] p-1 rounded-xl shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 bg-[#18181f] border border-[#272730] p-1 rounded-xl w-full lg:w-auto shrink-0">
           <button
             type="button"
             onClick={() => setSubTab('configuration')}
@@ -258,7 +258,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
       {subTab === 'configuration' && (
         <div className="space-y-6">
           {/* Primary Ranking Signal Weights (Must Balance to 100%) */}
-          <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+          <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#232329] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white">
@@ -268,7 +268,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                   Adjust how the For You and Free Posts engines weight interest relevance, creator affinity, watch completion, and discovery.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 tabular-nums">
                 <span
                   className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold border ${
                     totalRankingWeightSum === 100
@@ -375,7 +375,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
           {/* Behavioral Signal Point Weights & Time-Decay Configuration */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Signal Point Weights */}
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
               <div className="border-b border-[#232329] pb-2.5">
                 <h3 className="text-sm font-bold text-white">
                   2. Fan Behavioral Signal Point Weights
@@ -385,7 +385,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3 tabular-nums">
                 {[
                   { key: 'videoWatchedLong' as const, label: 'Watch ≥ 50%', badge: '+' },
                   { key: 'videoCompleted' as const, label: 'Complete Video', badge: '+' },
@@ -423,7 +423,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
             </div>
 
             {/* Time Decay, Diversity, Repetition & Exploration Settings */}
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
               <div className="border-b border-[#232329] pb-2.5">
                 <h3 className="text-sm font-bold text-white">
                   3. Time-Decay, Diversity &amp; Repetition Guardrails
@@ -555,9 +555,9 @@ export const AdminRecommendationEngineSection: React.FC = () => {
 
           {/* Eligible Content Types & Experiment Pause Controls */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-3">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-3">
               <h3 className="text-sm font-bold text-white">4. Eligible Content Types in Recommendations</h3>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {[
                   { key: 'publicFreePosts' as const, label: 'Public Free Posts & Videos' },
                   { key: 'followerOnlyPosts' as const, label: 'Free Follower-Only Posts' },
@@ -596,7 +596,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-3">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-3">
               <h3 className="text-sm font-bold text-white">5. Emergency Experiment Control &amp; Audit Log</h3>
               <p className="text-[11px] text-neutral-400">
                 Pause personalized ML ranking across the platform to fall back to chronological sorting if an experiment requires rollback.
@@ -646,8 +646,8 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                 <div className="pt-2 space-y-1.5 max-h-36 overflow-y-auto">
                   <div className="text-[10px] font-mono uppercase text-neutral-400">Recent Engine Audit Logs:</div>
                   {recAuditLogs.map(log => (
-                    <div key={log.id} className="p-2 bg-[#18181f] border border-[#272730] rounded-lg flex items-center justify-between text-[11px]">
-                      <span className="text-neutral-200 truncate pr-2">{log.details || log.action}</span>
+                    <div key={log.id} className="p-2 bg-[#18181f] border border-[#272730] rounded-lg flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="text-neutral-200 truncate pr-2 min-w-0">{log.details || log.action}</span>
                       <span className="font-mono text-[10px] text-neutral-400 shrink-0">{log.timestamp}</span>
                     </div>
                   ))}
@@ -665,7 +665,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
         <div className="space-y-6">
           {/* Filter Bar */}
           <div className="p-4 bg-[#121216] border border-[#232329] rounded-2xl flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-neutral-400 font-medium">Date Range:</span>
               {(['all', 'today', '7d', '30d'] as const).map(d => (
                 <button
@@ -683,12 +683,12 @@ export const AdminRecommendationEngineSection: React.FC = () => {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-neutral-400 font-medium">Category Filter:</span>
               <select
                 value={categoryFilter}
                 onChange={e => setCategoryFilter(e.target.value)}
-                className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white"
+                className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white max-w-full min-w-0"
               >
                 <option value="all">All Categories</option>
                 {CATEGORIES.filter(c => c !== 'All Categories').map(c => (
@@ -699,7 +699,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
           </div>
 
           {/* Primary KPI Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 tabular-nums">
             <div className="p-4 bg-[#121216] border border-[#232329] rounded-2xl">
               <div className="text-[10px] uppercase text-neutral-400">For You Impressions</div>
               <div className="text-xl font-bold font-mono text-white mt-1">{analyticsStats.forYouImpressions}</div>
@@ -736,18 +736,18 @@ export const AdminRecommendationEngineSection: React.FC = () => {
 
           {/* Secondary Engagement Breakdown & Category Performance */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
               <h3 className="text-sm font-bold text-white">Top Recommended Categories &amp; Free Post Supply</h3>
               <div className="space-y-2.5">
                 {categoryBreakdown.map(row => (
-                  <div key={row.category} className="p-3 bg-[#18181f] border border-[#272730] rounded-xl flex items-center justify-between gap-3">
-                    <div>
+                  <div key={row.category} className="p-3 bg-[#18181f] border border-[#272730] rounded-xl flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="font-bold text-white">{row.category}</div>
                       <div className="text-[11px] text-neutral-400">
                         {row.postsCount} total posts · <span className="text-emerald-300">{row.freePostsCount} free accessible</span> · {row.eventsCount} tracked signals
                       </div>
                     </div>
-                    <div className="text-right font-mono">
+                    <div className="text-right font-mono shrink-0">
                       <div className="text-xs font-bold text-[#fce7b0]">{row.totalAffinity} pts</div>
                       <div className="text-[10px] text-neutral-500">Platform Affinity</div>
                     </div>
@@ -756,13 +756,13 @@ export const AdminRecommendationEngineSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+            <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
               <h3 className="text-sm font-bold text-white">Recent Fan Behavioral Signal Stream ({filteredEvents.length})</h3>
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {filteredEvents.slice(0, 15).map(ev => (
-                  <div key={ev.id} className="p-2.5 bg-[#18181f] border border-[#272730] rounded-xl flex items-center justify-between gap-2 text-[11px]">
+                  <div key={ev.id} className="p-2.5 bg-[#18181f] border border-[#272730] rounded-xl flex flex-wrap items-center justify-between gap-2 text-[11px]">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2 py-0.5 rounded bg-[#d4af37]/15 border border-[#d4af37]/30 font-mono text-[10px] text-[#fce7b0]">
                           {ev.eventType}
                         </span>
@@ -794,7 +794,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
       {subTab === 'health' && (
         <div className="space-y-6">
           {/* System Health Telemetry Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-4 tabular-nums">
             <div className="p-4 bg-[#121216] border border-[#232329] rounded-2xl">
               <div className="text-[10px] uppercase text-neutral-400">Events Processed</div>
               <div className="text-lg font-bold font-mono text-emerald-400 mt-1">
@@ -830,7 +830,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
           </div>
 
           {/* Live Fan Persona Ranking Simulator (Verify Test Cases Fan A - Fan F) */}
-          <div className="p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
+          <div className="p-4 sm:p-5 bg-[#121216] border border-[#232329] rounded-2xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#232329] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white">
@@ -866,9 +866,9 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                   <span>Top 4 &ldquo;For You&rdquo; Ranked Posts</span>
                 </div>
                 {previewForYou.map((r, idx) => (
-                  <div key={r.post.id} className="p-3 bg-[#18181f] border border-[#272730] rounded-xl flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                  <div key={r.post.id} className="p-3 bg-[#18181f] border border-[#272730] rounded-xl flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono font-bold text-[#d4af37]">#{idx + 1}</span>
                         <span className="font-bold text-white truncate">{r.post.creatorName}</span>
                         <span className="px-2 py-0.5 rounded bg-[#121216] border border-[#2e2e38] text-[10px] text-neutral-300">
@@ -894,9 +894,9 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                   <span>Top 4 &ldquo;Free Posts&rdquo; Ranked Posts (Zero Locked Content)</span>
                 </div>
                 {previewFreePosts.map((r, idx) => (
-                  <div key={r.post.id} className="p-3 bg-[#18181f] border border-emerald-500/20 rounded-xl flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                  <div key={r.post.id} className="p-3 bg-[#18181f] border border-emerald-500/20 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono font-bold text-emerald-400">#{idx + 1}</span>
                         <span className="font-bold text-white truncate">{r.post.creatorName}</span>
                         <span className="px-2 py-0.5 rounded bg-[#121216] border border-[#2e2e38] text-[10px] text-neutral-300">

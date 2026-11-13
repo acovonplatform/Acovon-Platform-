@@ -7,6 +7,7 @@ import {
   resolveThemeTokensForMode
 } from '../../data/brandingThemes';
 import { VerifiedBadge } from '../common/VerifiedBadge';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import {
   Palette,
   Sparkles,
@@ -185,7 +186,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
   // ============================================================================
   if (!canManageBranding) {
     return (
-      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-8 text-center space-y-4">
+      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-8 text-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto">
           <Lock className="w-6 h-6 text-rose-400" />
         </div>
@@ -344,10 +345,10 @@ export const AdminBrandingStudioSection: React.FC = () => {
       {/* ====================================================================
           TOP HEADER & CURRENT ACTIVE THEME STATUS BAR
       ==================================================================== */}
-      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-5">
+      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs text-neutral-400">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
               <span>Appearance &amp; Branding</span>
               <span aria-hidden="true">→</span>
               <span className="text-[#fce7b0] font-semibold">Global Branding Studio</span>
@@ -368,7 +369,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             {/* Global Appearance Mode Selector (Dark / Light / System Default) */}
-            <div className="flex items-center gap-1 bg-[#18181f] border border-[#2e2e38] rounded-xl p-1 text-xs">
+            <div className="flex flex-wrap items-center gap-1 bg-[#18181f] border border-[#2e2e38] rounded-xl p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setAppearanceMode('dark')}
@@ -577,7 +578,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           TAB 1: 13 PRESET BRANDING THEMES GALLERY + CUSTOM THEMES
       ==================================================================== */}
       {studioTab === 'gallery' && (
-        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-6">
+        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h3 className="text-base font-bold text-white">
@@ -721,7 +722,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       ))}
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <span
                         style={{ color: preset.tokens.textMuted }}
                         className="text-[10px] truncate"
@@ -770,7 +771,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           {/* Saved Custom Themes Section */}
           {customBrandingThemes.length > 0 && (
             <div className="pt-4 border-t border-[#232329] space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                 <h4 className="text-sm font-bold text-white">
                   Saved Custom Branding Themes ({customBrandingThemes.length})
                 </h4>
@@ -778,7 +779,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   Custom themes are stored separately and never overwrite the 13 official presets
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {customBrandingThemes.map(custom => {
                   const isSelected = selectedTheme.id === custom.id;
                   const isLive = activeBrandingTheme.id === custom.id;
@@ -869,7 +870,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           TAB 2: THEME DETAILS & CONTROLLED CUSTOMIZATION STUDIO
       ==================================================================== */}
       {studioTab === 'customizer' && (
-        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-6">
+        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-white">
@@ -931,7 +932,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-400 mb-1">Presentation Mode</label>
                   <select
@@ -969,9 +970,9 @@ export const AdminBrandingStudioSection: React.FC = () => {
                 { key: 'bgElevated', label: 'Elevated / Input Surface' },
                 { key: 'borderPrimary', label: 'Primary Hairline Border' }
               ].map(item => (
-                <div key={item.key} className="flex items-center justify-between gap-3">
+                <div key={item.key} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-neutral-300">{item.label}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <input
                       type="color"
                       value={(customTokens as any)[item.key]}
@@ -986,7 +987,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       onChange={e =>
                         setCustomTokens(prev => ({ ...prev, [item.key]: e.target.value }))
                       }
-                      className="w-24 bg-[#121216] border border-[#2e2e38] rounded-lg px-2 py-1 text-white font-mono text-[11px]"
+                      className="w-20 xs:w-24 bg-[#121216] border border-[#2e2e38] rounded-lg px-2 py-1 text-white font-mono text-[11px]"
                     />
                   </div>
                 </div>
@@ -1004,9 +1005,9 @@ export const AdminBrandingStudioSection: React.FC = () => {
                 { key: 'textMuted', label: 'Muted Metadata Text' },
                 { key: 'secondaryBtnBg', label: 'Secondary Button Surface' }
               ].map(item => (
-                <div key={item.key} className="flex items-center justify-between gap-3">
+                <div key={item.key} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-neutral-300">{item.label}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <input
                       type="color"
                       value={(customTokens as any)[item.key]}
@@ -1021,7 +1022,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       onChange={e =>
                         setCustomTokens(prev => ({ ...prev, [item.key]: e.target.value }))
                       }
-                      className="w-24 bg-[#121216] border border-[#2e2e38] rounded-lg px-2 py-1 text-white font-mono text-[11px]"
+                      className="w-20 xs:w-24 bg-[#121216] border border-[#2e2e38] rounded-lg px-2 py-1 text-white font-mono text-[11px]"
                     />
                   </div>
                 </div>
@@ -1035,7 +1036,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           TAB 3: THEME PUBLISHING HISTORY & ROLLBACK
       ==================================================================== */}
       {studioTab === 'history' && (
-        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h3 className="text-base font-bold text-white">
@@ -1078,7 +1079,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   {record.notes && <div className="text-neutral-300">{record.notes}</div>}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleSelectThemeForPreview(record.snapshotTheme)}
@@ -1104,7 +1105,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           TAB 4: BRANDING ACCESS PERMISSIONS (Super Admin Governance)
       ==================================================================== */}
       {studioTab === 'permissions' && activeAdminPermissionLevel === 'super_admin' && (
-        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
           <div>
             <h3 className="text-base font-bold text-white">
               Global Branding Permission Governance (manage_platform_branding)
@@ -1187,7 +1188,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
           INTERACTIVE LIVE THEME PREVIEW SANDBOX (ALL 10 PLATFORM SURFACES)
           Scoped exclusively to this container — never alters live platform until published!
       ==================================================================== */}
-      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 sm:p-6 space-y-5">
+      <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -1203,7 +1204,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
 
           {/* Preview Mode (Dark / Light), Viewport Size & RTL Simulation Controls */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 bg-[#18181f] border border-[#272730] rounded-xl p-1 text-xs">
+            <div className="flex flex-wrap items-center gap-1 bg-[#18181f] border border-[#272730] rounded-xl p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setPreviewColorMode('dark')}
@@ -1226,7 +1227,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-1 bg-[#18181f] border border-[#272730] rounded-xl p-1 text-xs">
+            <div className="flex flex-wrap items-center gap-1 bg-[#18181f] border border-[#272730] rounded-xl p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setPreviewViewport('desktop')}
@@ -1318,9 +1319,10 @@ export const AdminBrandingStudioSection: React.FC = () => {
                 backgroundColor: pt.bgSurface,
                 borderColor: pt.borderPrimary
               }}
-              className="px-4 py-3 border-b flex items-center justify-between gap-4"
+              className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-3"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <AcovonLogoIcon size="xs" />
                 <span
                   style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }}
                   className="text-base font-bold tracking-wider"
@@ -1398,10 +1400,11 @@ export const AdminBrandingStudioSection: React.FC = () => {
                         className="absolute inset-0 w-full h-full object-cover opacity-55"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                      <div className="relative z-10 space-y-1.5 max-w-md">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-extrabold text-white">@{sampleCreator.username}</span>
+                      <div className="relative z-10 space-y-1.5 max-w-full sm:max-w-md min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-extrabold text-white">{sampleCreator.name}</span>
                           <VerifiedBadge forceShow size="xs" />
+                          <span className="text-xs text-white/75">@{sampleCreator.username}</span>
                           <span
                             style={{ backgroundColor: '#FE2C55', color: '#FFFFFF' }}
                             className="px-2 py-0.5 rounded text-[10px] font-bold"
@@ -1479,7 +1482,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                           <div style={{ backgroundColor: '#FF0000' }} className="h-full w-2/3" />
                         </div>
                       </div>
-                      <div className="p-3 flex items-start justify-between gap-3">
+                      <div className="p-3 flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-start gap-2.5">
                           <img
                             src={sampleCreator.avatar}
@@ -1516,7 +1519,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                     }}
                     className="p-4 border space-y-3"
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
                         <img
                           src={sampleCreator.avatar}
@@ -1732,14 +1735,14 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   }}
                   className="p-4 border space-y-3"
                 >
-                  <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: pt.borderSubtle }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b" style={{ borderColor: pt.borderSubtle }}>
                     <div className="flex items-center gap-2">
                       <span style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }} className="font-bold text-xs">
                         {sampleCreator.name}
                       </span>
                       <VerifiedBadge forceShow size="xs" />
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         style={{ backgroundColor: pt.bgElevated, color: pt.accentPrimary }}
                         className="px-2 py-0.5 rounded text-[10px] font-semibold"
@@ -1898,7 +1901,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   }}
                   className="p-4 border space-y-2.5 text-xs"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }} className="font-bold">
                       Notifications
                     </span>
@@ -1968,7 +1971,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   }}
                   className="p-4 border space-y-3"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <BarChart3 className="w-4 h-4" style={{ color: pt.accentPrimary }} />
                       <span style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }} className="font-bold text-sm">
@@ -1979,7 +1982,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       Theme: {effectivePreviewTheme.name}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs tabular-nums">
                     {[
                       { k: 'Gross Volume', v: '$142,850' },
                       { k: 'Active Creators', v: '128' },
@@ -2011,8 +2014,8 @@ export const AdminBrandingStudioSection: React.FC = () => {
           ONE-CLICK GLOBAL THEME APPLICATION CONFIRMATION MODAL
       ==================================================================== */}
       {showApplyConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel space-y-4 text-xs shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-[#d4af37]" />
@@ -2032,13 +2035,13 @@ export const AdminBrandingStudioSection: React.FC = () => {
             </p>
 
             <div className="p-3 rounded-xl bg-[#18181f] border border-[#272730] space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-neutral-400">Selected Theme:</span>
                 <span className="font-bold text-white">
                   {effectivePreviewTheme.code} — {effectivePreviewTheme.name}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-neutral-400">Typography:</span>
                 <span className="text-[#fce7b0] font-medium">{effectivePreviewTheme.fontPairLabel}</span>
               </div>
@@ -2066,7 +2069,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowApplyConfirmModal(false)}

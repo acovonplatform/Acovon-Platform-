@@ -66,7 +66,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Device Toggle */}
           <div className="flex items-center gap-1 bg-[#141418] p-1 rounded-xl border border-[#27272a]">
             <button
@@ -122,7 +122,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
             <button
               type="button"
               onClick={onNavigateToBranding}
-              className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-black text-white text-[11px] font-semibold border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+              className="touch-always-visible absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 hover:bg-black text-white text-[11px] font-semibold border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
             >
               <Edit3 className="w-3 h-3 text-[#d4af37]" />
               <span>Change Cover</span>
@@ -152,7 +152,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
                   <button
                     type="button"
                     onClick={onNavigateToBranding}
-                    className="absolute inset-0 rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold cursor-pointer"
+                    className="touch-always-visible absolute inset-0 rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold cursor-pointer"
                   >
                     Edit Photo
                   </button>
@@ -160,15 +160,14 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
               </div>
 
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <h1 className="text-xl sm:text-2xl font-bold font-brand text-white">
                     {creator.name}
                   </h1>
-                  <VerifiedBadge creatorId={creator.id} size="sm" />
+                  <VerifiedBadge creatorId={creator.id} size="lg" />
                 </div>
-                <div className="text-xs text-neutral-400 inline-flex items-center gap-1">
+                <div className="text-xs text-neutral-400">
                   <span>@{creator.username}</span>
-                  <VerifiedBadge creatorId={creator.id} size="xs" />
                 </div>
                 {creator.location && (
                   <div className="text-[11px] text-neutral-500 flex items-center gap-1">
@@ -278,11 +277,11 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-4 border-b border-[#222228] text-xs pt-2">
+          <div className="flex items-center gap-4 border-b border-[#222228] text-xs pt-2 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab('posts')}
-              className={`pb-2.5 font-semibold transition-colors cursor-pointer ${
+              className={`pb-2.5 font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'posts' ? 'text-[#fce7b0] border-b-2 border-[#d4af37]' : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -291,7 +290,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('tiers')}
-              className={`pb-2.5 font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+              className={`pb-2.5 font-semibold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0 ${
                 activeTab === 'tiers' ? 'text-[#fce7b0] border-b-2 border-[#d4af37]' : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -301,7 +300,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('vault')}
-              className={`pb-2.5 font-semibold transition-colors cursor-pointer ${
+              className={`pb-2.5 font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'vault' ? 'text-[#fce7b0] border-b-2 border-[#d4af37]' : 'text-neutral-400 hover:text-white'
               }`}
             >
@@ -311,7 +310,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
 
           {/* Tab Content 1: Posts Grid */}
           {activeTab === 'posts' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
               {myPosts.length > 0 ? (
                 myPosts.map(post => {
                   const media = post.media[0];
@@ -399,7 +398,7 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
 
           {/* Tab Content 3: PPV Vault Releases */}
           {activeTab === 'vault' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
               {ppvPosts.length > 0 ? (
                 ppvPosts.map(post => {
                   const media = post.media[0];

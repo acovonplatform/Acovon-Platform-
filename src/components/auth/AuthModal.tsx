@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../supabaseClient.js';
 import { X, AlertCircle, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 
 interface AuthModalProps {
   initialMode?: 'register' | 'login';
@@ -221,8 +222,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95 max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative animate-in zoom-in-95 max-h-[92dvh] overflow-y-auto acovon-modal-panel">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white rounded-lg transition-colors cursor-pointer"
@@ -232,9 +233,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </button>
 
         <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-7 h-7 rounded bg-[#d4af37] text-black font-bold font-brand flex items-center justify-center text-sm">
-            A
-          </div>
+          <AcovonLogoIcon size="sm" />
           <span className="font-brand font-bold text-white text-lg tracking-wider">ACOVON</span>
         </div>
 
@@ -447,33 +446,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="button"
                   onClick={() => fillExistingAccount('jordan@example.com')}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
+                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
                 >
-                  <span className="text-white font-medium">jordan@example.com</span>
+                  <span className="text-white font-medium break-all">jordan@example.com</span>
                   <span className="text-[10px] text-neutral-400">Standard Fan Account</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => fillExistingAccount('chloe@atelier.paris')}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
+                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
                 >
-                  <span className="text-white font-medium">chloe@atelier.paris</span>
+                  <span className="text-white font-medium break-all">chloe@atelier.paris</span>
                   <span className="text-[10px] text-amber-400">Pending Creator App (Logs in as Fan)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => fillExistingAccount('elena@acovon.creator')}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
+                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
                 >
-                  <span className="text-white font-medium">elena@acovon.creator</span>
+                  <span className="text-white font-medium break-all">elena@acovon.creator</span>
                   <span className="text-[10px] text-[#d4af37]">Approved Creator Account</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => fillExistingAccount('julian.sterling@acovon.com')}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
+                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
                 >
-                  <span className="text-white font-medium">julian.sterling@acovon.com</span>
+                  <span className="text-white font-medium break-all">julian.sterling@acovon.com</span>
                   <span className="text-[10px] text-emerald-400">Super Admin Account</span>
                 </button>
               </div>

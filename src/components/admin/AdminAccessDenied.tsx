@@ -11,8 +11,8 @@ export const AdminAccessDenied: React.FC<AdminAccessDeniedProps> = ({
   onNavigateToLogin
 }) => {
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-16">
-      <div className="max-w-md w-full bg-[#101014] border border-rose-500/30 shadow-2xl rounded-2xl p-8 text-center space-y-6 animate-in zoom-in-95">
+    <div className="min-h-[80vh] flex items-center justify-center px-3 sm:px-4 py-12 sm:py-16">
+      <div className="max-w-md w-full bg-[#101014] border border-rose-500/30 shadow-2xl rounded-2xl p-5 sm:p-8 text-center space-y-6 animate-in zoom-in-95">
         <div className="w-16 h-16 rounded-2xl bg-rose-950/40 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400 shadow-lg">
           <ShieldAlert className="w-8 h-8" />
         </div>

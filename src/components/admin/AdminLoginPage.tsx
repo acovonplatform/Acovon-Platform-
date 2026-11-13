@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import {
   ShieldAlert,
   Lock,
@@ -114,9 +115,9 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12 relative">
+    <div className="min-h-[85vh] flex items-center justify-center px-3 sm:px-4 py-10 sm:py-12 relative overflow-hidden">
       {/* Background radial luxury glow */}
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
         <div className="w-[500px] h-[500px] bg-gradient-to-br from-[#d4af37]/10 via-[#7a6114]/5 to-transparent rounded-full blur-3xl" />
       </div>
 
@@ -132,11 +133,11 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         </button>
 
         {/* Card */}
-        <div className="bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-7 sm:p-8 backdrop-blur-xl space-y-6">
+        <div className="bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-5 sm:p-8 backdrop-blur-xl space-y-6">
           {/* Header branding */}
           <div className="space-y-3 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-[#d4af37]/20 via-[#7a6114]/20 to-[#101014] border border-[#d4af37]/50 shadow-lg text-[#fce7b0] mx-auto">
-              <ShieldAlert className="w-6 h-6 text-[#d4af37]" />
+            <div className="inline-flex items-center justify-center mx-auto">
+              <AcovonLogoIcon size="lg" />
             </div>
             <div>
               <div className="flex items-center justify-center gap-2">
@@ -277,8 +278,8 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121216] border border-[#272730] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#272730] rounded-2xl max-w-sm w-full p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-[#d4af37]" />
@@ -321,7 +322,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                 required
                 className="w-full bg-[#18181f] border border-[#2e2e38] rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
               />
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}

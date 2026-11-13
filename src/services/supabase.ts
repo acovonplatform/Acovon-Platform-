@@ -612,6 +612,72 @@ export async function uploadUserFileToSupabase(params: {
 
   if (onProgress) onProgress(25);
 
+  // 1. Always store uploaded media permanently on ACOVON media storage (/api/media/upload)
+  // so URLs (/api/media/files/...) never expire after 1 hour or break across page reloads.
+  try {
+    const serverRes = await fetch('/api/media/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'x-file-name': sanitizedName,
+        'x-mime-type': file.type || resolvedMime,
+        'x-owner-id': ownerUid,
+        'x-post-id': resolvedItemId
+      },
+      body: file
+    });
+
+    if (serverRes.ok) {
+      const serverData = await serverRes.json();
+      if (serverData?.success && serverData?.url) {
+        if (onProgress) onProgress(85);
+        const permanentUrl: string = serverData.url;
+        const record: SupabaseUserFileRecord = {
+          file_id: serverData.mediaId || fileId,
+          owner_uid: ownerUid,
+          original_filename: sanitizedName,
+          storage_path: permanentUrl,
+          mime_type: serverData.mimeType || resolvedMime,
+          file_extension: resolvedExtension,
+          file_size_bytes: serverData.sizeBytes || file.size,
+          file_category: resolvedCategory,
+          upload_status: 'completed',
+          visibility,
+          download_url: permanentUrl,
+          created_at: nowIso,
+          updated_at: nowIso
+        };
+
+        // Non-blocking optional Supabase metadata sync
+        if (supabase) {
+          try {
+            await supabase.from('user_files').insert(record);
+            if (featureName === 'avatars') {
+              await supabase
+                .from('users')
+                .update({ profile_picture_url: permanentUrl, updated_at: nowIso })
+                .eq('uid', ownerUid);
+            }
+          } catch {
+            // ignore optional remote metadata sync error
+          }
+        }
+
+        if (onProgress) onProgress(100);
+        return {
+          success: true,
+          record,
+          storagePath: permanentUrl,
+          signedUrl: permanentUrl
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Permanent server media upload notice:', err);
+  }
+
+  // 2. If Supabase public storage fallback is attempted when server upload is unreachable,
+  // avoid returning ephemeral blob: URLs for persisted posts.
   if (supabase) {
     try {
       const { error: uploadErr } = await supabase.storage
@@ -622,74 +688,46 @@ export async function uploadUserFileToSupabase(params: {
         });
 
       if (!uploadErr) {
-        if (onProgress) onProgress(75);
-        const signedUrl =
-          (await createSignedAppFileUrl(storagePath, 3600)) || URL.createObjectURL(file);
+        const { data: publicUrlData } = supabase.storage
+          .from(SUPABASE_STORAGE_BUCKET)
+          .getPublicUrl(storagePath);
+        const permanentPublicUrl = publicUrlData?.publicUrl;
 
-        const record: SupabaseUserFileRecord = {
-          file_id: fileId,
-          owner_uid: ownerUid,
-          original_filename: sanitizedName,
-          storage_path: storagePath,
-          mime_type: resolvedMime,
-          file_extension: resolvedExtension,
-          file_size_bytes: file.size,
-          file_category: resolvedCategory,
-          upload_status: 'completed',
-          visibility,
-          download_url: signedUrl,
-          created_at: nowIso,
-          updated_at: nowIso
-        };
-
-        await supabase.from('user_files').insert(record);
-
-        // If this is a profile avatar upload, also persist storage_path/url in users table
-        if (featureName === 'avatars') {
-          await supabase
-            .from('users')
-            .update({ profile_picture_url: storagePath, updated_at: nowIso })
-            .eq('uid', ownerUid);
+        if (permanentPublicUrl && !permanentPublicUrl.startsWith('blob:')) {
+          const record: SupabaseUserFileRecord = {
+            file_id: fileId,
+            owner_uid: ownerUid,
+            original_filename: sanitizedName,
+            storage_path: storagePath,
+            mime_type: resolvedMime,
+            file_extension: resolvedExtension,
+            file_size_bytes: file.size,
+            file_category: resolvedCategory,
+            upload_status: 'completed',
+            visibility,
+            download_url: permanentPublicUrl,
+            created_at: nowIso,
+            updated_at: nowIso
+          };
+          await supabase.from('user_files').insert(record);
+          if (onProgress) onProgress(100);
+          return {
+            success: true,
+            record,
+            storagePath,
+            signedUrl: permanentPublicUrl
+          };
         }
-
-        if (onProgress) onProgress(100);
-        return {
-          success: true,
-          record,
-          storagePath,
-          signedUrl
-        };
-      } else {
-        console.warn('Supabase Storage upload notice:', uploadErr.message);
       }
     } catch (err) {
-      console.warn('Supabase Storage upload fallback:', err);
+      console.warn('Supabase Storage upload error:', err);
     }
   }
 
   if (onProgress) onProgress(100);
-  const localPreviewUrl = URL.createObjectURL(file);
-  const record: SupabaseUserFileRecord = {
-    file_id: fileId,
-    owner_uid: ownerUid,
-    original_filename: sanitizedName,
-    storage_path: storagePath,
-    mime_type: resolvedMime,
-    file_extension: resolvedExtension,
-    file_size_bytes: file.size,
-    file_category: resolvedCategory,
-    upload_status: 'completed',
-    visibility,
-    download_url: localPreviewUrl,
-    created_at: nowIso,
-    updated_at: nowIso
-  };
-
   return {
-    success: true,
-    record,
-    storagePath,
-    signedUrl: localPreviewUrl
+    success: false,
+    error: 'Unable to persist uploaded file to permanent media storage. Please retry.'
   };
 }
 

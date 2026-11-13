@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Image as ImageIcon, Video as VideoIcon, Type, 
   Trash2, Eye, Heart, Clock, Sparkles, Check, 
@@ -13,6 +13,8 @@ import {
 
 interface MyStatusSectionProps {
   onOpenViewer?: (creatorId: string) => void;
+  initialTab?: 'manage' | 'create' | 'archive';
+  tabRequestKey?: number;
 }
 
 const TEXT_GRADIENTS = [
@@ -44,7 +46,11 @@ const DEMO_PRESET_VIDEOS = [
   }
 ];
 
-export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }) => {
+export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
+  onOpenViewer,
+  initialTab,
+  tabRequestKey
+}) => {
   const { 
     currentUser, 
     statuses, 
@@ -53,7 +59,13 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
     deleteStatus 
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'manage' | 'create' | 'archive'>('manage');
+  const [activeTab, setActiveTab] = useState<'manage' | 'create' | 'archive'>(initialTab || 'manage');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, tabRequestKey]);
   
   // Create Status Form State
   const [contentType, setContentType] = useState<'photo' | 'video' | 'text'>('photo');
@@ -66,6 +78,8 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
   const [selectedTierId, setSelectedTierId] = useState<string>('');
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [publishSuccessMsg, setPublishSuccessMsg] = useState<string>('');
+  const [publishErrorMsg, setPublishErrorMsg] = useState<string>('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedViewerStatusId, setSelectedViewerStatusId] = useState<string | null>(null);
   const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(null);
   const [statusStorageMap, setStatusStorageMap] = useState<Record<string, string>>(() => {
@@ -150,16 +164,17 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
 
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
+    setPublishErrorMsg('');
     setIsPublishing(true);
 
     if (contentType === 'text' && !textOverlay.trim()) {
-      alert('Please enter text for your status.');
+      setPublishErrorMsg('Please enter text for your status.');
       setIsPublishing(false);
       return;
     }
 
     if (contentType !== 'text' && !mediaUrl) {
-      alert('Please select or upload media for your status.');
+      setPublishErrorMsg('Please select or upload media for your status.');
       setIsPublishing(false);
       return;
     }
@@ -215,8 +230,8 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
       {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-neutral-800">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-white">Creator Stories & Status</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold text-white">Creator Stories & Status</h2>
             <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
               24-Hour Moments
             </span>
@@ -226,11 +241,11 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {activeStatuses.length > 0 && onOpenViewer && (
             <button
               onClick={() => onOpenViewer(currentUser.id)}
-              className="px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition border border-neutral-700"
+              className="px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition border border-neutral-700 cursor-pointer"
             >
               <Eye className="w-4 h-4" />
               <span>Preview My Story</span>
@@ -239,7 +254,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
 
           <button
             onClick={() => setActiveTab('create')}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-semibold text-xs flex items-center gap-1.5 transition shadow-lg"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-semibold text-xs flex items-center gap-1.5 transition shadow-lg cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add New Status</span>
@@ -248,10 +263,10 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
       </div>
 
       {/* Navigation Pill Tabs */}
-      <div className="flex items-center gap-2 border-b border-neutral-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-neutral-800 pb-2 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('manage')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeTab === 'manage' 
               ? 'bg-amber-400 text-black' 
               : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -261,7 +276,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
         </button>
         <button
           onClick={() => setActiveTab('create')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeTab === 'create' 
               ? 'bg-amber-400 text-black' 
               : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -271,7 +286,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
         </button>
         <button
           onClick={() => setActiveTab('archive')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeTab === 'archive' 
               ? 'bg-amber-400 text-black' 
               : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
@@ -285,7 +300,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
       {activeTab === 'manage' && (
         <div className="space-y-4">
           {activeStatuses.length === 0 ? (
-            <div className="p-8 text-center rounded-2xl bg-neutral-900/60 border border-neutral-800 space-y-3">
+            <div className="p-6 sm:p-8 text-center rounded-2xl bg-neutral-900/60 border border-neutral-800 space-y-3">
               <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 mx-auto flex items-center justify-center">
                 <Clock className="w-6 h-6" />
               </div>
@@ -295,14 +310,14 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
               </p>
               <button
                 onClick={() => setActiveTab('create')}
-                className="mt-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold inline-flex items-center gap-1.5 transition"
+                className="mt-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Post Your First Status</span>
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4">
               {activeStatuses.map((st) => (
                 <div 
                   key={st.id} 
@@ -397,39 +412,55 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
                     )}
 
                     {/* Actions */}
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       {onOpenViewer && (
                         <button
                           onClick={() => onOpenViewer(currentUser.id)}
-                          className="text-xs text-amber-400 hover:underline font-semibold"
+                          className="text-xs text-amber-400 hover:underline font-semibold cursor-pointer"
                         >
                           View in Player
                         </button>
                       )}
 
-                      <button
-                        onClick={async () => {
-                          if (confirm('Delete this status update from your public stories?')) {
-                            const storagePath = statusStorageMap[st.id];
-                            if (storagePath) {
-                              await deleteSupabaseFileByPath({ storagePath, uid: currentUser.id });
-                              const nextMap = { ...statusStorageMap };
-                              delete nextMap[st.id];
-                              setStatusStorageMap(nextMap);
-                              try {
-                                localStorage.setItem(`acovon_status_storage_map_${currentUser.id}`, JSON.stringify(nextMap));
-                              } catch {
-                                // ignore
+                      {confirmDeleteId === st.id ? (
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          <button
+                            onClick={async () => {
+                              const storagePath = statusStorageMap[st.id];
+                              if (storagePath) {
+                                await deleteSupabaseFileByPath({ storagePath, uid: currentUser.id });
+                                const nextMap = { ...statusStorageMap };
+                                delete nextMap[st.id];
+                                setStatusStorageMap(nextMap);
+                                try {
+                                  localStorage.setItem(`acovon_status_storage_map_${currentUser.id}`, JSON.stringify(nextMap));
+                                } catch {
+                                  // ignore
+                                }
                               }
-                            }
-                            deleteStatus(st.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition"
-                        title="Delete status"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                              deleteStatus(st.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold cursor-pointer"
+                          >
+                            Confirm Delete
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2 py-1 rounded-lg bg-neutral-800 text-neutral-300 text-[11px] cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(st.id)}
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition cursor-pointer ml-auto"
+                          title="Delete status"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -441,10 +472,16 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
 
       {/* TAB 2: CREATE STATUS */}
       {activeTab === 'create' && (
-        <form onSubmit={handlePublish} className="rounded-2xl bg-neutral-900 border border-neutral-800 p-6 space-y-6">
+        <form onSubmit={handlePublish} className="rounded-2xl bg-neutral-900 border border-neutral-800 p-4 sm:p-6 space-y-5 sm:space-y-6">
+          {publishErrorMsg && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{publishErrorMsg}</span>
+            </div>
+          )}
           {publishSuccessMsg && (
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-              <Check className="w-4 h-4" />
+              <Check className="w-4 h-4 shrink-0" />
               <span>{publishSuccessMsg}</span>
             </div>
           )}
@@ -454,7 +491,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
             <label className="block text-xs font-semibold text-neutral-300 mb-2">
               1. Choose Status Format
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setContentType('photo')}
@@ -503,7 +540,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
                 <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                   Gradient Theme
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-6 gap-2">
                   {TEXT_GRADIENTS.map(grad => (
                     <button
                       key={grad.id}
@@ -573,7 +610,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
                 {/* Presets Row */}
                 <div className="mt-3">
                   <div className="text-[11px] font-medium text-neutral-400 mb-2">Or select a licensed demonstration asset:</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2">
                     {contentType === 'photo' ? (
                       DEMO_PRESET_PHOTOS.map(p => (
                         <button
@@ -731,24 +768,24 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
           </div>
 
           {/* Submit */}
-          <div className="flex items-center justify-between pt-4 border-t border-neutral-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-800">
             <span className="text-[11px] text-neutral-500 flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3.5 h-3.5 shrink-0" />
               <span>Automatically expires after 24 hours</span>
             </span>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('manage')}
-                className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isPublishing}
-                className="px-6 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold shadow-lg transition"
+                className="px-5 sm:px-6 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold shadow-lg transition cursor-pointer"
               >
                 {isPublishing ? 'Publishing...' : 'Publish Status'}
               </button>
@@ -765,7 +802,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({ onOpenViewer }
               Your status history will appear here once stories complete their 24-hour cycle.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 3xl:grid-cols-4 gap-3">
               {archivedStatuses.map(arch => (
                 <div key={arch.id} className="p-3 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-3">
                   <div className="w-12 h-16 rounded-lg bg-neutral-800 overflow-hidden flex-shrink-0 flex items-center justify-center">

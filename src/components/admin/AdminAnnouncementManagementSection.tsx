@@ -611,11 +611,11 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Section Header */}
-      <div className="bg-[#121216] border border-[#26262f] rounded-2xl p-6">
+      <div className="bg-[#121216] border border-[#26262f] rounded-2xl p-4 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] shrink-0">
                 <Megaphone className="w-5 h-5" />
               </div>
               <div>
@@ -675,7 +675,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                 'Moderator authority: Read-only inspection of platform announcements and recipient logs.'}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-neutral-400 font-mono">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-neutral-400 font-mono">
             <span>Eligible Fans: <strong className="text-sky-300">{eligibleAccountCounts.fans}</strong></span>
             <span>•</span>
             <span>Eligible Creators: <strong className="text-[#fce7b0]">{eligibleAccountCounts.creators}</strong></span>
@@ -709,7 +709,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
       )}
 
       {/* 12 Real-Time Computed Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 xs:grid-cols-3 lg:grid-cols-6 gap-3 tabular-nums">
         {[
           { label: 'Total Announcements', value: dashboardStats.total, accent: 'text-white' },
           { label: 'Published', value: dashboardStats.published, accent: 'text-emerald-400' },
@@ -812,7 +812,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1e1e26] text-[11px] text-neutral-400">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span>Date Range:</span>
             {(['all', 'today', '7d', '30d'] as const).map(range => (
               <button
@@ -874,7 +874,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
 
                   return (
                     <tr key={ann.id} className="hover:bg-[#16161d] transition-colors">
-                      <td className="py-3.5 px-4 max-w-xs">
+                      <td className="py-3.5 px-4 min-w-[240px] max-w-xs">
                         <div className="font-semibold text-white line-clamp-1">{ann.title}</div>
                         <div className="text-[11px] text-neutral-400 line-clamp-1 mt-0.5">
                           {ann.summary}
@@ -1065,31 +1065,31 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
           CREATE / EDIT ANNOUNCEMENT MODAL WITH LIVE AUDIENCE PREVIEW
       ====================================================================== */}
       {isEditorOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#121216] border border-[#2d2d38] rounded-2xl max-w-6xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#2d2d38] rounded-2xl max-w-6xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl acovon-modal-panel">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#25252f] flex items-center justify-between bg-[#15151b]">
-              <div className="flex items-center gap-2.5">
-                <Megaphone className="w-5 h-5 text-[#d4af37]" />
-                <h3 className="text-base font-bold text-white">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[#25252f] flex items-center justify-between gap-2 bg-[#15151b]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Megaphone className="w-5 h-5 text-[#d4af37] shrink-0" />
+                <h3 className="text-base font-bold text-white truncate">
                   {editingAnnouncement ? `Edit Announcement: ${editingAnnouncement.title}` : 'Create Official Platform Announcement'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsEditorOpen(false)}
-                className="p-1.5 text-neutral-400 hover:text-white rounded-lg cursor-pointer"
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Body: 2-Column Split (Editor Form + Live Audience Preview) */}
-            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs">
               {/* Left 7 Columns: Configuration & Rich Editor */}
               <div className="lg:col-span-7 space-y-5">
                 {/* 1. REQUIRED AUDIENCE SELECTOR */}
                 <div className="bg-[#17171f] border border-[#2b2b36] rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="font-bold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <span>1. Target Audience Selection (Required)</span>
                       <span className="text-[#d4af37]">*</span>
@@ -1215,7 +1215,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
 
                 {/* 3. RICH-TEXT ANNOUNCEMENT BODY EDITOR */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="text-neutral-300 font-medium">
                       Full Announcement Body (Rich Text / HTML) <span className="text-rose-400">*</span>
                     </label>
@@ -1385,7 +1385,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
 
                 {/* 5. OPTIONAL IMAGE UPLOAD (JPG, JPEG, PNG, WEBP) */}
                 <div className="bg-[#17171f] border border-[#2b2b36] rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="font-bold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-[#d4af37]" />
                       <span>5. Optional Announcement Banner Image (JPG, JPEG, PNG, WEBP)</span>
@@ -1435,7 +1435,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                         setFormImageFileName('custom_banner_image.webp');
                       }}
                       placeholder="Or paste image URL (https://...)"
-                      className="flex-1 bg-[#131318] border border-[#2b2b36] rounded-xl px-3 py-1.5 text-white"
+                      className="flex-1 w-full sm:w-auto min-w-0 bg-[#131318] border border-[#2b2b36] rounded-xl px-3 py-1.5 text-white"
                     />
                   </div>
 
@@ -1676,8 +1676,8 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
 
               {/* Right 5 Columns: Live Role-Isolated Preview */}
               <div className="lg:col-span-5 space-y-4">
-                <div className="bg-[#16161d] border border-[#2b2b36] rounded-2xl p-4 space-y-4 sticky top-0">
-                  <div className="flex items-center justify-between border-b border-[#252530] pb-3">
+                <div className="bg-[#16161d] border border-[#2b2b36] rounded-2xl p-4 space-y-4 lg:sticky lg:top-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-[#252530] pb-3">
                     <div>
                       <h4 className="font-bold text-white text-xs uppercase tracking-wider">
                         Live Audience Isolation Simulator
@@ -1800,7 +1800,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[#25252f] bg-[#15151b] flex items-center justify-between gap-3">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-[#25252f] bg-[#15151b] flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-neutral-400">
                 Target Audience:{' '}
                 <strong className="text-white">
@@ -1811,7 +1811,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                     : `Everyone (${eligibleAccountCounts.everyone} accounts)`}
                 </strong>
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsEditorOpen(false)}
@@ -1842,10 +1842,10 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
           INSPECTOR MODAL: PREVIEW, RECIPIENT DELIVERY LOGS & VERSION HISTORY
       ====================================================================== */}
       {inspectingAnnouncement && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#121216] border border-[#2d2d38] rounded-2xl max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl text-xs">
-            <div className="px-6 py-4 border-b border-[#25252f] flex items-center justify-between bg-[#15151b]">
-              <div className="flex items-center gap-2.5">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#2d2d38] rounded-2xl max-w-4xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl text-xs acovon-modal-panel">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[#25252f] flex items-center justify-between gap-2 bg-[#15151b]">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {renderAudienceBadge(inspectingAnnouncement.audience)}
                 <h3 className="text-sm font-bold text-white truncate max-w-md">
                   {inspectingAnnouncement.title}
@@ -1853,14 +1853,14 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
               </div>
               <button
                 onClick={() => setInspectingAnnouncement(null)}
-                className="p-1.5 text-neutral-400 hover:text-white rounded-lg cursor-pointer"
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Tabs */}
-            <div className="px-6 pt-3 border-b border-[#24242e] bg-[#14141a] flex items-center gap-2">
+            <div className="px-4 sm:px-6 pt-3 border-b border-[#24242e] bg-[#14141a] flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
               {[
                 { id: 'preview' as const, label: 'Formatted Announcement View', icon: Eye },
                 {
@@ -1899,7 +1899,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
               })}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {inspectTab === 'preview' && (
                 <div className="space-y-4">
                   {inspectingAnnouncement.imageUrl && (
@@ -1925,7 +1925,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                       __html: sanitizeAnnouncementHtml(inspectingAnnouncement.bodyHtml)
                     }}
                   />
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] font-mono bg-[#16161d] p-3.5 rounded-xl border border-[#25252f]">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] font-mono bg-[#16161d] p-3.5 rounded-xl border border-[#25252f]">
                     <div>
                       <span className="text-neutral-500 block">Created By</span>
                       <span className="text-white">{inspectingAnnouncement.createdByAdminName}</span>
@@ -1948,7 +1948,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
 
               {inspectTab === 'recipients' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-neutral-400">
                       Showing individual delivery, read, and acknowledgment records for{' '}
                       <strong className="text-white">{inspectingAnnouncement.title}</strong>
@@ -1975,8 +1975,8 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="border border-[#262630] rounded-xl overflow-hidden">
-                    <table className="w-full text-left border-collapse text-xs">
+                  <div className="border border-[#262630] rounded-xl overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs whitespace-nowrap tabular-nums">
                       <thead>
                         <tr className="bg-[#17171f] border-b border-[#262630] text-[10px] font-mono uppercase text-neutral-400">
                           <th className="py-2.5 px-3">Recipient</th>
@@ -2068,7 +2068,7 @@ export const AdminAnnouncementManagementSection: React.FC = () => {
                         key={vh.id}
                         className="p-3.5 rounded-xl bg-[#15151c] border border-[#252530] space-y-1"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
                           <span className="font-mono font-bold text-[#fce7b0]">
                             Version v{vh.versionNumber} Snapshot
                           </span>

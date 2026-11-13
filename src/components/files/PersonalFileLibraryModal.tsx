@@ -384,9 +384,9 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-[#121216] border border-[#27272f] rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#121216] border border-[#27272f] rounded-2xl max-w-5xl w-full max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden acovon-modal-panel">
         {/* Top Header */}
-        <div className="px-4 sm:px-6 py-4 border-b border-[#27272f] flex items-center justify-between gap-3 bg-[#16161c]">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[#27272f] flex items-center justify-between gap-3 bg-[#16161c] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-[#d4af37]/15 border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] shrink-0">
               <FolderLock className="w-5 h-5" />
@@ -415,7 +415,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
         </div>
 
         {/* Navigation Tabs */}
-        <div className="px-4 sm:px-6 py-2.5 bg-[#141419] border-b border-[#27272f] flex flex-wrap items-center justify-between gap-2">
+        <div className="px-4 sm:px-6 py-2.5 bg-[#141419] border-b border-[#27272f] flex flex-wrap items-center justify-between gap-2 shrink-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => setActiveTab('library')}
@@ -514,7 +514,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                     <select
                       value={selectedVisibility}
                       onChange={(e) => setSelectedVisibility(e.target.value as FileVisibilityMode)}
-                      className="bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                      className="w-full sm:w-auto max-w-full min-w-0 bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                     >
                       <option value="private">Visibility: Private Vault (Owner Only)</option>
                       <option value="public">Visibility: Public Content</option>
@@ -586,22 +586,22 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                   ))}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-initial min-w-0">
                     <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search your files..."
-                      className="bg-[#18181f] border border-[#27272f] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
+                      className="w-full sm:w-auto min-w-0 bg-[#18181f] border border-[#27272f] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
                     />
                   </div>
 
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                    className="bg-[#18181f] border border-[#27272f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                    className="w-full xs:w-auto min-w-0 bg-[#18181f] border border-[#27272f] rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                   >
                     <option value="newest">Sort: Newest First</option>
                     <option value="oldest">Sort: Oldest First</option>
@@ -613,7 +613,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
               {/* File Library Grid */}
               {filteredAndSortedFiles.length === 0 ? (
-                <div className="bg-[#18181f]/60 border border-[#27272f] rounded-2xl p-10 text-center space-y-3">
+                <div className="bg-[#18181f]/60 border border-[#27272f] rounded-2xl p-6 sm:p-10 text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37] mx-auto">
                     <FolderLock className="w-6 h-6" />
                   </div>
@@ -626,7 +626,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-4">
                   {filteredAndSortedFiles.map((file) => {
                     const visMeta = VISIBILITY_LABELS[file.visibility] || VISIBILITY_LABELS.private;
                     const VisIcon = visMeta.icon;
@@ -888,27 +888,27 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
         {/* File Preview Modal */}
         {previewFile && (
-          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-            <div className="bg-[#141419] border border-[#2e2e38] rounded-2xl max-w-2xl w-full p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-white">{previewFile.original_filename}</h4>
-                  <p className="text-[11px] text-neutral-400 font-mono">{previewFile.storage_path}</p>
+          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-2.5 sm:p-4">
+            <div className="bg-[#141419] border border-[#2e2e38] rounded-2xl max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 space-y-4 acovon-modal-panel">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-white truncate">{previewFile.original_filename}</h4>
+                  <p className="text-[11px] text-neutral-400 font-mono truncate">{previewFile.storage_path}</p>
                 </div>
                 <button
                   onClick={() => setPreviewFile(null)}
-                  className="p-1.5 text-neutral-400 hover:text-white cursor-pointer"
+                  className="p-1.5 text-neutral-400 hover:text-white cursor-pointer shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="bg-black rounded-xl overflow-hidden flex items-center justify-center max-h-[60vh]">
+              <div className="bg-black rounded-xl overflow-hidden flex items-center justify-center max-h-[60dvh]">
                 {previewFile.file_category === 'image' && previewFile.download_url ? (
                   <img
                     src={previewFile.download_url}
                     alt={previewFile.original_filename}
-                    className="max-h-[58vh] object-contain"
+                    className="max-h-[58dvh] object-contain"
                   />
                 ) : previewFile.file_category === 'video' && previewFile.download_url ? (
                   <video
@@ -921,7 +921,7 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
                         el.load();
                       }
                     }}
-                    className="max-h-[58vh] w-full"
+                    className="max-h-[58dvh] w-full"
                   />
                 ) : (
                   <div className="p-10 text-center space-y-2">
@@ -946,8 +946,8 @@ export const PersonalFileLibraryModal: React.FC<PersonalFileLibraryModalProps> =
 
         {/* Delete Confirmation Modal */}
         {confirmDeleteFile && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-[#141419] border border-[#2e2e38] rounded-2xl max-w-md w-full p-5 space-y-4">
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-2.5 sm:p-4">
+            <div className="bg-[#141419] border border-[#2e2e38] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 space-y-4 acovon-modal-panel">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-white">Confirm File Deletion</h4>
                 <button

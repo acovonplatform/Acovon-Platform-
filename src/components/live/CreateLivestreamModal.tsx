@@ -173,23 +173,23 @@ export const CreateLivestreamModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl bg-[#111114] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-3xl max-h-[92dvh] flex flex-col bg-[#111114] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden my-auto acovon-modal-panel">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-500/30 flex items-center justify-center text-red-500">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-zinc-800 flex items-center justify-between gap-2 bg-zinc-950/60 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-600/10 border border-red-500/30 flex items-center justify-center text-red-500 shrink-0">
               <Radio className="w-5 h-5 animate-pulse" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                Acovon Live Studio
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span>Acovon Live Studio</span>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#d4af37]/20 text-[#fce7b0] border border-[#d4af37]/30">
                   Broadcast Suite
                 </span>
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-[11px] sm:text-xs text-zinc-400">
                 Choose an access model, monetize viewers, and configure your live stream.
               </p>
             </div>
@@ -197,14 +197,14 @@ export const CreateLivestreamModal: React.FC = () => {
 
           <button
             onClick={() => setIsCreateLiveModalOpen(false)}
-            className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 sm:space-y-6 flex-1 min-h-0 overflow-y-auto">
           {error && (
             <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/40 text-xs text-red-300">
               {error}
@@ -389,7 +389,7 @@ export const CreateLivestreamModal: React.FC = () => {
                 </label>
                 <span className="text-xs font-bold text-[#d4af37]">${ppvTicketPrice.toFixed(2)}</span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
                 {[5.99, 9.99, 14.99, 29.99].map(price => (
                   <button
                     key={price}
@@ -883,7 +883,7 @@ export const CreateLivestreamModal: React.FC = () => {
 
           {/* SECTION 5: BROADCAST LAUNCH TIMING */}
           <div className="space-y-3 pt-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setBroadcastTiming('now')}
@@ -957,7 +957,7 @@ export const CreateLivestreamModal: React.FC = () => {
           </div>
 
           {/* Submit Actions */}
-          <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-zinc-800 flex flex-wrap items-center justify-end gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={() => setIsCreateLiveModalOpen(false)}

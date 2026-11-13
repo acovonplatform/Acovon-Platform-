@@ -159,17 +159,59 @@ export const INITIAL_STATUSES: CreatorStatus[] = [
     isDemo: true
   },
 
-  // Aria Chen - 1 Status Update
+  // Sarah Chen - 1 Status Update
   {
-    id: 'status_aria_1',
-    creatorId: 'creator_aria',
-    creatorName: 'Aria Chen',
-    creatorUsername: 'ariachen',
-    creatorAvatar: '/src/assets/images/creator_avatar_aria_1793476684348.jpg',
+    id: 'status_sarah_1',
+    creatorId: 'creator_sarah',
+    creatorName: 'Sarah Chen',
+    creatorUsername: 'sarahchenfit',
+    creatorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
     mediaType: 'image',
-    mediaUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1080&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=300&q=80',
-    caption: 'Late night streaming setup dialed in. Cyberpunk tournament run starts in 30 mins! 🎮💜',
+    mediaUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1080&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=300&q=80',
+    caption: 'Olympic warm-up and thoracic mobility flow before today’s heavy pull session.',
+    audience: 'public',
+    createdAt: new Date(now - 3 * oneHour).toISOString(),
+    expiresAt: new Date(now + 21 * oneHour).toISOString(),
+    viewsCount: 412,
+    uniqueViews: [],
+    reactions: [],
+    replies: [],
+    isDemo: true
+  },
+
+  // Kai Zen - 1 Status Update
+  {
+    id: 'status_kai_1',
+    creatorId: 'creator_kai',
+    creatorName: 'Kai Zen',
+    creatorUsername: 'kaizencgi',
+    creatorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    mediaType: 'image',
+    mediaUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1080&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=80',
+    caption: 'Real-time Houdini fluid sim shader test running at 120fps in Unreal Engine.',
+    audience: 'public',
+    createdAt: new Date(now - 4 * oneHour).toISOString(),
+    expiresAt: new Date(now + 20 * oneHour).toISOString(),
+    viewsCount: 520,
+    uniqueViews: [],
+    reactions: [],
+    replies: [],
+    isDemo: true
+  },
+
+  // Maya Lin - 1 Status Update
+  {
+    id: 'status_maya_1',
+    creatorId: 'creator_maya',
+    creatorName: 'Maya Lin',
+    creatorUsername: 'mayalin_cine',
+    creatorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    mediaType: 'image',
+    mediaUrl: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=1080&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=300&q=80',
+    caption: 'Anamorphic golden-hour test reel graded with our new Cine LUT pack.',
     audience: 'public',
     createdAt: new Date(now - 6 * oneHour).toISOString(),
     expiresAt: new Date(now + 18 * oneHour).toISOString(),

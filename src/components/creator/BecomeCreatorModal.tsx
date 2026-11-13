@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import { 
   X, 
   ShieldCheck, 
@@ -112,15 +113,13 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full p-6 sm:p-7 space-y-6 shadow-2xl relative my-8 animate-in fade-in zoom-in-95">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-7 space-y-5 sm:space-y-6 shadow-2xl relative my-auto animate-in fade-in zoom-in-95 acovon-modal-panel">
         
         {/* Header */}
-        <div className="flex items-start justify-between pb-4 border-b border-[#26262b]">
+        <div className="flex items-start justify-between gap-2 pb-4 border-b border-[#26262b]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d4af37] via-[#b38f28] to-[#6d5410] flex items-center justify-center shadow-lg shadow-[#d4af37]/20">
-              <Sparkles className="w-5 h-5 text-black font-bold" />
-            </div>
+            <AcovonLogoIcon size="md" />
             <div>
               <h3 className="font-brand text-lg font-bold text-white flex items-center gap-2">
                 <span>Become an Acovon Creator</span>
@@ -142,7 +141,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
         </div>
 
         {/* Linked Single-Account Identity Banner */}
-        <div className="p-3 bg-[#16161b] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+        <div className="p-3 bg-[#16161b] border border-[#27272a] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2.5">
             <UserCheck className="w-4 h-4 text-[#d4af37] shrink-0" />
             <div>
@@ -170,7 +169,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
               <p className="text-xs text-neutral-400 leading-relaxed">
                 While your application is pending review by an authorized ACOVON Administrator, your account remains a <strong>Fan</strong> account. Once approved by an Admin, Creator Studio, Go Live, and Create Post will activate automatically on this account without requiring a second registration or new email.
               </p>
-              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 text-neutral-400">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 text-[11px] pt-1 text-neutral-400">
                 <div>Document: <span className="text-white capitalize">{userPendingVerification.documentType.replace('_', ' ')}</span></div>
                 <div>ID Ref: <span className="text-white font-mono">{userPendingVerification.documentNumber}</span></div>
               </div>
@@ -380,7 +379,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                 </div>
 
                 {/* Simulated ID & Biometric Uploads */}
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 pt-1">
                   <div className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2 text-center">
                     <div className="text-[11px] font-semibold text-neutral-300 flex items-center justify-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-[#d4af37]" />
@@ -435,7 +434,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                   </label>
                 </div>
 
-                <div className="flex justify-between items-center pt-3">
+                <div className="flex flex-wrap justify-between items-center gap-2 pt-3">
                   <button
                     type="button"
                     onClick={() => setStep(1)}
@@ -443,7 +442,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                   >
                     Back to Profile
                   </button>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={onClose}

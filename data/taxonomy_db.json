@@ -1,0 +1,1868 @@
+{
+  "categories": [
+    {
+      "id": "cat_fashion_luxury",
+      "name": "Cumshot",
+      "slug": "fashion-luxury",
+      "description": "Couture atelier lookbooks, runway archives, styling diaries, and high-fashion editorial releases.",
+      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "is_active": false,
+      "display_order": 1,
+      "created_at": "2025-01-01",
+      "updated_at": "2026-11-13"
+    },
+    {
+      "id": "cat_music_audio",
+      "name": "Music & Audio Production",
+      "slug": "music-audio-production",
+      "description": "Studio sessions, uncompressed stem vaults, modular synthesizer patches, and film scoring masterclasses.",
+      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "is_active": true,
+      "display_order": 2,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_fitness_bodybuilding",
+      "name": "Fitness & Bodybuilding",
+      "slug": "fitness-bodybuilding",
+      "description": "Athletic conditioning, biomechanics drills, hypertrophy periodization, and performance nutrition.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 3,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_photography_cine",
+      "name": "Photography & Cinematography",
+      "slug": "photography-cinematography",
+      "description": "Anamorphic lens tests, DaVinci Resolve color grading suites, lighting diagrams, and visual storytelling.",
+      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "is_active": true,
+      "display_order": 4,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_digital_art_3d",
+      "name": "Digital Art & 3D Design",
+      "slug": "digital-art-3d-design",
+      "description": "Procedural Houdini setups, Unreal Engine environments, PBR shader libraries, and concept art.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 5,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_gaming_esports",
+      "name": "Gaming & Esports",
+      "slug": "gaming-esports",
+      "description": "Pro tournament VOD reviews, tactical mechanics breakdowns, competitive coaching, and live gameplay.",
+      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "is_active": true,
+      "display_order": 6,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_culinary_gourmet",
+      "name": "Culinary Arts & Gourmet",
+      "slug": "culinary-arts-gourmet",
+      "description": "Fine dining plating techniques, Michelin-inspired recipes, artisanal pastry, and sommelier pairings.",
+      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "is_active": true,
+      "display_order": 7,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_tech_software",
+      "name": "Tech & Software Development",
+      "slug": "tech-software-development",
+      "description": "Distributed systems architecture, full-stack engineering deep dives, AI engineering, and code reviews.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 8,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_education_tutorials",
+      "name": "Education & Tutorials",
+      "slug": "education-tutorials",
+      "description": "Structured video curricula, hands-on workshops, language mastery, and academic breakdowns.",
+      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "is_active": true,
+      "display_order": 9,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_coaching_business",
+      "name": "Coaching & Business",
+      "slug": "coaching-business",
+      "description": "Executive leadership, venture strategy, creator monetization blueprints, and personal advisory.",
+      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "is_active": true,
+      "display_order": 10,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_dance_choreography",
+      "name": "Dance & Choreography",
+      "slug": "dance-choreography",
+      "description": "Contemporary movement, stage choreography rehearsals, rhythm workshops, and performance reels.",
+      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "is_active": true,
+      "display_order": 11,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_animation_motion",
+      "name": "Animation & Motion Design",
+      "slug": "animation-motion-design",
+      "description": "Keyframe storytelling, 2D/3D motion graphics, title sequence design, and visual effects.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 12,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_wellness_meditation",
+      "name": "Wellness & Meditation",
+      "slug": "wellness-meditation",
+      "description": "Breathwork protocols, mindfulness sessions, somatic recovery, and holistic longevity practices.",
+      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "is_active": true,
+      "display_order": 13,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_amateur",
+      "name": "Amateur",
+      "slug": "amateur",
+      "description": "Authentic independent creator stories, unscripted daily captures, behind-the-scenes vlogs, and raw moments.",
+      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "is_active": true,
+      "display_order": 14,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_lifestyle_vlog",
+      "name": "Lifestyle & Vlog",
+      "slug": "lifestyle-vlog",
+      "description": "Day-in-the-life diaries, international living, personal collections, and creator chronicles.",
+      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "is_active": true,
+      "display_order": 15,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_beauty_glamour",
+      "name": "Beauty & Glamour",
+      "slug": "beauty-glamour",
+      "description": "Editorial makeup artistry, skincare rituals, fragrance curation, and red-carpet preparation.",
+      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "is_active": true,
+      "display_order": 16,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_travel_destinations",
+      "name": "Travel & Destinations",
+      "slug": "travel-destinations",
+      "description": "Global destination cinematography, hidden architectural gems, luxury hospitality, and cultural expeditions.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 17,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_comedy_entertainment",
+      "name": "Comedy & Entertainment",
+      "slug": "comedy-entertainment",
+      "description": "Original sketches, live crowd-work clips, commentary, and high-energy entertainment.",
+      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "is_active": true,
+      "display_order": 18,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_asmr_relaxation",
+      "name": "ASMR & Relaxation",
+      "slug": "asmr-relaxation",
+      "description": "Binaural microphone recordings, spatial soundscapes, and calming sensory experiences.",
+      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "is_active": true,
+      "display_order": 19,
+      "created_at": "2025-01-01"
+    },
+    {
+      "id": "cat_cosplay_performance",
+      "name": "Cosplay & Performance",
+      "slug": "cosplay-performance",
+      "description": "Hand-crafted costume fabrication, prop engineering, character performances, and convention showcases.",
+      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "is_active": true,
+      "display_order": 20,
+      "created_at": "2025-01-01"
+    }
+  ],
+  "deletedCategoryIds": [],
+  "countries": [
+    {
+      "id": "country_af",
+      "name": "Afghanistan",
+      "iso_code": "AF",
+      "flag": "🇦🇫",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_al",
+      "name": "Albania",
+      "iso_code": "AL",
+      "flag": "🇦🇱",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_dz",
+      "name": "Algeria",
+      "iso_code": "DZ",
+      "flag": "🇩🇿",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ad",
+      "name": "Andorra",
+      "iso_code": "AD",
+      "flag": "🇦🇩",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ao",
+      "name": "Angola",
+      "iso_code": "AO",
+      "flag": "🇦🇴",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ag",
+      "name": "Antigua and Barbuda",
+      "iso_code": "AG",
+      "flag": "🇦🇬",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ar",
+      "name": "Argentina",
+      "iso_code": "AR",
+      "flag": "🇦🇷",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_am",
+      "name": "Armenia",
+      "iso_code": "AM",
+      "flag": "🇦🇲",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_au",
+      "name": "Australia",
+      "iso_code": "AU",
+      "flag": "🇦🇺",
+      "region": "Oceania",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_at",
+      "name": "Austria",
+      "iso_code": "AT",
+      "flag": "🇦🇹",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_az",
+      "name": "Azerbaijan",
+      "iso_code": "AZ",
+      "flag": "🇦🇿",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bs",
+      "name": "Bahamas",
+      "iso_code": "BS",
+      "flag": "🇧🇸",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bh",
+      "name": "Bahrain",
+      "iso_code": "BH",
+      "flag": "🇧🇭",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bd",
+      "name": "Bangladesh",
+      "iso_code": "BD",
+      "flag": "🇧🇩",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bb",
+      "name": "Barbados",
+      "iso_code": "BB",
+      "flag": "🇧🇧",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_by",
+      "name": "Belarus",
+      "iso_code": "BY",
+      "flag": "🇧🇾",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_be",
+      "name": "Belgium",
+      "iso_code": "BE",
+      "flag": "🇧🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bz",
+      "name": "Belize",
+      "iso_code": "BZ",
+      "flag": "🇧🇿",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bj",
+      "name": "Benin",
+      "iso_code": "BJ",
+      "flag": "🇧🇯",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bt",
+      "name": "Bhutan",
+      "iso_code": "BT",
+      "flag": "🇧🇹",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bo",
+      "name": "Bolivia",
+      "iso_code": "BO",
+      "flag": "🇧🇴",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ba",
+      "name": "Bosnia and Herzegovina",
+      "iso_code": "BA",
+      "flag": "🇧🇦",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bw",
+      "name": "Botswana",
+      "iso_code": "BW",
+      "flag": "🇧🇼",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_br",
+      "name": "Brazil",
+      "iso_code": "BR",
+      "flag": "🇧🇷",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bn",
+      "name": "Brunei",
+      "iso_code": "BN",
+      "flag": "🇧🇳",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bg",
+      "name": "Bulgaria",
+      "iso_code": "BG",
+      "flag": "🇧🇬",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bf",
+      "name": "Burkina Faso",
+      "iso_code": "BF",
+      "flag": "🇧🇫",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_bi",
+      "name": "Burundi",
+      "iso_code": "BI",
+      "flag": "🇧🇮",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cv",
+      "name": "Cabo Verde",
+      "iso_code": "CV",
+      "flag": "🇨🇻",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_kh",
+      "name": "Cambodia",
+      "iso_code": "KH",
+      "flag": "🇰🇭",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cm",
+      "name": "Cameroon",
+      "iso_code": "CM",
+      "flag": "🇨🇲",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ca",
+      "name": "Canada",
+      "iso_code": "CA",
+      "flag": "🇨🇦",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cf",
+      "name": "Central African Republic",
+      "iso_code": "CF",
+      "flag": "🇨🇫",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_td",
+      "name": "Chad",
+      "iso_code": "TD",
+      "flag": "🇹🇩",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cl",
+      "name": "Chile",
+      "iso_code": "CL",
+      "flag": "🇨🇱",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cn",
+      "name": "China",
+      "iso_code": "CN",
+      "flag": "🇨🇳",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_co",
+      "name": "Colombia",
+      "iso_code": "CO",
+      "flag": "🇨🇴",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_km",
+      "name": "Comoros",
+      "iso_code": "KM",
+      "flag": "🇰🇲",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cg",
+      "name": "Congo",
+      "iso_code": "CG",
+      "flag": "🇨🇬",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cr",
+      "name": "Costa Rica",
+      "iso_code": "CR",
+      "flag": "🇨🇷",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ci",
+      "name": "Côte d'Ivoire",
+      "iso_code": "CI",
+      "flag": "🇨🇮",
+      "region": "Africa",
+      "aliases": [
+        "Ivory Coast"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_hr",
+      "name": "Croatia",
+      "iso_code": "HR",
+      "flag": "🇭🇷",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cu",
+      "name": "Cuba",
+      "iso_code": "CU",
+      "flag": "🇨🇺",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cy",
+      "name": "Cyprus",
+      "iso_code": "CY",
+      "flag": "🇨🇾",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cz",
+      "name": "Czechia",
+      "iso_code": "CZ",
+      "flag": "🇨🇿",
+      "region": "Europe",
+      "aliases": [
+        "Czech Republic"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_dk",
+      "name": "Denmark",
+      "iso_code": "DK",
+      "flag": "🇩🇰",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_dj",
+      "name": "Djibouti",
+      "iso_code": "DJ",
+      "flag": "🇩🇯",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_dm",
+      "name": "Dominica",
+      "iso_code": "DM",
+      "flag": "🇩🇲",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_do",
+      "name": "Dominican Republic",
+      "iso_code": "DO",
+      "flag": "🇩🇴",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_cd",
+      "name": "DR Congo",
+      "iso_code": "CD",
+      "flag": "🇨🇩",
+      "region": "Africa",
+      "aliases": [
+        "Democratic Republic of the Congo",
+        "DRC"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_ec",
+      "name": "Ecuador",
+      "iso_code": "EC",
+      "flag": "🇪🇨",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_eg",
+      "name": "Egypt",
+      "iso_code": "EG",
+      "flag": "🇪🇬",
+      "region": "Middle East & Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sv",
+      "name": "El Salvador",
+      "iso_code": "SV",
+      "flag": "🇸🇻",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gq",
+      "name": "Equatorial Guinea",
+      "iso_code": "GQ",
+      "flag": "🇬🇶",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_er",
+      "name": "Eritrea",
+      "iso_code": "ER",
+      "flag": "🇪🇷",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ee",
+      "name": "Estonia",
+      "iso_code": "EE",
+      "flag": "🇪🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sz",
+      "name": "Eswatini",
+      "iso_code": "SZ",
+      "flag": "🇸🇿",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_et",
+      "name": "Ethiopia",
+      "iso_code": "ET",
+      "flag": "🇪🇹",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_fj",
+      "name": "Fiji",
+      "iso_code": "FJ",
+      "flag": "🇫🇯",
+      "region": "Oceania",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_fi",
+      "name": "Finland",
+      "iso_code": "FI",
+      "flag": "🇫🇮",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_fr",
+      "name": "France",
+      "iso_code": "FR",
+      "flag": "🇫🇷",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ga",
+      "name": "Gabon",
+      "iso_code": "GA",
+      "flag": "🇬🇦",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gm",
+      "name": "Gambia",
+      "iso_code": "GM",
+      "flag": "🇬🇲",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ge",
+      "name": "Georgia",
+      "iso_code": "GE",
+      "flag": "🇬🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_de",
+      "name": "Germany",
+      "iso_code": "DE",
+      "flag": "🇩🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gh",
+      "name": "Ghana",
+      "iso_code": "GH",
+      "flag": "🇬🇭",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gr",
+      "name": "Greece",
+      "iso_code": "GR",
+      "flag": "🇬🇷",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gd",
+      "name": "Grenada",
+      "iso_code": "GD",
+      "flag": "🇬🇩",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gt",
+      "name": "Guatemala",
+      "iso_code": "GT",
+      "flag": "🇬🇹",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gn",
+      "name": "Guinea",
+      "iso_code": "GN",
+      "flag": "🇬🇳",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gw",
+      "name": "Guinea-Bissau",
+      "iso_code": "GW",
+      "flag": "🇬🇼",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_gy",
+      "name": "Guyana",
+      "iso_code": "GY",
+      "flag": "🇬🇾",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ht",
+      "name": "Haiti",
+      "iso_code": "HT",
+      "flag": "🇭🇹",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_hn",
+      "name": "Honduras",
+      "iso_code": "HN",
+      "flag": "🇭🇳",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_hk",
+      "name": "Hong Kong",
+      "iso_code": "HK",
+      "flag": "🇭🇰",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_hu",
+      "name": "Hungary",
+      "iso_code": "HU",
+      "flag": "🇭🇺",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_is",
+      "name": "Iceland",
+      "iso_code": "IS",
+      "flag": "🇮🇸",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_in",
+      "name": "India",
+      "iso_code": "IN",
+      "flag": "🇮🇳",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_id",
+      "name": "Indonesia",
+      "iso_code": "ID",
+      "flag": "🇮🇩",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ir",
+      "name": "Iran",
+      "iso_code": "IR",
+      "flag": "🇮🇷",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_iq",
+      "name": "Iraq",
+      "iso_code": "IQ",
+      "flag": "🇮🇶",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ie",
+      "name": "Ireland",
+      "iso_code": "IE",
+      "flag": "🇮🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_il",
+      "name": "Israel",
+      "iso_code": "IL",
+      "flag": "🇮🇱",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_it",
+      "name": "Italy",
+      "iso_code": "IT",
+      "flag": "🇮🇹",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_jm",
+      "name": "Jamaica",
+      "iso_code": "JM",
+      "flag": "🇯🇲",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_jp",
+      "name": "Japan",
+      "iso_code": "JP",
+      "flag": "🇯🇵",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_jo",
+      "name": "Jordan",
+      "iso_code": "JO",
+      "flag": "🇯🇴",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_kz",
+      "name": "Kazakhstan",
+      "iso_code": "KZ",
+      "flag": "🇰🇿",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ke",
+      "name": "Kenya",
+      "iso_code": "KE",
+      "flag": "🇰🇪",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_kw",
+      "name": "Kuwait",
+      "iso_code": "KW",
+      "flag": "🇰🇼",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_kg",
+      "name": "Kyrgyzstan",
+      "iso_code": "KG",
+      "flag": "🇰🇬",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_la",
+      "name": "Laos",
+      "iso_code": "LA",
+      "flag": "🇱🇦",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lv",
+      "name": "Latvia",
+      "iso_code": "LV",
+      "flag": "🇱🇻",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lb",
+      "name": "Lebanon",
+      "iso_code": "LB",
+      "flag": "🇱🇧",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ls",
+      "name": "Lesotho",
+      "iso_code": "LS",
+      "flag": "🇱🇸",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lr",
+      "name": "Liberia",
+      "iso_code": "LR",
+      "flag": "🇱🇷",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ly",
+      "name": "Libya",
+      "iso_code": "LY",
+      "flag": "🇱🇾",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_li",
+      "name": "Liechtenstein",
+      "iso_code": "LI",
+      "flag": "🇱🇮",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lt",
+      "name": "Lithuania",
+      "iso_code": "LT",
+      "flag": "🇱🇹",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lu",
+      "name": "Luxembourg",
+      "iso_code": "LU",
+      "flag": "🇱🇺",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mo",
+      "name": "Macau",
+      "iso_code": "MO",
+      "flag": "🇲🇴",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mg",
+      "name": "Madagascar",
+      "iso_code": "MG",
+      "flag": "🇲🇬",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mw",
+      "name": "Malawi",
+      "iso_code": "MW",
+      "flag": "🇲🇼",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_my",
+      "name": "Malaysia",
+      "iso_code": "MY",
+      "flag": "🇲🇾",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mv",
+      "name": "Maldives",
+      "iso_code": "MV",
+      "flag": "🇲🇻",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ml",
+      "name": "Mali",
+      "iso_code": "ML",
+      "flag": "🇲🇱",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mt",
+      "name": "Malta",
+      "iso_code": "MT",
+      "flag": "🇲🇹",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mr",
+      "name": "Mauritania",
+      "iso_code": "MR",
+      "flag": "🇲🇷",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mu",
+      "name": "Mauritius",
+      "iso_code": "MU",
+      "flag": "🇲🇺",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mx",
+      "name": "Mexico",
+      "iso_code": "MX",
+      "flag": "🇲🇽",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_md",
+      "name": "Moldova",
+      "iso_code": "MD",
+      "flag": "🇲🇩",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mc",
+      "name": "Monaco",
+      "iso_code": "MC",
+      "flag": "🇲🇨",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mn",
+      "name": "Mongolia",
+      "iso_code": "MN",
+      "flag": "🇲🇳",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_me",
+      "name": "Montenegro",
+      "iso_code": "ME",
+      "flag": "🇲🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ma",
+      "name": "Morocco",
+      "iso_code": "MA",
+      "flag": "🇲🇦",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mz",
+      "name": "Mozambique",
+      "iso_code": "MZ",
+      "flag": "🇲🇿",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mm",
+      "name": "Myanmar",
+      "iso_code": "MM",
+      "flag": "🇲🇲",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_na",
+      "name": "Namibia",
+      "iso_code": "NA",
+      "flag": "🇳🇦",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_np",
+      "name": "Nepal",
+      "iso_code": "NP",
+      "flag": "🇳🇵",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_nl",
+      "name": "Netherlands",
+      "iso_code": "NL",
+      "flag": "🇳🇱",
+      "region": "Europe",
+      "aliases": [
+        "Holland"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_nz",
+      "name": "New Zealand",
+      "iso_code": "NZ",
+      "flag": "🇳🇿",
+      "region": "Oceania",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ni",
+      "name": "Nicaragua",
+      "iso_code": "NI",
+      "flag": "🇳🇮",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ne",
+      "name": "Niger",
+      "iso_code": "NE",
+      "flag": "🇳🇪",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ng",
+      "name": "Nigeria",
+      "iso_code": "NG",
+      "flag": "🇳🇬",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_mk",
+      "name": "North Macedonia",
+      "iso_code": "MK",
+      "flag": "🇲🇰",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_no",
+      "name": "Norway",
+      "iso_code": "NO",
+      "flag": "🇳🇴",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_om",
+      "name": "Oman",
+      "iso_code": "OM",
+      "flag": "🇴🇲",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pk",
+      "name": "Pakistan",
+      "iso_code": "PK",
+      "flag": "🇵🇰",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ps",
+      "name": "Palestine",
+      "iso_code": "PS",
+      "flag": "🇵🇸",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pa",
+      "name": "Panama",
+      "iso_code": "PA",
+      "flag": "🇵🇦",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pg",
+      "name": "Papua New Guinea",
+      "iso_code": "PG",
+      "flag": "🇵🇬",
+      "region": "Oceania",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_py",
+      "name": "Paraguay",
+      "iso_code": "PY",
+      "flag": "🇵🇾",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pe",
+      "name": "Peru",
+      "iso_code": "PE",
+      "flag": "🇵🇪",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ph",
+      "name": "Philippines",
+      "iso_code": "PH",
+      "flag": "🇵🇭",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pl",
+      "name": "Poland",
+      "iso_code": "PL",
+      "flag": "🇵🇱",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pt",
+      "name": "Portugal",
+      "iso_code": "PT",
+      "flag": "🇵🇹",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_pr",
+      "name": "Puerto Rico",
+      "iso_code": "PR",
+      "flag": "🇵🇷",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_qa",
+      "name": "Qatar",
+      "iso_code": "QA",
+      "flag": "🇶🇦",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ro",
+      "name": "Romania",
+      "iso_code": "RO",
+      "flag": "🇷🇴",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ru",
+      "name": "Russia",
+      "iso_code": "RU",
+      "flag": "🇷🇺",
+      "region": "Europe & Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_rw",
+      "name": "Rwanda",
+      "iso_code": "RW",
+      "flag": "🇷🇼",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sa",
+      "name": "Saudi Arabia",
+      "iso_code": "SA",
+      "flag": "🇸🇦",
+      "region": "Middle East",
+      "aliases": [
+        "KSA"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_sn",
+      "name": "Senegal",
+      "iso_code": "SN",
+      "flag": "🇸🇳",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_rs",
+      "name": "Serbia",
+      "iso_code": "RS",
+      "flag": "🇷🇸",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sc",
+      "name": "Seychelles",
+      "iso_code": "SC",
+      "flag": "🇸🇨",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sl",
+      "name": "Sierra Leone",
+      "iso_code": "SL",
+      "flag": "🇸🇱",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sg",
+      "name": "Singapore",
+      "iso_code": "SG",
+      "flag": "🇸🇬",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sk",
+      "name": "Slovakia",
+      "iso_code": "SK",
+      "flag": "🇸🇰",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_si",
+      "name": "Slovenia",
+      "iso_code": "SI",
+      "flag": "🇸🇮",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_so",
+      "name": "Somalia",
+      "iso_code": "SO",
+      "flag": "🇸🇴",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_za",
+      "name": "South Africa",
+      "iso_code": "ZA",
+      "flag": "🇿🇦",
+      "region": "Africa",
+      "aliases": [
+        "RSA"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_kr",
+      "name": "South Korea",
+      "iso_code": "KR",
+      "flag": "🇰🇷",
+      "region": "Asia",
+      "aliases": [
+        "Korea",
+        "Republic of Korea",
+        "ROK"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_es",
+      "name": "Spain",
+      "iso_code": "ES",
+      "flag": "🇪🇸",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_lk",
+      "name": "Sri Lanka",
+      "iso_code": "LK",
+      "flag": "🇱🇰",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sd",
+      "name": "Sudan",
+      "iso_code": "SD",
+      "flag": "🇸🇩",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_se",
+      "name": "Sweden",
+      "iso_code": "SE",
+      "flag": "🇸🇪",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ch",
+      "name": "Switzerland",
+      "iso_code": "CH",
+      "flag": "🇨🇭",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_sy",
+      "name": "Syria",
+      "iso_code": "SY",
+      "flag": "🇸🇾",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tw",
+      "name": "Taiwan",
+      "iso_code": "TW",
+      "flag": "🇹🇼",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tj",
+      "name": "Tajikistan",
+      "iso_code": "TJ",
+      "flag": "🇹🇯",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tz",
+      "name": "Tanzania",
+      "iso_code": "TZ",
+      "flag": "🇹🇿",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_th",
+      "name": "Thailand",
+      "iso_code": "TH",
+      "flag": "🇹🇭",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tg",
+      "name": "Togo",
+      "iso_code": "TG",
+      "flag": "🇹🇬",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tt",
+      "name": "Trinidad and Tobago",
+      "iso_code": "TT",
+      "flag": "🇹🇹",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tn",
+      "name": "Tunisia",
+      "iso_code": "TN",
+      "flag": "🇹🇳",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_tr",
+      "name": "Turkey",
+      "iso_code": "TR",
+      "flag": "🇹🇷",
+      "region": "Europe & Middle East",
+      "aliases": [
+        "Türkiye"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_tm",
+      "name": "Turkmenistan",
+      "iso_code": "TM",
+      "flag": "🇹🇲",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ug",
+      "name": "Uganda",
+      "iso_code": "UG",
+      "flag": "🇺🇬",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ua",
+      "name": "Ukraine",
+      "iso_code": "UA",
+      "flag": "🇺🇦",
+      "region": "Europe",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ae",
+      "name": "United Arab Emirates",
+      "iso_code": "AE",
+      "flag": "🇦🇪",
+      "region": "Middle East",
+      "aliases": [
+        "UAE",
+        "Dubai",
+        "Abu Dhabi",
+        "Emirates"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_gb",
+      "name": "United Kingdom",
+      "iso_code": "GB",
+      "flag": "🇬🇧",
+      "region": "Europe",
+      "aliases": [
+        "UK",
+        "Great Britain",
+        "England",
+        "Scotland",
+        "Wales"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_us",
+      "name": "United States",
+      "iso_code": "US",
+      "flag": "🇺🇸",
+      "region": "Americas",
+      "aliases": [
+        "USA",
+        "United States of America",
+        "America"
+      ],
+      "is_active": true
+    },
+    {
+      "id": "country_uy",
+      "name": "Uruguay",
+      "iso_code": "UY",
+      "flag": "🇺🇾",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_uz",
+      "name": "Uzbekistan",
+      "iso_code": "UZ",
+      "flag": "🇺🇿",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ve",
+      "name": "Venezuela",
+      "iso_code": "VE",
+      "flag": "🇻🇪",
+      "region": "Americas",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_vn",
+      "name": "Vietnam",
+      "iso_code": "VN",
+      "flag": "🇻🇳",
+      "region": "Asia",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_ye",
+      "name": "Yemen",
+      "iso_code": "YE",
+      "flag": "🇾🇪",
+      "region": "Middle East",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_zm",
+      "name": "Zambia",
+      "iso_code": "ZM",
+      "flag": "🇿🇲",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    },
+    {
+      "id": "country_zw",
+      "name": "Zimbabwe",
+      "iso_code": "ZW",
+      "flag": "🇿🇼",
+      "region": "Africa",
+      "aliases": [],
+      "is_active": true
+    }
+  ],
+  "creatorCountries": {},
+  "postCountries": {
+    "131e2655-6a60-490e-ab9b-d660772b39af": {
+      "post_id": "131e2655-6a60-490e-ab9b-d660772b39af",
+      "creator_id": "creator_elena",
+      "video_country_id": "country_ke",
+      "country_name": "Kenya",
+      "iso_code": "KE"
+    }
+  },
+  "postCategories": {
+    "131e2655-6a60-490e-ab9b-d660772b39af": [
+      "cat_fashion_luxury"
+    ]
+  }
+}

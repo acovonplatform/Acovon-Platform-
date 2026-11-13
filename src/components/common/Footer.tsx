@@ -1,5 +1,6 @@
 import React from 'react';
 import { Shield, Lock, Award, Heart } from 'lucide-react';
+import { AcovonLogoIcon } from './AcovonLogoIcon';
 
 interface FooterProps {
   onNavigate: (tab: string) => void;
@@ -7,27 +8,25 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
   return (
-    <footer className="w-full bg-[#f4f1ea] dark:bg-[#09090b] border-t border-stone-200 dark:border-[#1f1f23] text-stone-600 dark:text-neutral-400 text-xs py-12 px-6 lg:px-12 mt-16 transition-colors">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-5 gap-8">
+    <footer className="w-full bg-[#f4f1ea] dark:bg-[#09090b] border-t border-stone-200 dark:border-[#1f1f23] text-stone-600 dark:text-neutral-400 text-xs py-8 sm:py-12 px-4 sm:px-6 lg:px-10 mt-12 sm:mt-16 transition-colors">
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 xs:grid-cols-2 md:grid-cols-5 gap-6 sm:gap-8">
         
         {/* Brand Column */}
-        <div className="md:col-span-2 space-y-4">
+        <div className="xs:col-span-2 md:col-span-2 space-y-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded bg-gradient-to-br from-[#d4af37] to-[#7a6114] flex items-center justify-center">
-              <span className="font-brand text-black font-bold text-sm">A</span>
-            </div>
+            <AcovonLogoIcon size="sm" />
             <span className="font-brand text-lg font-bold tracking-widest text-stone-900 dark:text-white">ACOVON</span>
           </div>
           <p className="text-neutral-400 max-w-sm text-xs leading-relaxed">
             Where Creators Monetize Their Influence. The premier global platform for creator subscriptions, exclusive vault media, paid private video calls, and personalized video commissions.
           </p>
-          <div className="flex items-center gap-4 text-xs text-neutral-500 pt-2">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-neutral-500 pt-2">
             <div className="flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-[#d4af37]" />
+              <Shield className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
               <span>Strict 18+ Identity Verification</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-[#d4af37]" />
+              <Lock className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
               <span>Escrow Payment Protection</span>
             </div>
           </div>
@@ -79,9 +78,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
 
       </div>
 
-      <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-[#1f1f23] flex flex-col sm:flex-row items-center justify-between gap-4 text-neutral-500 text-[11px]">
+      <div className="max-w-[1600px] mx-auto mt-8 sm:mt-10 pt-5 sm:pt-6 border-t border-[#1f1f23] flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 text-neutral-500 text-[11px]">
         <div>© 2026 ACOVON International Inc. All rights reserved. Registered trademark.</div>
-        <div className="flex items-center gap-5 flex-wrap">
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
           <span>Global Multi-Currency Settlements</span>
           <span aria-hidden="true">·</span>
           <span>End-to-End Escrow Protection</span>

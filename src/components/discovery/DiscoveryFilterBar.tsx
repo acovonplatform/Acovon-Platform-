@@ -71,7 +71,7 @@ export const SearchableCountrySelector: React.FC<SearchableCountrySelectorProps>
   return (
     <div ref={containerRef} className={`relative space-y-1.5 ${className}`}>
       {label && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <label className="text-xs font-semibold text-stone-800 dark:text-neutral-200 flex items-center gap-1.5">
             <Globe className="w-3.5 h-3.5 text-[#d4af37]" />
             <span>{label}</span>
@@ -221,8 +221,16 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
   searchPlaceholder
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setAlignRight(rect.left + 320 > window.innerWidth - 16 && rect.right - 320 >= 16);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -260,7 +268,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(prev => !prev)}
-        className={`w-full sm:w-auto min-w-[175px] px-3 py-2 rounded-xl border text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+        className={`w-full sm:w-auto sm:min-w-[175px] px-3 py-2 rounded-xl border text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
           selectedValues.length > 0
             ? 'bg-amber-50 dark:bg-[#1f1c12] border-[#d4af37] text-stone-900 dark:text-[#fce7b0] font-semibold'
             : 'bg-white dark:bg-[#141418] border-stone-300 dark:border-[#27272a] text-stone-700 dark:text-neutral-300 hover:border-stone-400 dark:hover:border-[#3a3a44]'
@@ -279,7 +287,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 z-50 bg-white dark:bg-[#141418] border border-stone-300 dark:border-[#2e2e38] rounded-2xl shadow-2xl p-2.5 space-y-2 animate-in fade-in zoom-in-95">
+        <div className={`absolute ${alignRight ? 'right-0' : 'left-0'} top-full mt-1.5 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] z-50 bg-white dark:bg-[#141418] border border-stone-300 dark:border-[#2e2e38] rounded-2xl shadow-2xl p-2.5 space-y-2 animate-in fade-in zoom-in-95`}>
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-2.5" />
             <input
@@ -518,7 +526,7 @@ export const DiscoveryFilterBar: React.FC<DiscoveryFilterBarProps> = ({
   return (
     <div className="bg-white dark:bg-[#121216] border border-stone-200 dark:border-[#26262b] rounded-2xl p-3 sm:p-4 space-y-3 mb-5">
       {/* Mobile Filter Toggle Header */}
-      <div className="flex items-center justify-between gap-2 sm:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:hidden">
         <button
           type="button"
           onClick={() => setMobileFilterOpen(prev => !prev)}
@@ -605,7 +613,7 @@ export const DiscoveryFilterBar: React.FC<DiscoveryFilterBarProps> = ({
         </div>
 
         {/* Apply Filters & Clear All Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={handleApply}

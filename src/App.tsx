@@ -3,7 +3,6 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
-import { LandingPage } from './components/public/LandingPage';
 import { FeedView } from './components/feed/FeedView';
 import { ExplorePage } from './components/explore/ExplorePage';
 import { CategoriesDiscoveryPage } from './components/discovery/CategoriesDiscoveryPage';
@@ -21,6 +20,7 @@ import { EditPostModal } from './components/feed/EditPostModal';
 import { DeletePostModal } from './components/feed/DeletePostModal';
 import { VideoCallModal } from './components/videocall/VideoCallModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { GuestAuthPromptModal } from './components/auth/GuestAuthPromptModal';
 import { AdFreeModal } from './components/ads/AdFreeModal';
 import { CreatorAdvertisingModal } from './components/creator/CreatorAdvertisingModal';
 import { LivestreamsHub } from './components/live/LivestreamsHub';
@@ -36,6 +36,7 @@ import {
   HelpCenterModal
 } from './components/profile/ProfileModals';
 import { BecomeCreatorModal } from './components/creator/BecomeCreatorModal';
+import { BecomeCreatorLandingPage } from './components/creator/BecomeCreatorLandingPage';
 import { MySubscriptionsView } from './components/fan/MySubscriptionsView';
 import { SubscribeModal } from './components/common/SubscribeModal';
 import { ShareModal } from './components/common/ShareModal';
@@ -50,8 +51,8 @@ import { Post } from './types';
 import { X, Shield, Lock, FileText, Coins } from 'lucide-react';
 
 function AppContent() {
-  const { tipCreator, isCurrentUserApprovedCreator, isAuthenticated, currentUser } = useApp();
-  const isCreator = isCurrentUserApprovedCreator;
+  const { tipCreator, isCurrentUserApprovedCreator, isAuthenticated, currentUser, requireAuth } = useApp();
+  const isCreator = isAuthenticated && isCurrentUserApprovedCreator;
 
   const [currentTab, setCurrentTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -60,7 +61,7 @@ function AppContent() {
       if (path === '/admin/setup') return 'admin-setup';
       if (path === '/admin' || path === '/admin-panel') return 'admin-panel';
     }
-    return isAuthenticated ? 'feed' : 'landing';
+    return 'feed';
   });
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>('creator_elena');
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
@@ -79,15 +80,57 @@ function AppContent() {
   const [showPrivacy, setShowPrivacy] = useState<boolean>(false);
   const [showHelpCenter, setShowHelpCenter] = useState<boolean>(false);
   const [showBecomeCreator, setShowBecomeCreator] = useState<boolean>(false);
+  const [pendingBecomeCreatorAfterAuth, setPendingBecomeCreatorAfterAuth] = useState<boolean>(false);
   const [showFanProfile, setShowFanProfile] = useState<boolean>(false);
   const [studioTargetSection, setStudioTargetSection] = useState<{
     category: StudioCategory;
     subItem: string;
+    statusTab?: 'manage' | 'create' | 'archive';
     key: number;
   } | null>(null);
   const [accessDeniedNotice, setAccessDeniedNotice] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [infoModalTitle, setInfoModalTitle] = useState<string | null>(null);
+  const [isMobileKeyboardOpen, setIsMobileKeyboardOpen] = useState<boolean>(false);
+
+  // Detect software keyboard appearance on mobile (< 768px) via visualViewport
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let baselineHeight = window.innerHeight;
+    const checkKeyboard = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileKeyboardOpen(false);
+        return;
+      }
+      const vv = window.visualViewport;
+      if (!vv) {
+        setIsMobileKeyboardOpen(false);
+        return;
+      }
+      // Update baseline when viewport grows (e.g. keyboard closed or orientation changed)
+      if (vv.height > baselineHeight || Math.abs(vv.width - window.innerWidth) > 40) {
+        baselineHeight = Math.max(vv.height, window.innerHeight);
+      }
+      const referenceHeight = Math.max(window.innerHeight, baselineHeight);
+      const heightDelta = referenceHeight - vv.height;
+      const activeTag = document.activeElement?.tagName;
+      const isTextFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      setIsMobileKeyboardOpen(heightDelta > 130 && isTextFocused);
+    };
+
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', checkKeyboard);
+    window.addEventListener('resize', checkKeyboard);
+    window.addEventListener('focusin', checkKeyboard);
+    window.addEventListener('focusout', () => setTimeout(checkKeyboard, 80));
+
+    return () => {
+      vv?.removeEventListener('resize', checkKeyboard);
+      window.removeEventListener('resize', checkKeyboard);
+      window.removeEventListener('focusin', checkKeyboard);
+    };
+  }, []);
 
   // Handle Supabase email verification / OAuth callback tokens and protect private pages with supabase.auth.getSession()
   useEffect(() => {
@@ -118,21 +161,18 @@ function AppContent() {
       const isAdminRoute = pathname.startsWith('/admin') || ['admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
 
       if (data.session) {
-        if (!isAdminRoute && (currentTab === 'landing' || pathname === '/login')) {
-          window.history.pushState({}, '', '/');
-          setCurrentTab('feed');
+        if (!isAdminRoute && pathname === '/login') {
+          window.history.replaceState({}, '', '/');
         }
       } else {
         if (isAdminRoute) {
           return;
         }
 
-        const isPublicGuestTab = ['landing', 'categories', 'countries', 'explore', 'creator-profile'].includes(currentTab);
+        const isPublicGuestTab = ['feed', 'categories', 'countries', 'explore', 'creator-profile', 'live', 'become-creator'].includes(currentTab);
         if (!isPublicGuestTab) {
-          window.history.pushState({}, '', '/login');
-          setCurrentTab('landing');
-          setAuthMode('login');
-          setShowAuth(true);
+          setCurrentTab('feed');
+          requireAuth('access that page');
         } else if (pathname === '/login') {
           setAuthMode('login');
           setShowAuth(true);
@@ -201,37 +241,42 @@ function AppContent() {
       return;
     }
 
-    if (['terms', 'privacy', 'community-guidelines', 'verification-rules', 'pricing', 'become-creator', 'earnings-calculator', 'payout-terms'].includes(tab)) {
-      if (tab === 'become-creator') {
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) {
-          window.history.pushState({}, '', '/login');
-          setAuthMode('login');
-          setShowAuth(true);
-          return;
-        }
-        setShowBecomeCreator(true);
-        return;
+    if (tab === 'become-creator' || tab === 'earnings-calculator') {
+      setCurrentTab('become-creator');
+      if (tab === 'earnings-calculator') {
+        setTimeout(() => {
+          const el = document.getElementById('earnings-calculator');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
+      return;
+    }
+
+    if (['terms', 'privacy', 'community-guidelines', 'verification-rules', 'pricing', 'payout-terms'].includes(tab)) {
       setInfoModalTitle(tab);
       return;
     }
 
-    // Protect private pages with supabase.auth.getSession() — allow public guest discovery pages (landing, categories, countries, explore, creator-profile)
-    const isPublicGuestTab = ['landing', 'categories', 'countries', 'explore', 'creator-profile'].includes(tab);
+    // Protect private pages — allow seamless public guest browsing on Feed, Explore, Categories, Countries, Live, Become a Creator, and Creator Profiles
+    const isPublicGuestTab = ['feed', 'categories', 'countries', 'explore', 'creator-profile', 'live', 'become-creator'].includes(tab);
     if (!isPublicGuestTab) {
       const { data } = await supabase.auth.getSession();
       if (!data.session && !isAuthenticated) {
-        window.history.pushState({}, '', '/login');
-        setCurrentTab('landing');
-        setAuthMode('login');
-        setShowAuth(true);
+        const actionLabels: Record<string, string> = {
+          messages: 'message creators directly',
+          requests: 'manage custom video requests',
+          'creator-studio': 'access Creator Studio',
+          subscriptions: 'view your subscriptions',
+          wallet: 'access your ACOVON wallet'
+        };
+        requireAuth(actionLabels[tab] || 'access this feature');
         return;
       }
     }
 
-    // Once authenticated, never show the landing page again — Home is the Feed
-    const resolvedTab = isAuthenticated && tab === 'landing' ? 'feed' : tab;
+    const resolvedTab = tab === 'landing' ? 'feed' : tab;
 
     // Role-based Access Control (RBAC): Fans cannot access creator pages
     if (!isCreator && (resolvedTab === 'creator-studio' || resolvedTab === 'requests' || resolvedTab === 'creator-dashboard')) {
@@ -245,11 +290,17 @@ function AppContent() {
     if (creatorId) {
       setSelectedCreatorId(creatorId);
     }
+    if (resolvedTab !== 'creator-studio') {
+      setStudioTargetSection(null);
+    }
     setCurrentTab(resolvedTab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: resolvedTab === 'messages' ? 'auto' : 'smooth' });
   };
 
   const handleOpenCreatePost = () => {
+    if (!requireAuth('publish content as a creator')) {
+      return;
+    }
     if (!isCreator) {
       setAccessDeniedNotice('Content publishing is reserved for verified creator accounts. Complete your creator application to publish posts.');
       setShowBecomeCreator(true);
@@ -259,6 +310,9 @@ function AppContent() {
   };
 
   const handleOpenTipModal = (creatorId: string, creatorName: string) => {
+    if (!requireAuth(`send a tip to ${creatorName}`)) {
+      return;
+    }
     setTipTarget({ id: creatorId, name: creatorName });
   };
 
@@ -274,12 +328,19 @@ function AppContent() {
     }
   };
 
+  const showMobileBottomNav = !['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
+  const isMessagesTab = currentTab === 'messages';
+
   return (
-    <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex flex-col justify-between selection:bg-[#d4af37]/30 selection:text-[#fef08a] transition-colors duration-200">
+    <div
+      className={`min-h-screen bg-[#09090b] text-[#f4f4f5] flex flex-col justify-between selection:bg-[#d4af37]/30 selection:text-[#fef08a] transition-colors duration-200 ${
+        showMobileBottomNav && !isMessagesTab ? 'pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0' : ''
+      }`}
+    >
       
       {/* Top Header */}
       <Header
-        currentTab={isAuthenticated && currentTab === 'landing' ? 'feed' : currentTab}
+        currentTab={currentTab === 'landing' ? 'feed' : currentTab}
         onNavigate={handleNavigate}
         onOpenWallet={() => setShowWallet(true)}
         onOpenCreatePost={handleOpenCreatePost}
@@ -314,7 +375,7 @@ function AppContent() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenPrivacy={() => setShowPrivacy(true)}
         onOpenHelpCenter={() => setShowHelpCenter(true)}
-        onOpenBecomeCreator={() => setShowBecomeCreator(true)}
+        onOpenBecomeCreator={() => handleNavigate('become-creator')}
         onOpenFanProfile={() => setShowFanProfile(true)}
         searchQuery={globalSearchQuery}
         onSearchChange={setGlobalSearchQuery}
@@ -322,19 +383,19 @@ function AppContent() {
 
       {/* RBAC Access Denied Notification Banner */}
       {accessDeniedNotice && (
-        <div className="max-w-4xl mx-auto px-4 pt-4 w-full animate-in fade-in slide-in-from-top-2">
-          <div className="p-3.5 bg-gradient-to-r from-[#211d14] via-[#1c1810] to-[#141418] border border-[#d4af37]/60 rounded-xl flex items-center justify-between gap-3 shadow-xl">
-            <div className="flex items-center gap-2.5">
-              <Shield className="w-5 h-5 text-[#d4af37] shrink-0" />
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4 w-full animate-in fade-in slide-in-from-top-2">
+          <div className="p-3 sm:p-3.5 bg-gradient-to-r from-[#211d14] via-[#1c1810] to-[#141418] border border-[#d4af37]/60 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
+            <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+              <Shield className="w-5 h-5 text-[#d4af37] shrink-0 mt-0.5 sm:mt-0" />
               <span className="text-xs text-neutral-200">{accessDeniedNotice}</span>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center justify-end gap-2 shrink-0">
               <button
                 onClick={() => {
                   setAccessDeniedNotice(null);
                   setShowBecomeCreator(true);
                 }}
-                className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-sm"
+                className="px-3 sm:px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-sm"
               >
                 Apply to Become Creator
               </button>
@@ -350,26 +411,22 @@ function AppContent() {
       )}
 
       {/* Main Viewport */}
-      <main className="flex-1 pb-16 md:pb-0">
-        {!isAuthenticated && currentTab === 'landing' && (
-          <LandingPage
-            onNavigate={handleNavigate}
-            onOpenAuth={(mode = 'register') => {
-              setAuthMode(mode);
-              setShowAuth(true);
-            }}
-          />
-        )}
-
-        {isAuthenticated && (currentTab === 'feed' || currentTab === 'landing') && (
+      <main className={isMessagesTab ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 min-w-0'}>
+        {(currentTab === 'feed' || currentTab === 'landing') && (
           <FeedView
             onNavigateToCreator={(id) => handleNavigate('creator-profile', id)}
             onOpenCreatePost={handleOpenCreatePost}
             onOpenTipModal={handleOpenTipModal}
-            onGoAdFree={() => setShowAdFree(true)}
-            onOpenCreatorAd={() => setShowCreatorAd(true)}
+            onGoAdFree={() => {
+              if (requireAuth('upgrade to Ad-Free VIP')) setShowAdFree(true);
+            }}
+            onOpenCreatorAd={() => {
+              if (requireAuth('promote creator content')) setShowCreatorAd(true);
+            }}
             onNavigateToRequests={() => isCreator ? handleNavigate('requests') : handleNavigate('feed')}
-            onOpenSubscribeModal={(creatorId) => setSubscribeTargetCreatorId(creatorId)}
+            onOpenSubscribeModal={(creatorId) => {
+              if (requireAuth('subscribe to this creator')) setSubscribeTargetCreatorId(creatorId);
+            }}
             onOpenShareModal={(post) => setShareTargetPost(post)}
             onOpenVideoPlayer={(postId, time) => {
               setFullScreenVideoPostId(postId);
@@ -382,9 +439,15 @@ function AppContent() {
             onOpenStatusViewer={(creatorId) => setActiveStatusCreatorId(creatorId)}
             onOpenCreateStatus={() => {
               if (isCreator) {
+                setStudioTargetSection({
+                  category: 'CONTENT',
+                  subItem: 'my_status',
+                  statusTab: 'create',
+                  key: Date.now()
+                });
                 handleNavigate('creator-studio');
               } else {
-                setShowBecomeCreator(true);
+                handleNavigate('become-creator');
               }
             }}
             onNavigate={handleNavigate}
@@ -429,13 +492,34 @@ function AppContent() {
               setFullScreenPhotoPostId(postId);
               setFullScreenPhotoIndex(mediaIdx || 0);
             }}
+            searchQuery={globalSearchQuery}
+            onSearchChange={setGlobalSearchQuery}
           />
         )}
 
         {currentTab === 'live' && (
-          <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-6">
-            <LivestreamsHub />
+          <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-8 pt-4 sm:pt-6">
+            <LivestreamsHub
+              searchQuery={globalSearchQuery}
+              onClearSearch={() => setGlobalSearchQuery('')}
+            />
           </div>
+        )}
+
+        {currentTab === 'become-creator' && (
+          <BecomeCreatorLandingPage
+            onApplyClick={() => {
+              if (!isAuthenticated) {
+                setPendingBecomeCreatorAfterAuth(true);
+                requireAuth('apply to become a creator');
+                return;
+              }
+              setShowBecomeCreator(true);
+            }}
+            onOpenCreatorStudio={() => handleNavigate('creator-studio')}
+            onBackToFeed={() => handleNavigate('feed')}
+            onNavigate={handleNavigate}
+          />
         )}
 
         {currentTab === 'creator-profile' && (
@@ -573,20 +657,21 @@ function AppContent() {
         )}
       </main>
 
-      {/* Footer */}
-      <Footer onNavigate={handleNavigate} />
+      {/* Footer — hidden in Messages so chat conversation stays locked to viewport */}
+      {!isMessagesTab && <Footer onNavigate={handleNavigate} />}
 
-      {/* Mobile Bottom Navigation — shown for authenticated users on public/fan/creator tabs */}
-      {isAuthenticated && !['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab) && (
+      {/* Mobile Bottom Navigation — shown for guests (public tabs) & authenticated users */}
+      {showMobileBottomNav && (
         <MobileBottomNav
           currentTab={currentTab === 'landing' ? 'feed' : currentTab}
           onNavigate={handleNavigate}
           onOpenCreatePost={handleOpenCreatePost}
+          isKeyboardOpen={isMobileKeyboardOpen}
         />
       )}
 
       {/* Global Modals */}
-      {showWallet && <WalletModal onClose={() => setShowWallet(false)} />}
+      {showWallet && isAuthenticated && <WalletModal onClose={() => setShowWallet(false)} />}
       
       {showCreatePost && isCreator && <CreatePostModal onClose={() => setShowCreatePost(false)} />}
 
@@ -594,7 +679,7 @@ function AppContent() {
       <EditPostModal />
       <DeletePostModal />
 
-      {showBecomeCreator && (
+      {showBecomeCreator && isAuthenticated && (
         <BecomeCreatorModal
           onClose={() => setShowBecomeCreator(false)}
           onSuccess={() => {
@@ -602,14 +687,29 @@ function AppContent() {
           }}
         />
       )}
+
+      <GuestAuthPromptModal
+        onOpenAuth={(mode) => {
+          setAuthMode(mode);
+          setShowAuth(true);
+        }}
+      />
       
       {showAuth && (
         <AuthModal
           initialMode={authMode}
-          onClose={() => setShowAuth(false)}
+          onClose={() => {
+            if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+              window.history.replaceState({}, '', '/');
+            }
+            setShowAuth(false);
+          }}
           onSuccess={() => {
-            setCurrentTab('feed');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Preserve visitor's exact page, open media player, and scroll position on login
+            if (pendingBecomeCreatorAfterAuth) {
+              setPendingBecomeCreatorAfterAuth(false);
+              setShowBecomeCreator(true);
+            }
           }}
         />
       )}
@@ -698,7 +798,9 @@ function AppContent() {
           initialTime={fullScreenVideoTime}
           onClose={() => setFullScreenVideoPostId(null)}
           onNavigateToCreator={(id) => handleNavigate('creator-profile', id)}
-          onOpenSubscribeModal={(id) => setSubscribeTargetCreatorId(id)}
+          onOpenSubscribeModal={(id) => {
+            if (requireAuth('subscribe to this creator')) setSubscribeTargetCreatorId(id);
+          }}
           onOpenShareModal={(post) => setShareTargetPost(post)}
           onOpenTipModal={handleOpenTipModal}
         />
@@ -711,7 +813,9 @@ function AppContent() {
           initialMediaIndex={fullScreenPhotoIndex}
           onClose={() => setFullScreenPhotoPostId(null)}
           onNavigateToCreator={(id) => handleNavigate('creator-profile', id)}
-          onOpenSubscribeModal={(id) => setSubscribeTargetCreatorId(id)}
+          onOpenSubscribeModal={(id) => {
+            if (requireAuth('subscribe to this creator')) setSubscribeTargetCreatorId(id);
+          }}
           onOpenShareModal={(post) => setShareTargetPost(post)}
           onOpenTipModal={handleOpenTipModal}
         />
@@ -736,8 +840,8 @@ function AppContent() {
 
       {/* Quick Direct Tip Modal */}
       {tipTarget && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-5 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="acovon-modal-panel bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-4 sm:p-5 space-y-4 max-h-[92dvh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Coins className="w-5 h-5 text-[#d4af37]" />
@@ -808,16 +912,18 @@ function AppContent() {
             handleNavigate('creator-profile', creatorId);
           }}
           onOpenSubscribeModal={(creatorId) => {
-            setActiveStatusCreatorId(null);
-            setSubscribeTargetCreatorId(creatorId);
+            if (requireAuth('subscribe to this creator')) {
+              setActiveStatusCreatorId(null);
+              setSubscribeTargetCreatorId(creatorId);
+            }
           }}
         />
       )}
 
       {/* Informational Policy Modal */}
       {infoModalTitle && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="acovon-modal-panel bg-[#121215] border border-[#27272a] rounded-2xl max-w-xl w-full p-4 sm:p-6 space-y-4 max-h-[92dvh] flex flex-col">
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
               <div className="flex items-center gap-2 text-[#d4af37]">
                 <Shield className="w-5 h-5" />
@@ -857,8 +963,8 @@ function AppContent() {
         </div>
       )}
 
-      {/* Important Role-Targeted Announcement Popup Modal */}
-      {currentTab !== 'landing' && currentTab !== 'admin' && (
+      {/* Important Role-Targeted Announcement Popup Modal — only for signed-in accounts */}
+      {isAuthenticated && !['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab) && (
         <ImportantAnnouncementPopupModal
           onNavigate={handleNavigate}
           onOpenWallet={() => setShowWallet(true)}

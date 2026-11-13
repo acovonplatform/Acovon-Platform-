@@ -66,8 +66,8 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#121215] border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+    <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-[#121215] border border-zinc-800 rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 acovon-modal-panel">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -158,7 +158,7 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({
               <Clock className="w-3.5 h-3.5 text-[#d4af37]" />
               <span>Poll Duration</span>
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
               {[
                 { label: '1 Min', secs: 60 },
                 { label: '3 Mins', secs: 180 },
@@ -182,7 +182,7 @@ export const CreatePollModal: React.FC<CreatePollModalProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3 pt-3 border-t border-zinc-800">
             <button
               type="button"
               onClick={onClose}

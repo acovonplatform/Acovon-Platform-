@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import {
   ShieldCheck,
   Lock,
@@ -122,8 +123,8 @@ export const AdminSetupPage: React.FC<AdminSetupPageProps> = ({
   // IF SETUP IS ALREADY COMPLETED: Display immutable locked state (Never render registration form)
   if (adminSetupStatus.isSetupCompleted) {
     return (
-      <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-8 text-center space-y-6 animate-in zoom-in-95">
+      <div className="min-h-[85vh] flex items-center justify-center px-3 sm:px-4 py-10 sm:py-12">
+        <div className="max-w-md w-full bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-5 sm:p-8 text-center space-y-6 animate-in zoom-in-95">
           <div className="w-16 h-16 rounded-2xl bg-amber-950/40 border border-[#d4af37]/50 flex items-center justify-center mx-auto text-[#fce7b0] shadow-lg">
             <Lock className="w-8 h-8 text-[#d4af37]" />
           </div>
@@ -167,14 +168,14 @@ export const AdminSetupPage: React.FC<AdminSetupPageProps> = ({
   }
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12 relative">
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+    <div className="min-h-[85vh] flex items-center justify-center px-3 sm:px-4 py-10 sm:py-12 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
         <div className="w-[500px] h-[500px] bg-gradient-to-br from-[#d4af37]/15 via-[#7a6114]/10 to-transparent rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-lg">
         {/* Navigation */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
           <button
             type="button"
             onClick={onNavigateHome}
@@ -193,11 +194,11 @@ export const AdminSetupPage: React.FC<AdminSetupPageProps> = ({
         </div>
 
         {/* Setup Card */}
-        <div className="bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-7 sm:p-9 backdrop-blur-xl space-y-6">
+        <div className="bg-[#101014] border border-[#272730] shadow-2xl rounded-2xl p-5 sm:p-8 backdrop-blur-xl space-y-6">
           {/* Header */}
           <div className="space-y-3 text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#d4af37] to-[#806414] text-black shadow-xl mx-auto">
-              <Crown className="w-7 h-7" />
+            <div className="inline-flex items-center justify-center mx-auto">
+              <AcovonLogoIcon size="lg" />
             </div>
             <div>
               <div className="flex items-center justify-center gap-2">
@@ -330,7 +331,7 @@ export const AdminSetupPage: React.FC<AdminSetupPageProps> = ({
             </div>
 
             {/* Password security criteria checklist */}
-            <div className="p-3 bg-[#16161c] border border-[#24242e] rounded-xl grid grid-cols-2 gap-2 text-[11px]">
+            <div className="p-3 bg-[#16161c] border border-[#24242e] rounded-xl grid grid-cols-1 xs:grid-cols-2 gap-2 text-[11px]">
               <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-emerald-400' : 'text-neutral-500'}`}>
                 {hasMinLength ? <Check className="w-3 h-3 text-emerald-400" /> : <div className="w-1.5 h-1.5 rounded-full bg-neutral-600 ml-1" />}
                 <span>At least 8 characters</span>

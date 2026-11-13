@@ -60,6 +60,7 @@ interface CreatorDashboardProps {
   initialSection?: {
     category: StudioCategory;
     subItem: string;
+    statusTab?: 'manage' | 'create' | 'archive';
     key: number;
   } | null;
 }
@@ -116,6 +117,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   const [promoType, setPromoType] = useState<'boost_profile' | 'promote_post' | 'featured_creator'>('boost_profile');
   const [promoBudget, setPromoBudget] = useState(25);
   const [promoSucceeded, setPromoSucceeded] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
 
   // Live Recording inline editor state
   const [editingRecordingId, setEditingRecordingId] = useState<string | null>(null);
@@ -274,25 +277,28 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
     });
 
     if (res.success) {
+      setPromoError(null);
       setPromoSucceeded(true);
       setTimeout(() => setPromoSucceeded(false), 3000);
     } else {
-      alert(res.error);
+      setPromoError(res.error || 'Could not launch promotion campaign.');
+      setTimeout(() => setPromoError(null), 4000);
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6 overflow-x-hidden">
+    <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6 overflow-x-clip">
 
       {/* Top Banner & Quick Metrics */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#26262b]">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-bold font-brand tracking-wide text-white">Creator Studio</h1>
-            <span className="text-xs font-medium text-neutral-300 inline-flex items-center gap-1">
-              · @{creator.username}
-              <VerifiedBadge creatorId={creator.id} size="xs" />
+            <span className="text-xs font-semibold text-neutral-100 inline-flex items-center gap-1.5">
+              <span>· {creator.name}</span>
+              <VerifiedBadge creatorId={creator.id} size="sm" />
             </span>
+            <span className="text-xs text-neutral-400">@{creator.username}</span>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
             Central business management: content, audience, monetization, official blue verification, live broadcasting, promotions, and analytics.
@@ -506,7 +512,11 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
         <div className="space-y-6">
           {/* Sub-item: My Status / Stories */}
           {activeSubItem === 'my_status' && (
-            <MyStatusSection onOpenViewer={onOpenStatusViewer} />
+            <MyStatusSection
+              onOpenViewer={onOpenStatusViewer}
+              initialTab={initialSection?.statusTab}
+              tabRequestKey={initialSection?.key}
+            />
           )}
 
           {/* Sub-item: My Posts */}
@@ -517,8 +527,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Upload Content & Background Video Compression Queue */}
           {activeSubItem === 'upload_content' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-5 bg-[#121215] border border-[#27272a] rounded-2xl p-6 text-center space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
+                <div className="lg:col-span-5 bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 text-center space-y-4">
                   <div className="w-14 h-14 rounded-2xl bg-[#d4af37]/15 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37] mx-auto">
                     <Film className="w-7 h-7" />
                   </div>
@@ -539,14 +549,20 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                           creatorId: creator.id,
                           creatorName: creator.name,
                           sourceContext: 'creator_studio',
-                          fileName: `Studio_Vault_Drop_4K_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.mov`,
+                          fileName: `Studio_Vault_Drop_4K_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.mp4`,
                           fileSize: 512 * 1024 * 1024,
-                          mimeType: 'video/quicktime',
-                          sourceUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
-                          thumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80',
-                          width: 3840,
-                          height: 2160,
-                          durationSeconds: 165,
+                          mimeType: 'video/mp4',
+                          sourceUrl: '/videos/sample3.mp4',
+                          thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
+                          previewFrames: [
+                            '/videos/thumbs/sample3_frame_1.webp',
+                            '/videos/thumbs/sample3_frame_2.webp',
+                            '/videos/thumbs/sample3_frame_3.webp',
+                            '/videos/thumbs/sample3_frame_4.webp'
+                          ],
+                          width: 1280,
+                          height: 720,
+                          durationSeconds: 10,
                           frameRate: 60
                         });
                       }}
@@ -558,18 +574,18 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 </div>
 
                 {/* Live Creator Video Optimization & Transcoding Queue */}
-                <div className="lg:col-span-7 bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
+                <div className="lg:col-span-7 bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-[#d4af37]" />
+                        <Layers className="w-4 h-4 text-[#d4af37] shrink-0" />
                         <span>Background Video Optimization &amp; Transcoding Queue</span>
                       </h4>
                       <p className="text-[11px] text-neutral-400">
                         Non-blocking background worker — continue managing your studio while videos optimize.
                       </p>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-mono text-emerald-300">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-mono text-emerald-300 shrink-0">
                       ~64% Avg Size Saved
                     </span>
                   </div>
@@ -587,7 +603,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                             key={job.id}
                             className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2 text-xs"
                           >
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="min-w-0">
                                 <div className="font-mono font-bold text-white truncate">{job.fileName}</div>
                                 <div className="text-[10px] text-neutral-400 flex items-center gap-2 mt-0.5">
@@ -654,7 +670,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Content Library */}
           {activeSubItem === 'content_library' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-bold text-white">Content Library, Adaptive Vault &amp; Live Clips</h3>
                   <p className="text-xs text-neutral-400">All optimized media assets, multi-bitrate ladders, and 30-second live highlights.</p>
@@ -664,7 +680,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 3xl:grid-cols-6 gap-2.5 sm:gap-3">
                 {myPosts.flatMap(p => p.media).map((m, idx) => (
                   <div key={idx} className="group relative aspect-square bg-[#18181c] border border-[#27272a] rounded-xl overflow-hidden">
                     <img src={m.thumbnailUrl || m.url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
@@ -677,7 +693,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-[#fce7b0] font-mono">
+                      <span className="text-[10px] text-[#fce7b0] font-mono truncate">
                         {m.type === 'video'
                           ? `${m.availableResolutions?.join('/') || '1080p/720p/480p/360p'}`
                           : `Asset #${idx + 1}`}
@@ -691,8 +707,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Scheduled Posts */}
           {activeSubItem === 'scheduled_posts' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-white">Scheduled Publishing Queue</h3>
                 <span className="text-xs text-neutral-400">2 drops queued for this week</span>
               </div>
@@ -701,15 +717,15 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                   { title: 'Behind The Scenes: Milan Haute Couture Fall Edition', time: 'Tomorrow at 18:00 UTC', type: 'PPV Video ($14.99)' },
                   { title: 'Exclusive Masterclass: Music Production Stems & Vocals', time: 'Friday at 20:00 UTC', type: 'Subscriber Exclusive' }
                 ].map((s, idx) => (
-                  <div key={idx} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
-                    <div className="space-y-1">
+                  <div key={idx} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="space-y-1 min-w-0">
                       <div className="font-semibold text-white">{s.title}</div>
                       <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#d4af37]" />
+                        <Clock className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
                         <span>{s.time}</span>
                       </div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0]">
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0] shrink-0">
                       {s.type}
                     </span>
                   </div>
@@ -746,21 +762,21 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-3">
+              <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-3">
                 <h4 className="text-sm font-bold text-white">Recent Active Subscribers</h4>
                 <div className="space-y-2">
                   {subscriptions.map(sub => (
-                    <div key={sub.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#24242d] flex items-center justify-center font-bold text-[#d4af37]">
+                    <div key={sub.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-[#24242d] flex items-center justify-center font-bold text-[#d4af37] shrink-0">
                           {sub.fanId.slice(4, 6).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="font-semibold text-white">Patron {sub.fanId}</div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate">Patron {sub.fanId}</div>
                           <div className="text-[10px] text-neutral-400">{sub.tierName} Tier · Next renewal {sub.nextRenewalDate}</div>
                         </div>
                       </div>
-                      <div className="text-right font-mono font-bold text-[#fce7b0]">
+                      <div className="text-right font-mono font-bold text-[#fce7b0] tabular-nums shrink-0">
                         ${sub.monthlyPrice.toFixed(2)}/mo
                       </div>
                     </div>
@@ -772,27 +788,27 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Followers */}
           {activeSubItem === 'followers' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-white">Free Followers Funnel</h3>
                   <p className="text-xs text-neutral-400">Followers can see public updates and be converted into paid subscribers.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-white">14,250 Followers</div>
+                <div className="text-xl font-bold font-mono text-white tabular-nums">14,250 Followers</div>
               </div>
-              <div className="p-4 bg-[#18181c] rounded-xl flex items-center justify-between text-xs">
+              <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="font-semibold text-neutral-200">Free to Paid Conversion Rate</span>
                   <div className="text-[11px] text-neutral-500">Industry benchmark: 2.5%</div>
                 </div>
-                <span className="text-base font-bold font-mono text-emerald-400">9.96%</span>
+                <span className="text-base font-bold font-mono text-emerald-400 tabular-nums">9.96%</span>
               </div>
             </div>
           )}
 
           {/* Sub-item: Messages */}
           {activeSubItem === 'messages' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-white">Direct Fan Inquiries & VIP Messages</h3>
@@ -802,14 +818,14 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               <p className="text-xs text-neutral-400 leading-relaxed">
                 Manage your conversations, send locked pay-per-view images/videos inside chat threads, and reply to VIP members.
               </p>
-              <div className="p-4 bg-[#18181c] rounded-xl flex items-center justify-between">
+              <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs">
                   <div className="font-semibold text-white">Active Message Threads: 18</div>
                   <div className="text-[11px] text-[#fce7b0]">3 pending paid unlock requests</div>
                 </div>
                 <button
                   onClick={() => window.location.href = '#messages'}
-                  className="px-4 py-2 bg-[#d4af37] text-black text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-[#d4af37] text-black text-xs font-bold rounded-xl cursor-pointer shrink-0"
                 >
                   Go to Messages Hub
                 </button>
@@ -819,13 +835,13 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Community */}
           {activeSubItem === 'community' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <h3 className="text-sm font-bold text-white">Community Engagement</h3>
               <p className="text-xs text-neutral-400">
                 Post comments, poll results, and community feedback from your active fanbase.
               </p>
               <div className="p-4 bg-[#18181c] rounded-xl space-y-2 text-xs">
-                <div className="flex items-center justify-between text-neutral-300">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-300">
                   <span>Community Sentiment Score</span>
                   <span className="font-mono text-emerald-400 font-bold">98.4% Positive</span>
                 </div>
@@ -862,20 +878,20 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Pay-per-view */}
           {activeSubItem === 'pay_per_view' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-white">Pay-Per-View Content Vault</h3>
                   <p className="text-xs text-neutral-400">Individual unlock revenue generated by locked posts and video teasers.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-[#fce7b0]">$9,228.00 Earned</div>
+                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$9,228.00 Earned</div>
               </div>
-              <div className="p-4 bg-[#18181c] rounded-xl flex items-center justify-between text-xs">
+              <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="font-semibold text-white">Average PPV Unlock Price</span>
                   <div className="text-[11px] text-neutral-500">Across 615 total unlocks</div>
                 </div>
-                <span className="font-mono font-bold text-white">$15.00</span>
+                <span className="font-mono font-bold text-white tabular-nums">$15.00</span>
               </div>
             </div>
           )}
@@ -883,14 +899,14 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Custom Video Requests */}
           {activeSubItem === 'custom_requests' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-white">Custom Video Requests</h3>
                   <p className="text-xs text-neutral-400">Escrow-backed personalized video requests from patrons.</p>
                 </div>
                 <button
                   onClick={onNavigateToRequests}
-                  className="px-4 py-2 bg-[#d4af37] text-black text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-[#d4af37] text-black text-xs font-bold rounded-xl cursor-pointer shrink-0"
                 >
                   Manage Requests Queue
                 </button>
@@ -898,13 +914,13 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
               <div className="space-y-3">
                 {customRequests.slice(0, 3).map(req => (
-                  <div key={req.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-bold text-white">{req.title}</div>
-                      <div className="text-[11px] text-neutral-400">For {req.recipientName} · By @{req.fanUsername}</div>
+                  <div key={req.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="font-bold text-white truncate">{req.title}</div>
+                      <div className="text-[11px] text-neutral-400 truncate">For {req.recipientName} · By @{req.fanUsername}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono font-bold text-[#fce7b0]">${req.price.toFixed(2)}</div>
+                    <div className="text-right shrink-0">
+                      <div className="font-mono font-bold text-[#fce7b0] tabular-nums">${req.price.toFixed(2)}</div>
                       <span className="text-[10px] text-emerald-400 uppercase font-bold">{req.status}</span>
                     </div>
                   </div>
@@ -915,17 +931,17 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Paid Messages */}
           {activeSubItem === 'paid_messages' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <h3 className="text-sm font-bold text-white">Paid Direct Messages</h3>
               <p className="text-xs text-neutral-400">Revenue earned from paid message requests and locked media attachments in chat.</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
                 <div className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
                   <div className="text-neutral-400">Paid Message Earnings</div>
-                  <div className="text-xl font-bold font-mono text-[#fce7b0]">$1,538.00</div>
+                  <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$1,538.00</div>
                 </div>
                 <div className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
                   <div className="text-neutral-400">Average Message Price</div>
-                  <div className="text-xl font-bold font-mono text-white">$15.00</div>
+                  <div className="text-xl font-bold font-mono text-white tabular-nums">$15.00</div>
                 </div>
               </div>
             </div>
@@ -933,10 +949,10 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Tips and Gifts */}
           {activeSubItem === 'tips_gifts' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <h3 className="text-sm font-bold text-white">Tips and Virtual Gifts</h3>
               <p className="text-xs text-neutral-400">Tips received during live broadcasts and directly on feed posts.</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
                 {[
                   { name: 'Virtual Champagne', value: '$25.00', count: 48 },
                   { name: 'Super Diamond', value: '$50.00', count: 18 },
@@ -944,7 +960,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 ].map((g, i) => (
                   <div key={i} className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
                     <div className="font-semibold text-white">{g.name}</div>
-                    <div className="text-lg font-mono font-bold text-[#fce7b0]">{g.value}</div>
+                    <div className="text-lg font-mono font-bold text-[#fce7b0] tabular-nums">{g.value}</div>
                     <div className="text-[10px] text-neutral-500">{g.count} gifts received</div>
                   </div>
                 ))}
@@ -954,20 +970,20 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Livestream Earnings */}
           {activeSubItem === 'livestream_earnings' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-white">Livestream &amp; Replay Revenue Streams</h3>
                   <p className="text-xs text-neutral-400">PPV ticket sales, official paid replay unlocks, highlight chat badges, and live tips.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-[#fce7b0]">$6,959.00 Gross</div>
+                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$6,959.00 Gross</div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-4 bg-[#18181c] rounded-xl space-y-1">
                   <div className="font-semibold text-white">PPV Live Ticket Gross</div>
                   <div className="text-[11px] text-neutral-400">324 tickets sold across pay-per-view live broadcasts.</div>
                 </div>
-                <div className="p-4 bg-[#18181c] rounded-xl space-y-1 flex items-center justify-between">
+                <div className="p-4 bg-[#18181c] rounded-xl space-y-1 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="font-semibold text-[#fce7b0]">Official Paid Replay Revenue</div>
                     <div className="text-[11px] text-neutral-400">Monetize recordings after streams end.</div>
@@ -977,7 +993,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                       setActiveCategory('LIVE');
                       setActiveSubItem('my_recordings');
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-[#d4af37] text-black font-bold text-xs cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-[#d4af37] text-black font-bold text-xs cursor-pointer shrink-0"
                   >
                     Manage Recordings
                   </button>
@@ -995,7 +1011,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
         <div className="space-y-6">
           {/* Sub-item: Go Live */}
           {activeSubItem === 'go_live' && (
-            <div className="bg-gradient-to-r from-red-950/40 via-[#181416] to-[#121215] border border-red-500/30 rounded-2xl p-8 text-center space-y-4 max-w-xl mx-auto shadow-2xl">
+            <div className="bg-gradient-to-r from-red-950/40 via-[#181416] to-[#121215] border border-red-500/30 rounded-2xl p-5 sm:p-8 text-center space-y-4 max-w-xl mx-auto shadow-2xl">
               <div className="w-16 h-16 rounded-full bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-500 mx-auto animate-pulse">
                 <Radio className="w-8 h-8" />
               </div>
@@ -1102,10 +1118,10 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 )}
 
                 {/* Recording Revenue Analytics Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 xs:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
                   <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl">
                     <div className="text-[11px] text-neutral-400">Replay Views</div>
-                    <div className="text-xl font-bold font-mono text-white mt-1">
+                    <div className="text-xl font-bold font-mono text-white mt-1 tabular-nums">
                       {totalAllReplayViews.toLocaleString()}
                     </div>
                     <div className="text-[10px] text-emerald-400 mt-0.5">
@@ -1115,7 +1131,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
                   <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl">
                     <div className="text-[11px] text-neutral-400">Paid Replay Purchases</div>
-                    <div className="text-xl font-bold font-mono text-[#fce7b0] mt-1">
+                    <div className="text-xl font-bold font-mono text-[#fce7b0] mt-1 tabular-nums">
                       {totalPaidReplayPurchases.toLocaleString()}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">Individual unlocks</div>
@@ -1123,7 +1139,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
                   <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl">
                     <div className="text-[11px] text-neutral-400">Gross Replay Revenue</div>
-                    <div className="text-xl font-bold font-mono text-white mt-1">
+                    <div className="text-xl font-bold font-mono text-white mt-1 tabular-nums">
                       ${totalReplayGross.toFixed(2)}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">100% gross volume</div>
@@ -1131,15 +1147,15 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
                   <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl">
                     <div className="text-[11px] text-neutral-400">Platform Commission (20%)</div>
-                    <div className="text-xl font-bold font-mono text-neutral-400 mt-1">
+                    <div className="text-xl font-bold font-mono text-neutral-400 mt-1 tabular-nums">
                       ${totalReplayPlatformFee.toFixed(2)}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">Hosting &amp; bandwidth</div>
                   </div>
 
-                  <div className="p-4 bg-[#121215] border border-[#d4af37]/40 rounded-2xl">
+                  <div className="col-span-2 xs:col-span-1 p-4 bg-[#121215] border border-[#d4af37]/40 rounded-2xl">
                     <div className="text-[11px] text-[#fce7b0]">Creator Net Earnings (80%)</div>
-                    <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
+                    <div className="text-xl font-bold font-mono text-emerald-400 mt-1 tabular-nums">
                       ${totalReplayNet.toFixed(2)}
                     </div>
                     <div className="text-[10px] text-emerald-400/80 mt-0.5">Credited to wallet</div>
@@ -1162,12 +1178,12 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                       return (
                         <div
                           key={s.id}
-                          className="p-5 bg-[#121215] border border-[#27272a] rounded-2xl space-y-4"
+                          className="p-4 sm:p-5 bg-[#121215] border border-[#27272a] rounded-2xl space-y-4"
                         >
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             {/* Left: Thumbnail & Metadata */}
-                            <div className="flex items-start gap-4 min-w-0">
-                              <div className="relative w-28 h-20 rounded-xl bg-black overflow-hidden shrink-0 border border-zinc-800">
+                            <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+                              <div className="relative w-24 h-18 sm:w-28 sm:h-20 rounded-xl bg-black overflow-hidden shrink-0 border border-zinc-800">
                                 <img src={s.coverImage} alt={s.title} className="w-full h-full object-cover" />
                                 <span
                                   className={`absolute top-1.5 left-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
@@ -1271,7 +1287,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                           {/* Inline Recording Settings Editor */}
                           {isEditing && (
                             <div className="pt-4 border-t border-[#27272a] space-y-4 bg-[#16161a] p-4 rounded-xl">
-                              <div className="flex items-center justify-between">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="text-xs font-bold uppercase tracking-wider text-[#d4af37]">
                                   Update Replay Monetization &amp; Permissions
                                 </span>
@@ -1282,7 +1298,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                                 <div>
                                   <label className="block text-neutral-400 mb-1">Recording Access Mode</label>
                                   <select
@@ -1384,11 +1400,11 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Scheduled Livestreams */}
           {activeSubItem === 'scheduled_live' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-white">Upcoming Scheduled Broadcasts</h3>
                 <button
                   onClick={() => setIsCreateLiveModalOpen(true)}
-                  className="px-3 py-1.5 bg-[#d4af37] text-black text-xs font-bold rounded-lg cursor-pointer"
+                  className="px-3 py-1.5 bg-[#d4af37] text-black text-xs font-bold rounded-lg cursor-pointer shrink-0"
                 >
                   Schedule Stream
                 </button>
@@ -1396,19 +1412,19 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
               <div className="space-y-3">
                 {livestreams.filter(s => s.status === 'scheduled').map(s => (
-                  <div key={s.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
+                  <div key={s.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-12 h-12 rounded-xl bg-black overflow-hidden shrink-0">
                         <img src={s.coverImage} alt="" className="w-full h-full object-cover" />
                       </div>
-                      <div>
-                        <div className="font-bold text-white">{s.title}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">{s.title}</div>
                         <div className="text-[10px] text-neutral-400 capitalize">
                           {s.accessMode.replace('_', ' ')} · {s.scheduledFor} · Replay: {s.recordingSettings?.mode || 'disabled'}
                         </div>
                       </div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0]">
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0] shrink-0">
                       Scheduled
                     </span>
                   </div>
@@ -1420,7 +1436,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Livestream History */}
           {activeSubItem === 'live_history' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-white">Past Broadcast Archives</h3>
                 <button
                   onClick={() => setActiveSubItem('my_recordings')}
@@ -1430,14 +1446,14 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 </button>
               </div>
               {livestreams.filter(s => s.status === 'ended').map((h) => (
-                <div key={h.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-white">{h.title}</div>
+                <div key={h.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-bold text-white truncate">{h.title}</div>
                     <div className="text-[10px] text-neutral-400">
                       {h.endedAt || h.startedAt} · Duration: {h.expectedDurationMinutes}m · Recording: {h.recordingSettings?.mode || 'disabled'}
                     </div>
                   </div>
-                  <div className="text-right font-mono">
+                  <div className="text-right font-mono tabular-nums shrink-0">
                     <div className="text-neutral-200">{(h.replayViewsCount || 0).toLocaleString()} replay views</div>
                     <div className="text-[#fce7b0] font-bold">${(h.replayGrossRevenue || 0).toFixed(2)} replay gross</div>
                   </div>
@@ -1475,9 +1491,9 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
       {activeCategory === 'PROMOTION' && (
         <div className="space-y-6">
           {/* Sub-item: Promote Profile / Posts / Campaigns */}
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-6">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-6">
             <div className="flex items-center gap-2">
-              <Rocket className="w-5 h-5 text-[#d4af37]" />
+              <Rocket className="w-5 h-5 text-[#d4af37] shrink-0" />
               <div>
                 <h3 className="font-bold text-white text-base">Self-Service Creator Promotions</h3>
                 <p className="text-xs text-neutral-400">Boost discovery and feed placement with guaranteed impressions.</p>
@@ -1511,7 +1527,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 <label className="block text-xs font-medium text-neutral-300 mb-2">
                   Select Budget Package
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 xs:grid-cols-3 gap-2.5 sm:gap-3">
                   {[
                     { amt: 10, days: 3, label: 'Starter ($10)' },
                     { amt: 25, days: 7, label: 'Growth ($25 · Recommended)' },
@@ -1534,6 +1550,12 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 </div>
               </div>
 
+              {promoError && (
+                <div className="p-3 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-300">
+                  {promoError}
+                </div>
+              )}
+
               {promoSucceeded && (
                 <div className="p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-xs text-emerald-300">
                   Campaign activated! Your content is now prioritized in discovery feeds.
@@ -1550,7 +1572,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           </div>
 
           {/* Active Campaigns List */}
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
             <h4 className="text-sm font-bold text-white">Active Promotion Campaigns</h4>
             <div className="space-y-3">
               {promotions.map(camp => (
@@ -1561,7 +1583,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                       Budget: ${camp.budget} · Active until {camp.endDate}
                     </div>
                   </div>
-                  <div className="flex items-center gap-6 text-neutral-300 font-mono">
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-neutral-300 font-mono tabular-nums">
                     <div>
                       <div className="text-[10px] text-neutral-500 font-sans">Impressions</div>
                       <div>{camp.impressions.toLocaleString()}</div>
@@ -1679,29 +1701,38 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
           {/* Sub-item: Revenue Reports */}
           {activeSubItem === 'revenue_reports' && (
-            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-sm font-bold text-white">Financial Statements & Reports</h4>
                   <p className="text-xs text-neutral-400">Download audited statements for taxation and payouts.</p>
                 </div>
                 <button
-                  onClick={() => alert('Exporting monthly statement CSV for ' + creator.name + '...')}
-                  className="px-4 py-2 bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-xs font-semibold rounded-xl text-neutral-200 flex items-center gap-1.5 cursor-pointer"
+                  onClick={() => {
+                    setReportNotice(`Monthly statement CSV prepared for ${creator.name}.`);
+                    setTimeout(() => setReportNotice(null), 4000);
+                  }}
+                  className="px-4 py-2 bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-xs font-semibold rounded-xl text-neutral-200 flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download CSV</span>
                 </button>
               </div>
 
+              {reportNotice && (
+                <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-xs text-emerald-300">
+                  {reportNotice}
+                </div>
+              )}
+
               <div className="space-y-2">
                 {transactions.slice(0, 4).map(tx => (
-                  <div key={tx.id} className="p-3 bg-[#18181c] rounded-xl flex items-center justify-between text-xs font-mono">
-                    <div>
+                  <div key={tx.id} className="p-3 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                    <div className="min-w-0">
                       <span className="text-white capitalize">{tx.description || tx.type}</span>
                       <div className="text-[10px] text-neutral-500 font-sans">{tx.createdAt}</div>
                     </div>
-                    <span className="text-[#fce7b0] font-bold">${tx.amount.toFixed(2)}</span>
+                    <span className="text-[#fce7b0] font-bold tabular-nums shrink-0">${tx.amount.toFixed(2)}</span>
                   </div>
                 ))}
               </div>

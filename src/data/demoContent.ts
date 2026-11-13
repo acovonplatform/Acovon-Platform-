@@ -22,7 +22,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample1.mp4',
         previewUrl: '/videos/sample2.mp4',
-        thumbnailUrl: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_2.webp',
         durationSeconds: 840
       }
     ],
@@ -52,7 +52,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_clip_elena_1',
         type: 'video',
         url: '/videos/sample3.mp4',
-        thumbnailUrl: '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
         durationSeconds: 30
       }
     ],
@@ -139,7 +139,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_marcus_v1',
         type: 'video',
         url: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_2.webp',
         durationSeconds: 310
       }
     ],
@@ -167,7 +167,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample1.mp4',
         previewUrl: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_3.webp',
         durationSeconds: 1840
       }
     ],
@@ -221,7 +221,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample3.mp4',
         previewUrl: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_3.webp',
         durationSeconds: 2700
       }
     ],
@@ -249,7 +249,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_sarah_v2',
         type: 'video',
         url: '/videos/sample1.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_4.webp',
         durationSeconds: 420
       }
     ],
@@ -306,7 +306,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_kai_v1',
         type: 'video',
         url: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample2_frame_2.webp',
         durationSeconds: 734
       }
     ],
@@ -333,7 +333,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample3.mp4',
         previewUrl: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_4.webp',
         durationSeconds: 1200
       }
     ],
@@ -392,7 +392,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_maya_v1',
         type: 'video',
         url: '/videos/sample1.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_1.webp',
         durationSeconds: 580
       }
     ],
@@ -419,7 +419,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample2.mp4',
         previewUrl: '/videos/sample3.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample2_frame_3.webp',
         durationSeconds: 2100
       }
     ],
@@ -478,7 +478,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_leo_v1',
         type: 'video',
         url: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_1.webp',
         durationSeconds: 910
       }
     ],
@@ -505,7 +505,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample1.mp4',
         previewUrl: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_2.webp',
         durationSeconds: 1540
       }
     ],
@@ -564,7 +564,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_chloe_v1',
         type: 'video',
         url: '/videos/sample3.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_1.webp',
         durationSeconds: 640
       }
     ],
@@ -591,7 +591,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample4.mp4',
         previewUrl: '/videos/sample1.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_3.webp',
         durationSeconds: 2400
       }
     ],
@@ -650,7 +650,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_alex_v1',
         type: 'video',
         url: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample2_frame_4.webp',
         durationSeconds: 1120
       }
     ],
@@ -677,7 +677,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample3.mp4',
         previewUrl: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
         durationSeconds: 5400
       }
     ],
@@ -736,7 +736,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_zara_v1',
         type: 'video',
         url: '/videos/sample1.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_3.webp',
         durationSeconds: 380
       }
     ],
@@ -763,7 +763,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample2.mp4',
         previewUrl: '/videos/sample3.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1518834107812-67b0b7c58434?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample2_frame_1.webp',
         durationSeconds: 1650
       }
     ],
@@ -822,7 +822,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_david_v1',
         type: 'video',
         url: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_4.webp',
         durationSeconds: 600
       }
     ],
@@ -849,7 +849,7 @@ export const DEMO_POSTS: Post[] = [
         type: 'video',
         url: '/videos/sample1.mp4',
         previewUrl: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1545205597-3d9d02c29597?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_4.webp',
         durationSeconds: 3600
       }
     ],
@@ -939,7 +939,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_marcus_jam',
         type: 'video',
         url: '/videos/sample3.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_3.webp',
         durationSeconds: 450
       }
     ],
@@ -965,7 +965,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_sarah_ankles',
         type: 'video',
         url: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_2.webp',
         durationSeconds: 320
       }
     ],
@@ -1016,7 +1016,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_leo_clip_video',
         type: 'video',
         url: '/videos/sample1.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample1_frame_2.webp',
         durationSeconds: 45
       }
     ],
@@ -1042,7 +1042,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_sarah_free_f1',
         type: 'video',
         url: '/videos/sample2.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample2_frame_2.webp',
         durationSeconds: 720
       }
     ],
@@ -1130,7 +1130,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_chloe_pub_v2',
         type: 'video',
         url: '/videos/sample3.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
         durationSeconds: 490
       }
     ],
@@ -1156,7 +1156,7 @@ export const DEMO_POSTS: Post[] = [
         id: 'media_alex_pub_v2',
         type: 'video',
         url: '/videos/sample4.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80',
+        thumbnailUrl: '/videos/thumbs/sample4_frame_1.webp',
         durationSeconds: 960
       }
     ],

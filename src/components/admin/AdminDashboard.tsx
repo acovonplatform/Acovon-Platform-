@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import {
   AdminPermissionLevel,
   AccountStatus,
@@ -658,11 +659,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     <div className="min-h-screen bg-[#09090b] text-[#f4f4f5]">
       {/* Top Executive Command Bar */}
       <div className="border-b border-[#232329] bg-[#0d0d11]">
-        <div className="max-w-[1440px] mx-auto px-4 lg:px-8 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="max-w-[1440px] 3xl:max-w-[1680px] mx-auto px-4 lg:px-8 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-[#d4af37]" />
+              <div className="flex items-center gap-2.5">
+                <AcovonLogoIcon size="sm" />
                 <h1 className="text-xl font-bold font-brand tracking-wide text-white">
                   ACOVON Admin Control Center
                 </h1>
@@ -707,7 +708,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 await adminLogout();
                 onExit?.();
               }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-medium text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 transition-colors cursor-pointer ml-1"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-medium text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 transition-colors cursor-pointer ml-0 xs:ml-1"
               title="Sign Out of Admin Control Center"
             >
               <Power className="w-3 h-3 text-rose-400" />
@@ -719,7 +720,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
       {/* Feedback Banner */}
       {feedbackBanner && (
-        <div className="max-w-[1440px] mx-auto px-4 lg:px-8 pt-4">
+        <div className="max-w-[1440px] 3xl:max-w-[1680px] mx-auto px-4 lg:px-8 pt-4">
           <div
             className={`p-3.5 rounded-xl border flex items-center justify-between text-xs ${
               feedbackBanner.type === 'success'
@@ -743,7 +744,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       )}
 
       {/* Main 1440px Enterprise Workspace: Left 19-Item Sidebar + Right Content Area */}
-      <div className="max-w-[1440px] mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 flex flex-col lg:flex-row gap-4 sm:gap-6 items-start overflow-x-hidden">
+      <div className="max-w-[1440px] 3xl:max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 flex flex-col lg:flex-row gap-4 sm:gap-6 items-start overflow-x-hidden">
         {/* 19-Section Sidebar */}
         <aside className="w-full lg:w-64 shrink-0 bg-[#121216] border border-[#232329] rounded-2xl p-2.5 lg:sticky lg:top-20">
           <div className="px-3 py-2 border-b border-[#232329] mb-2 flex items-center justify-between gap-2">
@@ -816,7 +817,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'overview' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#121216] border border-[#232329] rounded-2xl p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6">
                 <div>
                   <h2 className="text-lg font-bold text-white">01. Executive Platform Overview</h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
@@ -867,7 +868,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               </div>
 
               {/* Complete 23 Real-Time Platform Statistics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-3.5">
                 <div onClick={() => setActiveSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Total Registered Users</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">{metrics.totalUsers}</div>
@@ -976,8 +977,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               {/* Live New Sign-Ups & All Creator Applications Overview Panels */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Recent User Sign-Ups */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white flex items-center gap-2">
                         <Users className="w-4 h-4 text-[#d4af37]" />
@@ -1015,7 +1016,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       return (
                         <div
                           key={u.id}
-                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex items-center justify-between gap-3 text-xs transition-colors"
+                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex flex-wrap items-center justify-between gap-3 text-xs transition-colors"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <img
@@ -1072,8 +1073,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* All Creator Applications Queue Summary */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white flex items-center gap-2">
                         <Crown className="w-4 h-4 text-[#d4af37]" />
@@ -1107,7 +1108,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       sortedVerifications.map(v => (
                         <div
                           key={v.id}
-                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex items-center justify-between gap-3 text-xs transition-colors"
+                          className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex flex-wrap items-center justify-between gap-3 text-xs transition-colors"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <img
@@ -1175,13 +1176,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               {/* 6 Real-Data Platform Analytics Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Chart 1 & 2: Revenue Breakdown by Vertical */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white">Revenue &amp; Commission by Monetization Stream</h3>
                       <p className="text-[11px] text-neutral-400">Live ledger breakdown across all 6 ACOVON monetization engines</p>
                     </div>
-                    <TrendingUp className="w-4 h-4 text-[#d4af37]" />
+                    <TrendingUp className="w-4 h-4 text-[#d4af37] shrink-0" />
                   </div>
                   <div className="space-y-3 pt-1">
                     {[
@@ -1196,7 +1197,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       const pct = Math.min(100, Math.max(8, Math.round((row.amount / maxVal) * 100)));
                       return (
                         <div key={row.label} className="space-y-1 text-xs">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-neutral-300">{row.label}</span>
                             <span className="font-mono text-white tabular-nums">
                               ${row.amount.toFixed(2)}{' '}
@@ -1215,13 +1216,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* Chart 3: Top Creator Performance & Subscriber Distribution */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white">Creator Earnings &amp; Subscriber Velocity</h3>
                       <p className="text-[11px] text-neutral-400">Top performing partner creators ranked by cumulative net earnings</p>
                     </div>
-                    <Crown className="w-4 h-4 text-[#d4af37]" />
+                    <Crown className="w-4 h-4 text-[#d4af37] shrink-0" />
                   </div>
                   <div className="space-y-3 pt-1">
                     {[...creators]
@@ -1232,7 +1233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         const pct = Math.round((c.totalEarnings / maxEarned) * 100);
                         return (
                           <div key={c.id} className="space-y-1 text-xs">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <img src={c.avatar} alt={c.name} className="w-5 h-5 rounded-full object-cover" />
                                 <span className="text-white font-medium">{c.name}</span>
@@ -1250,15 +1251,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* Chart 4 & 5: Content Uploads & Media Catalog Composition */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white">Content Uploads &amp; Visibility Distribution</h3>
                       <p className="text-[11px] text-neutral-400">Breakdown of published videos, photos, stories, and access tiers</p>
                     </div>
-                    <Layers className="w-4 h-4 text-[#d4af37]" />
+                    <Layers className="w-4 h-4 text-[#d4af37] shrink-0" />
                   </div>
-                  <div className="grid grid-cols-3 gap-3 text-center pt-1">
+                  <div className="grid grid-cols-1 xs:grid-cols-3 gap-3 text-center pt-1 tabular-nums">
                     <div className="p-3 bg-[#18181f] rounded-xl border border-[#272730]">
                       <div className="text-lg font-bold font-mono text-white">{metrics.totalVideos}</div>
                       <div className="text-[11px] text-neutral-400">Playable Videos</div>
@@ -1288,17 +1289,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* Chart 6: Livestream Concurrency & User Growth */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-bold text-white">Livestream Activity &amp; Audience Concurrency</h3>
                       <p className="text-[11px] text-neutral-400">Real-time viewer counts and replay monetization across broadcasts</p>
                     </div>
-                    <Activity className="w-4 h-4 text-rose-400" />
+                    <Activity className="w-4 h-4 text-rose-400 shrink-0" />
                   </div>
                   <div className="space-y-2.5">
                     {livestreams.slice(0, 5).map(s => (
-                      <div key={s.id} className="p-3 bg-[#18181f] rounded-xl border border-[#272730] flex items-center justify-between text-xs">
+                      <div key={s.id} className="p-3 bg-[#18181f] rounded-xl border border-[#272730] flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="min-w-0 pr-3">
                           <div className="font-semibold text-white truncate">{s.title}</div>
                           <div className="text-[11px] text-neutral-400">
@@ -1358,7 +1359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">02. User Management &amp; Account Security</h2>
@@ -1443,7 +1444,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                   {/* Users Table */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full text-left text-xs whitespace-nowrap tabular-nums">
                       <thead>
                         <tr className="border-b border-[#232329] text-neutral-400">
                           <th className="pb-3 font-medium">User / Account</th>
@@ -1464,7 +1465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           const creatorAppStatus = matchedVerif?.status || u.creatorApplicationStatus;
                           return (
                             <tr key={u.id} className="hover:bg-[#16161d] transition-colors">
-                              <td className="py-3.5 pr-4">
+                              <td className="py-3.5 pr-4 min-w-[220px] whitespace-normal">
                                 <div className="flex items-center gap-3">
                                   <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover border border-[#2e2e38]" />
                                   <div>
@@ -1608,7 +1609,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
 
                   {/* Pagination */}
-                  <div className="flex items-center justify-between pt-2 text-xs text-neutral-400">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-400">
                     <span>
                       Showing {filteredUsers.length === 0 ? 0 : (userPage - 1) * pageSize + 1}–{Math.min(userPage * pageSize, filteredUsers.length)} of {filteredUsers.length} accounts
                     </span>
@@ -1636,26 +1637,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                 {/* Detailed User Profile & Ledger Drawer */}
                 {inspectedUser && (
-                  <div className="bg-[#121216] border border-[#d4af37]/40 rounded-2xl p-6 space-y-5">
+                  <div className="bg-[#121216] border border-[#d4af37]/40 rounded-2xl p-4 sm:p-6 space-y-5">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <img src={inspectedUser.avatar} alt={inspectedUser.name} className="w-14 h-14 rounded-2xl object-cover border border-[#d4af37]" />
-                        <div>
-                          <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <img src={inspectedUser.avatar} alt={inspectedUser.name} className="w-14 h-14 rounded-2xl object-cover border border-[#d4af37] shrink-0" />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-base font-bold text-white">{inspectedUser.name}</h3>
                             <span className="text-xs font-mono text-neutral-400">@{inspectedUser.username}</span>
                             <span className="text-[11px] font-mono uppercase text-[#fce7b0]">
                               · {inspectedUser.role}
                             </span>
                           </div>
-                          <p className="text-xs text-neutral-400 mt-0.5">
+                          <p className="text-xs text-neutral-400 mt-0.5 break-words">
                             Email: {inspectedUser.email} · Joined: {inspectedUser.dateJoined} · Country: {inspectedUser.country || 'United States'} · Last Login: {inspectedUser.lastLoginAt || 'Today'}
                           </p>
                         </div>
                       </div>
                       <button
                         onClick={() => setSelectedUserDetailId(null)}
-                        className="p-1.5 text-neutral-400 hover:text-white cursor-pointer"
+                        className="p-1.5 text-neutral-400 hover:text-white cursor-pointer shrink-0"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -1665,7 +1666,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       {/* Role & Verification Controls */}
                       <div className="p-4 bg-[#18181f] rounded-xl border border-[#272730] space-y-3">
                         <div className="font-semibold text-white">Role &amp; Identity Controls</div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Platform Role:</span>
                           <select
                             value={inspectedUser.role}
@@ -1683,7 +1684,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             <option value="admin">Admin</option>
                           </select>
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Verified Badge:</span>
                           <button
                             onClick={() => {
@@ -1696,7 +1697,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             {inspectedUser.isVerified ? 'Verified (Revoke)' : 'Unverified (Verify)'}
                           </button>
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Permanent Ban:</span>
                           <button
                             onClick={() => {
@@ -1783,7 +1784,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             return (
               <div className="space-y-6">
                 {/* Creator Applications & Identity Verification Queue */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">03. Creator Applications &amp; 18+ Verification Queue</h2>
@@ -1855,7 +1856,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <img src={v.selfieUrl} alt="Selfie" className="w-12 h-12 rounded-lg object-cover border border-[#2e2e38]" title="Live Facial Selfie" />
                           <img src={v.documentFileUrl} alt="ID Doc" className="w-16 h-12 rounded-lg object-cover border border-[#2e2e38]" title="Government Photo ID" />
 
-                          <div className="flex flex-col gap-2 min-w-[230px]">
+                          <div className="flex flex-col gap-2 w-full sm:w-auto sm:min-w-[230px]">
                             <input
                               type="text"
                               value={verifNotesInput[v.id] || ''}
@@ -1901,7 +1902,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* Partner Creators Directory & Deep-Dive Control */}
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-base font-bold text-white">Partner Creator Portfolio &amp; Governance</h3>
@@ -1909,18 +1910,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         Select any creator to inspect performance, subscription tiers, custom video orders, and privileges.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="text"
                         value={creatorSearch}
                         onChange={e => setCreatorSearch(e.target.value)}
                         placeholder="Filter creators..."
-                        className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-xs text-white"
+                        className="w-full sm:w-auto max-w-full min-w-0 bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-xs text-white"
                       />
                       <select
                         value={selectedCreatorId}
                         onChange={e => setSelectedCreatorId(e.target.value)}
-                        className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-xs text-white"
+                        className="w-full sm:w-auto max-w-full min-w-0 bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-xs text-white"
                       >
                         {creators
                           .filter(c => !creatorSearch || c.name.toLowerCase().includes(creatorSearch.toLowerCase()) || c.category.toLowerCase().includes(creatorSearch.toLowerCase()))
@@ -1950,7 +1951,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             <div className="text-xs text-neutral-400 mt-0.5">
                               {selectedCreator.category} · {selectedCreator.country} · {selectedCreator.followersCount.toLocaleString()} followers · {selectedCreator.subscribersCount.toLocaleString()} subscribers
                             </div>
-                            <div className="flex items-center gap-4 mt-2 text-xs font-mono">
+                            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mt-2 text-xs font-mono tabular-nums">
                               <span className="text-[#fce7b0]">Total Earned: ${selectedCreator.totalEarnings.toLocaleString()}</span>
                               <span className="text-white">Wallet: ${selectedCreator.walletBalance.toFixed(2)}</span>
                               <span className="text-amber-400">Pending: ${(selectedCreator.pendingBalance || 0).toFixed(2)}</span>
@@ -2057,7 +2058,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <div className="font-bold text-white">
                             Creator Activity &amp; Custom Video Orders ({creatorReqs.length})
                           </div>
-                          <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 text-center tabular-nums">
                             <div className="p-2.5 bg-[#121216] rounded-lg">
                               <div className="font-mono font-bold text-white text-sm">{creatorPosts.length}</div>
                               <div className="text-[10px] text-neutral-400">Published Posts</div>
@@ -2120,7 +2121,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">04. Platform-Wide Content Oversight</h2>
@@ -2130,7 +2131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     </div>
 
                     {/* Content Sub-Tabs */}
-                    <div className="flex items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
+                    <div className="flex flex-wrap items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
                       {[
                         { id: 'posts', label: `Posts & Media (${posts.length})` },
                         { id: 'recordings', label: `Live Recordings (${livestreams.length})` },
@@ -2280,7 +2281,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         })}
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 text-xs text-neutral-400">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-400">
                         <span>
                           Showing {(contentPage - 1) * pageSize + 1}–{Math.min(contentPage * pageSize, filteredPosts.length)} of {filteredPosts.length} posts
                         </span>
@@ -2324,7 +2325,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                 Mode: {recMode.toUpperCase()} {recMode === 'paid' ? `($${(s.recordingSettings?.price || 0).toFixed(2)})` : ''} · Status: {s.recordingStatus || 'not_recorded'} · Views: {s.replayViewsCount || 0} · Replay Gross: ${(s.replayGrossRevenue || 0).toFixed(2)}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               {recMode !== 'disabled' && !isRemoved && (
                                 <button
                                   onClick={() => {
@@ -2375,7 +2376,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   {contentTab === 'statuses' && (
                     <div className="space-y-2.5">
                       {statuses.map(st => (
-                        <div key={st.id} className="p-3.5 bg-[#18181f] border border-[#272730] rounded-xl flex items-center justify-between gap-4 text-xs">
+                        <div key={st.id} className="p-3.5 bg-[#18181f] border border-[#272730] rounded-xl flex flex-wrap items-center justify-between gap-4 text-xs">
                           <div>
                             <div className="font-bold text-white">
                               {st.creatorName} (@{st.creatorUsername}) · <span className="font-mono text-[#fce7b0] uppercase">{st.audience}</span>
@@ -2428,7 +2429,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           const isUnlockedForAudit = authorizedPrivateAccessIds.includes(rep.id);
                           return (
                             <div key={rep.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl space-y-3 text-xs">
-                              <div className="flex items-center justify-between">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                   <span className="font-bold text-white">Reported Private Message #{rep.targetId}</span>
                                   <span className="text-neutral-400 ml-2">Reported by {rep.reporterName} · Reason: {rep.reason}</span>
@@ -2479,7 +2480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   {/* SUB-TAB 5: Demo Content Governance */}
                   {contentTab === 'demo' && (
                     <div className="space-y-4 text-xs">
-                      <div className="flex items-center justify-between p-4 bg-[#18181f] rounded-xl border border-[#272730]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-[#18181f] rounded-xl border border-[#272730]">
                         <div>
                           <div className="font-bold text-white">Display "DEMO" Transparency Badges</div>
                           <div className="text-neutral-400">Clearly marks seeded showcase creators and posts across the platform.</div>
@@ -2488,10 +2489,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           type="checkbox"
                           checked={showDemoBadges}
                           onChange={e => setShowDemoBadges(e.target.checked)}
-                          className="w-5 h-5 accent-[#d4af37] cursor-pointer"
+                          className="w-5 h-5 accent-[#d4af37] cursor-pointer shrink-0"
                         />
                       </div>
-                      <div className="flex items-center justify-between p-4 bg-[#18181f] rounded-xl border border-[#272730]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-[#18181f] rounded-xl border border-[#272730]">
                         <div>
                           <div className="font-bold text-white">Restore Factory Demo Content Library</div>
                           <div className="text-neutral-400">Resets all 10 demo creators, 40+ posts, stories, and livestreams to default state.</div>
@@ -2526,7 +2527,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'live' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-bold text-white">05. Live Broadcast &amp; Stream Safety Control</h2>
@@ -2534,7 +2535,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       Monitor active broadcasts, audience counts, ticket revenue, scheduled streams, and execute emergency safety terminations.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
+                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
                     {(['all', 'live', 'scheduled', 'ended'] as const).map(st => (
                       <button
                         key={st}
@@ -2641,7 +2642,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'subscriptions' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-bold text-white">06. Platform Subscriptions &amp; Billing Agreements</h2>
@@ -2649,7 +2650,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       Monitor active recurring fan memberships, new enrollments, cancellations, and issue audited billing cycle refunds.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
+                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
                     {(['all', 'active', 'cancelled'] as const).map(st => (
                       <button
                         key={st}
@@ -2665,7 +2666,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs whitespace-nowrap tabular-nums">
                     <thead>
                       <tr className="border-b border-[#232329] text-neutral-400">
                         <th className="pb-3 font-medium">Subscription ID</th>
@@ -2765,7 +2766,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">07. Financial Administration &amp; Immutable Ledger</h2>
@@ -2773,7 +2774,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         Direct balance fabrication is prohibited. All financial corrections use auditable adjustment or refund records.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setShowAdjustmentModal(true)}
                         className="px-3.5 py-2 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold rounded-xl text-xs cursor-pointer"
@@ -2808,7 +2809,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
 
                   {/* Financial Summary Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
                     <div className="p-3.5 bg-[#18181f] rounded-xl border border-[#272730]">
                       <div className="text-neutral-400">Gross Platform Revenue</div>
                       <div className="text-lg font-bold font-mono text-white mt-0.5">${metrics.grossPlatformVolume.toLocaleString()}</div>
@@ -2876,7 +2877,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                   {/* Ledger Table */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full text-left text-xs whitespace-nowrap tabular-nums">
                       <thead>
                         <tr className="border-b border-[#232329] text-neutral-400">
                           <th className="pb-3 font-medium">Tx ID / Date</th>
@@ -2926,7 +2927,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
 
                   {/* Pagination */}
-                  <div className="flex items-center justify-between pt-2 text-xs text-neutral-400">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-400">
                     <span>
                       Showing {(txPage - 1) * pageSize + 1}–{Math.min(txPage * pageSize, filteredTx.length)} of {filteredTx.length} transactions
                     </span>
@@ -2960,7 +2961,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'payouts' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-bold text-white">08. Creator Payouts &amp; Settlement Workflow</h2>
@@ -2968,7 +2969,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       Review, approve, settle, or reject creator withdrawal requests. Requires Finance Admin or Super Admin authorization.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
+                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
                     {(['all', 'pending', 'approved', 'completed', 'rejected'] as const).map(st => (
                       <button
                         key={st}
@@ -3014,7 +3015,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                           {p.status === 'pending' && (
                             <button
                               onClick={() => {
@@ -3065,7 +3066,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           {activeSection === 'promotions' && (
             <div className="space-y-6">
               {/* Creator Promotional Campaigns */}
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
                 <div>
                   <h2 className="text-lg font-bold text-white">09. Creator Promotional Campaigns &amp; Ad Governance</h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
@@ -3077,7 +3078,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   {promotions.map(promo => (
                     <div key={promo.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-bold text-white text-sm">{promo.packageTitle}</span>
                           <span className="text-neutral-400">by {promo.creatorName}</span>
                           <span className="font-mono text-[#fce7b0]">· Budget: ${promo.budget.toFixed(2)}</span>
@@ -3087,7 +3088,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           Type: {promo.type} · Duration: {promo.durationDays}d ({promo.startDate} to {promo.endDate}) · Impressions: {promo.impressions.toLocaleString()} · Clicks: {promo.clicks.toLocaleString()} · Visits: {promo.profileVisits.toLocaleString()}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {promo.status !== 'active' && (
                           <button
                             onClick={() => {
@@ -3131,7 +3132,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               </div>
 
               {/* Approved Web Advertising Integration */}
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4 text-xs">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4 text-xs">
                 <h3 className="text-sm font-bold text-white">Approved Advertising Integration (Google AdSense)</h3>
                 <p className="text-neutral-400">
                   Unapproved third-party ad networks are strictly blocked. Active subscribers automatically receive an ad-free experience.
@@ -3186,7 +3187,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'moderation' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-bold text-white">10. Centralized Reports &amp; Moderation Queue</h2>
@@ -3194,7 +3195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       Investigate, assign, escalate, and resolve reports across users, creators, posts, livestreams, messages, copyright, and fraud.
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
+                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#18181f] rounded-xl text-xs">
                     {(['all', 'open', 'investigating', 'escalated', 'resolved', 'dismissed'] as const).map(st => (
                       <button
                         key={st}
@@ -3339,7 +3340,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">11. Support Center &amp; Escrow Dispute Resolution</h2>
@@ -3347,11 +3348,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         Manage user &amp; creator support tickets, payment disputes, refund requests, subscription issues, and custom video escrow holds.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
                       <select
                         value={ticketCatFilter}
                         onChange={e => setTicketCatFilter(e.target.value)}
-                        className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white"
+                        className="w-full sm:w-auto max-w-full min-w-0 bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white"
                       >
                         <option value="all">All Ticket Categories</option>
                         <option value="payment_dispute">Payment Disputes</option>
@@ -3365,7 +3366,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       <select
                         value={ticketFilter}
                         onChange={e => setTicketFilter(e.target.value as typeof ticketFilter)}
-                        className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white"
+                        className="w-full sm:w-auto max-w-full min-w-0 bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white"
                       >
                         <option value="all">All Statuses</option>
                         <option value="open">Open</option>
@@ -3422,7 +3423,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                 <strong className="text-white">{activeTicket.assignedAdminName || 'Unassigned'}</strong>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <select
                                 value={activeTicket.priority}
                                 onChange={e => {
@@ -3458,7 +3459,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           </div>
 
                           {activeTicket.disputedAmount && (
-                            <div className="p-3 bg-rose-950/30 border border-rose-500/30 rounded-xl flex items-center justify-between">
+                            <div className="p-3 bg-rose-950/30 border border-rose-500/30 rounded-xl flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <div className="font-semibold text-rose-200">
                                   Disputed Escrow Amount: ${activeTicket.disputedAmount.toFixed(2)}
@@ -3517,13 +3518,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           </div>
 
                           {/* Reply Box */}
-                          <div className="flex gap-2 pt-2">
+                          <div className="flex flex-col xs:flex-row gap-2 pt-2">
                             <input
                               type="text"
                               value={ticketReplyInput}
                               onChange={e => setTicketReplyInput(e.target.value)}
                               placeholder="Write official support response to user..."
-                              className="flex-1 bg-[#121216] border border-[#2e2e38] rounded-xl px-3.5 py-2 text-white"
+                              className="flex-1 min-w-0 bg-[#121216] border border-[#2e2e38] rounded-xl px-3.5 py-2 text-white"
                             />
                             <button
                               onClick={() => {
@@ -3562,7 +3563,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           {activeSection === 'categories' && (
             <div className="space-y-6">
               {/* Dynamic Commission Matrix */}
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-4">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-4">
                 <div>
                   <h2 className="text-lg font-bold text-white">12. Platform Commission Matrix &amp; Content Categories</h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
@@ -3703,9 +3704,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     />
                     <button
                       onClick={() => {
-                        if (!newCategoryInput.trim()) return;
+                        const clean = newCategoryInput.trim();
+                        if (!clean) return;
+                        if (platformConfig.contentCategories.some(c => c.toLowerCase() === clean.toLowerCase())) {
+                          notifyFeedback('error', `Category "${clean}" already exists.`);
+                          return;
+                        }
                         const res = updatePlatformConfig({
-                          contentCategories: [...platformConfig.contentCategories, newCategoryInput.trim()]
+                          contentCategories: [...platformConfig.contentCategories, clean]
                         });
                         if (res.success) {
                           setNewCategoryInput('');
@@ -3718,7 +3724,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {platformConfig.contentCategories.map(cat => (
+                    {Array.from(new Set(platformConfig.contentCategories)).map(cat => (
                       <div key={cat} className="p-2 bg-[#18181f] rounded-lg flex items-center justify-between">
                         <span className="text-neutral-200">{cat}</span>
                         <button
@@ -3749,9 +3755,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     />
                     <button
                       onClick={() => {
-                        if (!newVideoCategoryInput.trim()) return;
+                        const clean = newVideoCategoryInput.trim();
+                        if (!clean) return;
+                        if (platformConfig.videoCategories.some(c => c.toLowerCase() === clean.toLowerCase())) {
+                          notifyFeedback('error', `Video category "${clean}" already exists.`);
+                          return;
+                        }
                         const res = updatePlatformConfig({
-                          videoCategories: [...platformConfig.videoCategories, newVideoCategoryInput.trim()]
+                          videoCategories: [...platformConfig.videoCategories, clean]
                         });
                         if (res.success) {
                           setNewVideoCategoryInput('');
@@ -3764,7 +3775,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {platformConfig.videoCategories.map(cat => (
+                    {Array.from(new Set(platformConfig.videoCategories)).map(cat => (
                       <div key={cat} className="p-2 bg-[#18181f] rounded-lg flex items-center justify-between">
                         <span className="text-neutral-200">{cat}</span>
                         <button
@@ -3795,9 +3806,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     />
                     <button
                       onClick={() => {
-                        if (!newLiveCategoryInput.trim()) return;
+                        const clean = newLiveCategoryInput.trim();
+                        if (!clean) return;
+                        if (platformConfig.livestreamCategories.some(c => c.toLowerCase() === clean.toLowerCase())) {
+                          notifyFeedback('error', `Livestream category "${clean}" already exists.`);
+                          return;
+                        }
                         const res = updatePlatformConfig({
-                          livestreamCategories: [...platformConfig.livestreamCategories, newLiveCategoryInput.trim()]
+                          livestreamCategories: [...platformConfig.livestreamCategories, clean]
                         });
                         if (res.success) {
                           setNewLiveCategoryInput('');
@@ -3810,7 +3826,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {platformConfig.livestreamCategories.map(cat => (
+                    {Array.from(new Set(platformConfig.livestreamCategories)).map(cat => (
                       <div key={cat} className="p-2 bg-[#18181f] rounded-lg flex items-center justify-between">
                         <span className="text-neutral-200">{cat}</span>
                         <button
@@ -3836,7 +3852,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'admin_users' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                 <div>
                   <h2 className="text-lg font-bold text-white">13. Administrator Roles &amp; Permission Governance</h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
@@ -3851,10 +3867,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       const level = adm.adminPermissionLevel || (adm.role === 'moderator' ? 'moderator' : 'admin');
                       return (
                         <div key={adm.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
-                          <div className="flex items-center gap-3.5">
-                            <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50" />
-                            <div>
-                              <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50 shrink-0" />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-bold text-white text-sm">{adm.name}</span>
                                 <span className="text-neutral-400">@{adm.username}</span>
                                 <span className={`font-mono text-[10px] uppercase px-2 py-0.5 rounded border ${ADMIN_ROLE_LABELS[level].badgeClass}`}>
@@ -3906,7 +3922,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                 if (res.success) notifyFeedback('success', `Updated ${adm.name} permission level to ${ADMIN_ROLE_LABELS[nextLevel].label}.`);
                                 else notifyFeedback('error', res.error || 'Only Super Admin can change administrator permissions.');
                               }}
-                              className="bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-1.5 text-white"
+                              className="w-full xs:w-auto max-w-full min-w-0 bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-1.5 text-white"
                             >
                               <option value="super_admin">Super Admin</option>
                               <option value="admin">General Admin</option>
@@ -3952,7 +3968,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-5">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white">14. Permanent Administrative Audit Log</h2>
@@ -4054,7 +4070,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             Target: <strong className="text-white">{log.targetLabel}</strong> ({log.targetType} #{log.targetId}) — {log.details}
                           </div>
                         </div>
-                        <div className="text-right font-mono text-[11px] text-neutral-400 shrink-0">
+                        <div className="sm:text-right font-mono text-[11px] text-neutral-400 shrink-0">
                           <div className="text-neutral-200">{log.adminName} ({log.adminRole})</div>
                           <div>{log.timestamp}</div>
                         </div>
@@ -4071,7 +4087,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           ================================================================ */}
           {activeSection === 'platform_config' && (
             <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-6 text-xs">
+              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-6 text-xs">
                 <div>
                   <h2 className="text-lg font-bold text-white">15. Global Platform Configuration &amp; Governance</h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
@@ -4081,7 +4097,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                 {/* Global Announcement Banner */}
                 <div className="p-4 bg-[#18181f] border border-[#272730] rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-bold text-white text-sm">Global Platform Announcement Banner</span>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <span className="text-neutral-400">Active on Feed</span>
@@ -4161,7 +4177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
 
                 {/* Pricing & Livestream Guardrails */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-4 tabular-nums">
                   <div>
                     <label className="block text-neutral-400 mb-1">Min Subscription ($)</label>
                     <input
@@ -4258,7 +4274,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             return (
               <div className="space-y-6 text-xs">
-                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-6 space-y-6">
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -4269,7 +4285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         Monitor background transcoding workers, VMAF perceptual quality guardrails, HLS/DASH adaptive bitrate ladders, deduplication, and cloud storage savings.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
                           const nextPaused = !videoProcessingConfig.queuePaused;
@@ -4314,7 +4330,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
 
                   {/* Storage & Streaming Telemetry KPI Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 tabular-nums">
                     <div className="p-3.5 bg-[#18181f] border border-[#272730] rounded-xl">
                       <div className="text-[10px] uppercase text-neutral-400">Original Raw Uploads</div>
                       <div className="text-base font-bold font-mono text-white mt-1">
@@ -4629,8 +4645,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           MODAL: Audited Financial Adjustment / Refund
       ====================================================================== */}
       {showAdjustmentModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel space-y-4 text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">Issue Audited Financial Adjustment</h3>
               <button onClick={() => setShowAdjustmentModal(false)} className="text-neutral-400 hover:text-white cursor-pointer">
@@ -4657,7 +4673,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-300 mb-1">Adjustment Type</label>
                   <select
@@ -4705,7 +4721,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowAdjustmentModal(false)}
                 className="px-4 py-2 bg-[#1e1e26] text-neutral-300 rounded-xl cursor-pointer"
@@ -4742,8 +4758,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           MODAL: High-Impact Action Confirmation
       ====================================================================== */}
       {confirmDialog && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+          <div className="bg-[#121216] border border-[#2e2e38] rounded-2xl max-w-md w-full p-5 sm:p-6 max-h-[92dvh] overflow-y-auto acovon-modal-panel space-y-4 text-xs">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">{confirmDialog.title}</h3>
               <button onClick={() => setConfirmDialog(null)} className="text-neutral-400 hover:text-white cursor-pointer">
@@ -4762,7 +4778,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 />
               </div>
             )}
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
               <button
                 onClick={() => setConfirmDialog(null)}
                 className="px-4 py-2 bg-[#1e1e26] text-neutral-300 rounded-xl cursor-pointer"

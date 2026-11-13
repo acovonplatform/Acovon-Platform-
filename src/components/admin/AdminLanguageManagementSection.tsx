@@ -150,15 +150,15 @@ export const AdminLanguageManagementSection: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400 shrink-0">
                 <Globe className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-bold text-white flex flex-wrap items-center gap-2">
                   <span>{t('admin.languageManagement', 'Global Language & Translation Studio')}</span>
                   <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
                     19 Locales Active
@@ -183,7 +183,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
         </div>
 
         {/* Summary KPI Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-zinc-800/80">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-5 border-t border-zinc-800/80 tabular-nums">
           <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-3.5">
             <div className="text-xs text-zinc-400 flex items-center justify-between">
               <span>Supported Languages</span>
@@ -277,12 +277,12 @@ export const AdminLanguageManagementSection: React.FC = () => {
         </div>
 
         {/* Quick Live Preview Switcher */}
-        <div className="flex items-center gap-2 px-2">
+        <div className="flex flex-wrap items-center gap-2 px-2 w-full sm:w-auto">
           <span className="text-xs text-zinc-400">Live Preview Language:</span>
           <select
             value={activeLanguageCode}
             onChange={e => setLanguagePreference('manual', e.target.value as SupportedLanguageCode)}
-            className="bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500"
+            className="w-full sm:w-auto max-w-full min-w-0 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500"
           >
             {supportedLanguages
               .filter(l => l.enabled)
@@ -297,7 +297,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
 
       {/* TAB 1: SUPPORTED LANGUAGES */}
       {activeSubTab === 'languages' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-white">Platform Languages & Regional Configuration</h3>
@@ -340,9 +340,9 @@ export const AdminLanguageManagementSection: React.FC = () => {
                       : 'bg-zinc-950/30 border-zinc-800/50 opacity-65'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-bold text-white" data-no-translate="true">
                           {lang.nativeName}
                         </span>
@@ -395,7 +395,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800/70">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/70">
                     <button
                       onClick={() => {
                         setSelectedInspectLang(lang.code);
@@ -443,15 +443,15 @@ export const AdminLanguageManagementSection: React.FC = () => {
 
       {/* TAB 2: TRANSLATION DICTIONARY MANAGER */}
       {activeSubTab === 'dictionary' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div>
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+              <div className="w-full sm:w-auto min-w-0">
                 <label className="block text-[11px] text-zinc-400 mb-1">Target Language to Edit</label>
                 <select
                   value={selectedInspectLang}
                   onChange={e => setSelectedInspectLang(e.target.value as SupportedLanguageCode)}
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-violet-500"
+                  className="w-full sm:w-auto max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-violet-500"
                 >
                   {supportedLanguages.map(l => (
                     <option key={l.code} value={l.code}>
@@ -461,12 +461,12 @@ export const AdminLanguageManagementSection: React.FC = () => {
                 </select>
               </div>
 
-              <div>
+              <div className="w-full sm:w-auto min-w-0">
                 <label className="block text-[11px] text-zinc-400 mb-1">Module Category</label>
                 <select
                   value={selectedCategory}
                   onChange={e => setSelectedCategory(e.target.value)}
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-violet-500 uppercase"
+                  className="w-full sm:w-auto max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-violet-500 uppercase"
                 >
                   {categories.map(cat => (
                     <option key={cat} value={cat}>
@@ -476,7 +476,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
                 </select>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-0 sm:pt-4">
                 <label className="inline-flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2">
                   <input
                     type="checkbox"
@@ -534,7 +534,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
                         {record.englishText}
                       </td>
 
-                      <td className="py-3 px-4 align-top">
+                      <td className="py-3 px-4 align-top min-w-[220px]">
                         {isEditingThis ? (
                           <div className="space-y-2">
                             <input
@@ -577,7 +577,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
                         )}
                       </td>
 
-                      <td className="py-3 px-4 align-top text-right">
+                      <td className="py-3 px-4 align-top text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           {isMissing ? (
                             <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
@@ -614,7 +614,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
       {activeSubTab === 'add_key' && (
         <form
           onSubmit={handleCreateKey}
-          className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6 max-w-2xl space-y-4"
+          className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 max-w-2xl space-y-4"
         >
           <div>
             <h3 className="text-base font-bold text-white">Add New Platform Translation Key</h3>
@@ -714,7 +714,7 @@ export const AdminLanguageManagementSection: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-3 flex items-center justify-end gap-2">
+          <div className="pt-3 flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => setActiveSubTab('dictionary')}

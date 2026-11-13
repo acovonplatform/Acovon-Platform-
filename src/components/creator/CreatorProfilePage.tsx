@@ -7,6 +7,7 @@ import { CustomRequestModal } from '../requests/CustomRequestModal';
 import { SubscribeModal } from '../common/SubscribeModal';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   CheckCircle2, 
   Video, 
@@ -59,6 +60,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     posts, 
     currentUser, 
     isAuthenticated,
+    requireAuth,
     isCurrentUserApprovedCreator,
     activeRole,
     setEditingPost,
@@ -66,6 +68,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     initiateVideoCall, 
     subscribeToCreator, 
     isSubscribedTo, 
+    isPostPurchased,
     getSubscriptionTier,
     updateCreatorProfile,
     isFollowing,
@@ -97,7 +100,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   };
 
   const creator = creators.find(c => c.id === creatorId) || creators[0];
-  const isOwner = currentUser.id === creator.id;
+  const isOwner = isAuthenticated && currentUser.id === creator.id;
   const isCreatorOwner =
     isAuthenticated &&
     currentUser.id === creator.id &&
@@ -126,6 +129,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   };
 
   const handleTierSelect = (tierId: string) => {
+    if (!requireAuth('subscribe to creators')) return;
     const res = subscribeToCreator(creator.id, tierId);
     if (res.success) {
       setShowSubscribeModal(false);
@@ -135,7 +139,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-16 overflow-x-hidden">
+    <div className="max-w-[1600px] mx-auto pb-16 overflow-x-clip">
       
       {/* Cover Banner */}
       <div className="relative w-full h-44 sm:h-64 md:h-80 bg-neutral-900 overflow-hidden">
@@ -170,10 +174,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             </div>
 
             <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold font-brand text-white tracking-wide break-words">
                   {creator.name}
                 </h1>
+                <VerifiedBadge creatorId={creator.id} size="lg" />
                 {showDemoBadges && creator.isDemo && (
                   <span className="text-[10px] font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
                     DEMO
@@ -183,10 +188,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
               {/* Zero-Pill Clean Metadata with Creator Country Flag */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-400">
-                <span className="inline-flex items-center gap-1">
-                  <span>@{creator.username}</span>
-                  <VerifiedBadge creatorId={creator.id} size="xs" />
-                </span>
+                <span>@{creator.username}</span>
                 <span aria-hidden="true">·</span>
                 <span>{creator.category}</span>
                 {creator.country && (
@@ -226,7 +228,10 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             {creator.isLiveForCalls && (
               <button
                 type="button"
-                onClick={() => setShowCallLimitModal(true)}
+                onClick={() => {
+                  if (!requireAuth('start a live video call')) return;
+                  setShowCallLimitModal(true);
+                }}
                 className="px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-900/30 flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Video className="w-4 h-4 shrink-0" />
@@ -238,7 +243,10 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             {creator.acceptingCustomRequests && (
               <button
                 type="button"
-                onClick={() => setShowCustomReqModal(true)}
+                onClick={() => {
+                  if (!requireAuth('request a custom video')) return;
+                  setShowCustomReqModal(true);
+                }}
                 className="px-3.5 sm:px-4 py-2 bg-[#18181c] hover:bg-[#24242c] border border-[#d4af37]/40 text-[#fce7b0] font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Clapperboard className="w-4 h-4 text-[#d4af37] shrink-0" />
@@ -250,7 +258,10 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
             {!isSubscribed ? (
               <button
                 type="button"
-                onClick={() => setShowSubscribeModal(true)}
+                onClick={() => {
+                  if (!requireAuth('subscribe to this creator')) return;
+                  setShowSubscribeModal(true);
+                }}
                 className="px-4 sm:px-5 py-2 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 shrink-0" />
@@ -376,7 +387,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           {activeTab === 'posts' && (
             <div className="space-y-6">
               {/* Top View Mode Switcher (TikTok/Instagram Reels Grid vs Clean Feed View) */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#202028]">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#202028]">
                 <div className="text-xs text-neutral-400">
                   Showing <strong className="text-white font-semibold">{creatorPosts.length}</strong> videos &amp; uploads
                 </div>
@@ -419,12 +430,27 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 </div>
               ) : contentViewMode === 'grid' ? (
                 /* TikTok / Instagram Responsive Reels Grid */
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-2 sm:gap-3.5">
                   {creatorPosts.map(post => {
                     const videoAsset = post.media?.find(m => m.type === 'video');
                     const photoAsset = post.media?.[0];
                     const isVideo = Boolean(videoAsset);
-                    const thumbnail = videoAsset?.thumbnailUrl || photoAsset?.url || creator.coverImage || post.creatorAvatar;
+                    const isGridLocked =
+                      !isOwner &&
+                      ((post.visibility === 'subscribers' && !isSubscribed) ||
+                        (post.visibility === 'pay_per_view' && !isPostPurchased(post.id)) ||
+                        (post.visibility === 'followers' && !isFollowing(creator.id) && !isSubscribed));
+                    const safeThumb = isGridLocked
+                      ? (videoAsset?.thumbnailUrl && videoAsset.thumbnailUrl !== videoAsset.url
+                          ? videoAsset.thumbnailUrl
+                          : photoAsset?.thumbnailUrl && photoAsset.thumbnailUrl !== photoAsset.url
+                          ? photoAsset.thumbnailUrl
+                          : undefined)
+                      : videoAsset
+                      ? (videoAsset.thumbnailUrl && videoAsset.thumbnailUrl !== videoAsset.url
+                          ? videoAsset.thumbnailUrl
+                          : undefined)
+                      : photoAsset?.thumbnailUrl || photoAsset?.url || creator.coverImage || post.creatorAvatar;
                     const durationSec = videoAsset?.durationSeconds || (post.ppvPreviewDuration ? post.ppvPreviewDuration : 45);
                     const viewCount = post.likesCount ? Math.round(post.likesCount * 14.3) : 1240;
 
@@ -441,12 +467,20 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                         className="group relative aspect-[9/16] sm:aspect-[4/5] bg-[#141418] border border-[#26262e] rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer shadow-lg transition-all duration-300 hover:border-[#d4af37]/60 hover:shadow-2xl hover:shadow-[#d4af37]/15"
                       >
                         {/* Poster Thumbnail */}
-                        <img
-                          src={thumbnail}
-                          alt={post.content.slice(0, 40)}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
+                        {safeThumb ? (
+                          <img
+                            src={safeThumb}
+                            alt={post.content.slice(0, 40)}
+                            referrerPolicy="no-referrer"
+                            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+                              isGridLocked ? 'blur-lg opacity-35' : ''
+                            }`}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-[#101016] flex items-center justify-center">
+                            <Lock className="w-8 h-8 text-[#d4af37]/60" />
+                          </div>
+                        )}
 
                         {/* TikTok / Instagram Dark Vignette Gradient */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-black/35 group-hover:from-black/95 transition-colors" />
@@ -540,9 +574,22 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
                         {/* Bottom Overlay: Caption & TikTok/Instagram Metrics */}
                         <div className="absolute bottom-2 sm:bottom-2.5 left-2 sm:left-2.5 right-2 sm:right-2.5 text-white pointer-events-none">
-                          <p className="text-[11px] sm:text-xs font-medium text-neutral-200 line-clamp-2 leading-snug mb-1.5 drop-shadow">
-                            {post.content}
-                          </p>
+                          {post.content && (
+                            <div
+                              onClick={e => e.stopPropagation()}
+                              className="pointer-events-auto mb-1.5"
+                            >
+                              <CollapsibleDescriptionText
+                                text={post.content}
+                                variant="overlay"
+                                compact
+                                linkify
+                                maxExpandedHeightClass="max-h-32 overflow-y-auto"
+                                textClassName="text-[11px] sm:text-xs font-medium text-neutral-200 leading-snug drop-shadow"
+                                resetKey={post.id}
+                              />
+                            </div>
+                          )}
                           <div className="flex items-center justify-between text-[11px] font-mono text-neutral-300">
                             <div className="flex items-center gap-2 sm:gap-2.5">
                               <span className="flex items-center gap-1 drop-shadow">
@@ -789,8 +836,8 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
 
       {/* Video Call Spending Limit Setup Modal */}
       {showCallLimitModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4 acovon-modal-panel">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
                 <Video className="w-5 h-5 text-emerald-400" />

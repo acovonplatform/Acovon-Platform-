@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Languages, Sparkles, EyeOff, ShieldCheck, Globe } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SupportedLanguageCode } from '../../data/i18nData';
+import { CollapsibleDescriptionText } from './CollapsibleDescriptionText';
 
 interface TranslateContentButtonProps {
   text: string;
@@ -19,6 +20,13 @@ interface TranslateContentButtonProps {
   className?: string;
   renderPrimaryText?: boolean;
   textClassName?: string;
+  collapsible?: boolean;
+  linkify?: boolean;
+  variant?: 'default' | 'overlay';
+  maxExpandedHeightClass?: string;
+  hideTranslateAction?: boolean;
+  hasExtraContent?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 /**
@@ -37,7 +45,14 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
   compact = false,
   className = '',
   renderPrimaryText = false,
-  textClassName = 'text-neutral-200 text-sm leading-relaxed whitespace-pre-line break-words'
+  textClassName = 'text-neutral-200 text-sm leading-relaxed whitespace-pre-line break-words',
+  collapsible = false,
+  linkify = true,
+  variant = 'default',
+  maxExpandedHeightClass = '',
+  hideTranslateAction = false,
+  hasExtraContent = false,
+  onExpandedChange
 }) => {
   const {
     supportedLanguages,
@@ -97,7 +112,20 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
       {/* Optional Primary Text Renderer (switches cleanly between Original and Translated while keeping Original accessible) */}
       {renderPrimaryText && (
         <div>
-          {isShowingTranslation ? (
+          {collapsible ? (
+            <CollapsibleDescriptionText
+              text={isShowingTranslation ? translationResult.translatedText : text}
+              dir={isShowingTranslation ? translationResult.targetDir : undefined}
+              textClassName={textClassName}
+              variant={variant}
+              compact={compact}
+              linkify={linkify}
+              maxExpandedHeightClass={maxExpandedHeightClass}
+              resetKey={contentRef}
+              hasExtraContent={hasExtraContent}
+              onExpandedChange={onExpandedChange}
+            />
+          ) : isShowingTranslation ? (
             <div className="space-y-1">
               <p
                 data-ugc="true"
@@ -116,64 +144,68 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
       )}
 
       {/* Action Row: Translate / Show Original Button + Translated Status Label */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={handleToggleTranslate}
-          className={`inline-flex items-center gap-1.5 font-medium transition-colors cursor-pointer ${
-            compact
-              ? 'text-[10px] text-[#d4af37] hover:underline'
-              : 'text-[11px] px-2.5 py-0.5 rounded-lg bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-[#d4af37]'
-          }`}
-        >
-          {isShowingTranslation ? (
-            <>
-              <EyeOff className="w-3 h-3 shrink-0" />
-              <span>{t('feed.show_original', 'Show Original')}</span>
-            </>
-          ) : (
-            <>
-              <Languages className="w-3 h-3 shrink-0" />
-              <span>
-                {t('feed.translate', 'Translate')} · {preferredTranslationLanguageMeta.nativeName}
-              </span>
-            </>
-          )}
-        </button>
-
-        {isShowingTranslation && (
-          <>
-            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#fce7b0]">
-              <Sparkles className="w-2.5 h-2.5 text-[#d4af37] shrink-0" />
-              <span>
-                {platformTranslationEnabled && manualOverride === null
-                  ? `Translated (${translationResult.detectedSourceEnglishName} → ${preferredTranslationLanguageMeta.englishName})`
-                  : `Translated (${translationResult.detectedSourceEnglishName} → ${preferredTranslationLanguageMeta.englishName})`}
-              </span>
-            </span>
-
+      {(!hideTranslateAction || isShowingTranslation) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {!hideTranslateAction && (
             <button
               type="button"
-              onClick={e => {
-                e.stopPropagation();
-                setShowQuickLangPicker(prev => !prev);
-              }}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#18181f] hover:bg-[#24242e] text-neutral-300 hover:text-white border border-[#2c2c36] cursor-pointer"
-              title="Change Preferred Translation Language"
+              onClick={handleToggleTranslate}
+              className={`inline-flex items-center gap-1.5 font-medium transition-colors cursor-pointer ${
+                compact
+                  ? 'text-[10px] text-[#d4af37] hover:underline'
+                  : 'text-[11px] px-2.5 py-0.5 rounded-lg bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-[#d4af37]'
+              }`}
             >
-              <Globe className="w-2.5 h-2.5 text-[#d4af37]" />
-              <span>{preferredTranslationLanguageMeta.nativeName}</span>
+              {isShowingTranslation ? (
+                <>
+                  <EyeOff className="w-3 h-3 shrink-0" />
+                  <span>{t('feed.show_original', 'Show Original')}</span>
+                </>
+              ) : (
+                <>
+                  <Languages className="w-3 h-3 shrink-0" />
+                  <span>
+                    {t('feed.translate', 'Translate')} · {preferredTranslationLanguageMeta.nativeName}
+                  </span>
+                </>
+              )}
             </button>
-          </>
-        )}
+          )}
 
-        {contentType === 'message' && isShowingTranslation && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
-            <ShieldCheck className="w-3 h-3 shrink-0" />
-            <span>Private translation · Original preserved</span>
-          </span>
-        )}
-      </div>
+          {isShowingTranslation && (
+            <>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#fce7b0]">
+                <Sparkles className="w-2.5 h-2.5 text-[#d4af37] shrink-0" />
+                <span>
+                  {platformTranslationEnabled && manualOverride === null
+                    ? `Translated (${translationResult.detectedSourceEnglishName} → ${preferredTranslationLanguageMeta.englishName})`
+                    : `Translated (${translationResult.detectedSourceEnglishName} → ${preferredTranslationLanguageMeta.englishName})`}
+                </span>
+              </span>
+
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  setShowQuickLangPicker(prev => !prev);
+                }}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#18181f] hover:bg-[#24242e] text-neutral-300 hover:text-white border border-[#2c2c36] cursor-pointer"
+                title="Change Preferred Translation Language"
+              >
+                <Globe className="w-2.5 h-2.5 text-[#d4af37]" />
+                <span>{preferredTranslationLanguageMeta.nativeName}</span>
+              </button>
+            </>
+          )}
+
+          {contentType === 'message' && isShowingTranslation && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+              <ShieldCheck className="w-3 h-3 shrink-0" />
+              <span>Private translation · Original preserved</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Inline Quick Preferred Translation Language Picker (when opened) */}
       {isShowingTranslation && showQuickLangPicker && (
@@ -182,7 +214,7 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
           onClick={e => e.stopPropagation()}
           className="p-2.5 rounded-xl bg-[#111116] border border-[#2c2c36] space-y-1.5 animate-in fade-in"
         >
-          <div className="text-[10px] text-neutral-400 flex items-center justify-between">
+          <div className="text-[10px] text-neutral-400 flex flex-wrap items-center justify-between gap-1.5">
             <span>Select Preferred Translation Language:</span>
             <span className="text-[#fce7b0] font-semibold">
               {preferredTranslationLanguageMeta.nativeName} ({preferredTranslationLanguageMeta.englishName})
@@ -217,7 +249,7 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
         <div
           dir="ltr"
           onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2 text-[10px] text-neutral-400"
+          className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400"
         >
           <span>
             Original language is already {preferredTranslationLanguageMeta.englishName}.
@@ -264,17 +296,32 @@ export const TranslateContentButton: React.FC<TranslateContentButtonProps> = ({
             </button>
           </div>
 
-          <p
-            data-ugc="true"
-            className="text-xs text-neutral-100 leading-relaxed whitespace-pre-line break-words"
-          >
-            {translationResult.translatedText}
-          </p>
+          {collapsible ? (
+            <CollapsibleDescriptionText
+              text={translationResult.translatedText}
+              dir={translationResult.targetDir}
+              textClassName="text-xs text-neutral-100 leading-relaxed"
+              variant={variant}
+              compact={compact}
+              linkify={linkify}
+              maxExpandedHeightClass={maxExpandedHeightClass}
+              resetKey={contentRef}
+              hasExtraContent={hasExtraContent}
+              onExpandedChange={onExpandedChange}
+            />
+          ) : (
+            <p
+              data-ugc="true"
+              className="text-xs text-neutral-100 leading-relaxed whitespace-pre-line break-words"
+            >
+              {translationResult.translatedText}
+            </p>
+          )}
 
           {isSameLanguageAsOriginal && !showQuickLangPicker && (
             <div
               dir="ltr"
-              className="pt-1 border-t border-white/5 flex items-center justify-between gap-2 text-[10px] text-neutral-400"
+              className="pt-1 border-t border-white/5 flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-neutral-400"
             >
               <span>
                 Content is already in your Preferred Translation Language ({preferredTranslationLanguageMeta.englishName}).

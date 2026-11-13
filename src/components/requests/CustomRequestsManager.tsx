@@ -154,18 +154,18 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-8 py-6 sm:py-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold font-brand tracking-wide text-white">Custom Video Requests</h1>
+          <h1 className="text-xl sm:text-2xl font-bold font-brand tracking-wide text-white">Custom Video Requests</h1>
           <p className="text-xs text-neutral-400 mt-1">
             Personalized video commissions with escrow protection and delivery tracking.
           </p>
         </div>
 
         {/* Filter buttons (Interactive tabs allowed by design rules) */}
-        <div className="flex items-center gap-1.5 p-1 bg-[#141418] border border-[#27272a] rounded-xl self-start">
+        <div className="flex items-center gap-1.5 p-1 bg-[#141418] border border-[#27272a] rounded-xl self-start max-w-full overflow-x-auto no-scrollbar">
           <button
             onClick={() => setFilter('all')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
@@ -217,7 +217,7 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
           {visibleRequests.map((req) => (
             <div
               key={req.id}
-              className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 transition-all hover:border-[#383842]"
+              className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 transition-all hover:border-[#383842]"
             >
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-4 border-b border-[#1c1c22]">
                 <div className="space-y-1">
@@ -228,11 +228,14 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
 
                   {/* Unboxed Metadata */}
                   <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
-                    <span className="inline-flex items-center gap-1">
-                      Creator: <strong className="text-neutral-200">{req.creatorName}</strong>
-                      <span className="text-[10px] text-neutral-400 font-normal inline-flex items-center gap-0.5">
-                        @{creators.find(c => c.id === req.creatorId)?.username || req.creatorName.toLowerCase().replace(/\s+/g, '')}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>Creator:</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-neutral-200">
+                        <span>{req.creatorName}</span>
                         <VerifiedBadge creatorId={req.creatorId} size="xs" />
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-normal">
+                        @{creators.find(c => c.id === req.creatorId)?.username || req.creatorName.toLowerCase().replace(/\s+/g, '')}
                       </span>
                     </span>
                     <span aria-hidden="true">·</span>
@@ -262,8 +265,8 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
 
               {/* Delivered Video Preview Section if delivered or completed */}
               {req.deliveredVideoUrl && (
-                <div className="mt-2 mb-4 p-4 bg-[#18181c] border border-emerald-900/40 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
+                <div className="mt-2 mb-4 p-3.5 sm:p-4 bg-[#18181c] border border-emerald-900/40 rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
                       <FileCheck className="w-4 h-4" />
                       <span>Completed Video Delivery from {req.creatorName}</span>
@@ -290,7 +293,7 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                   Target Delivery: {req.deliveryDeadline}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {/* Creator actions */}
                   {activeRole === 'creator' && req.creatorId === currentUser.id && (
                     <>
@@ -359,15 +362,15 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
 
       {/* Video Modal Player */}
       {selectedVideo && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="max-w-3xl w-full bg-[#121215] border border-[#27272a] rounded-2xl overflow-hidden relative">
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
+          <div className="max-w-3xl w-full max-h-[92dvh] overflow-y-auto bg-[#121215] border border-[#27272a] rounded-2xl relative acovon-modal-panel">
             <button
               onClick={() => setSelectedVideo(null)}
               className="absolute top-3 right-3 z-10 p-2 bg-black/60 rounded-full text-white hover:bg-black/80 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="aspect-video bg-black">
+            <div className="aspect-video bg-black max-h-[82dvh] w-full">
               <video
                 src={selectedVideo}
                 controls
@@ -388,8 +391,8 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
 
       {/* Creator Delivery Modal */}
       {deliveringReqId && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative acovon-modal-panel">
             <button
               onClick={() => {
                 setDeliveringReqId(null);

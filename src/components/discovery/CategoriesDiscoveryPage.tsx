@@ -57,7 +57,8 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
     creators,
     getCountryFlagAndName,
     isAuthenticated,
-    currentUser
+    currentUser,
+    openGuestAuthPrompt
   } = useApp();
 
   // Top-level mode: 'categories' or 'countries'
@@ -132,7 +133,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
       if (p.isDeletedByCreator || p.publicationStatus === 'deleted') return false;
       if (p.moderationStatus && p.moderationStatus !== 'approved') return false;
       if (p.isDraft) return false;
-      if (p.visibility === 'private' && p.creatorId !== currentUser?.id) return false;
+      if (p.visibility === 'private' && (!isAuthenticated || p.creatorId !== currentUser?.id)) return false;
       if (p.scheduledFor && new Date(p.scheduledFor) > new Date()) return false;
       const creator = creatorMap.get(p.creatorId);
       if (creator && (creator.accountStatus === 'suspended' || creator.accountStatus === 'banned')) {
@@ -140,7 +141,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
       }
       return true;
     });
-  }, [posts, currentUser?.id, creatorMap]);
+  }, [posts, isAuthenticated, currentUser?.id, creatorMap]);
 
   // Calculate genuine engagement and post count per category
   const categoryStats = useMemo(() => {
@@ -593,10 +594,10 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#09090b] text-white py-5 sm:py-8 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-[1600px] mx-auto space-y-6 sm:space-y-8">
         {/* Top Hero & Mode Switcher */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#16161d] via-[#121216] to-[#09090b] border border-[#27272a] p-6 sm:p-8 shadow-2xl">
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#16161d] via-[#121216] to-[#09090b] border border-[#27272a] p-4 sm:p-6 lg:p-8 shadow-2xl">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="space-y-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#d4af37]/15 border border-[#d4af37]/30 text-[#fce7b0] text-xs font-bold uppercase tracking-wider">
@@ -631,7 +632,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                   setSelectedCategoryId(null);
                   setSelectedCountryId(null);
                 }}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                   discoveryMode === 'categories' && !selectedCountry
                     ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20'
                     : 'bg-[#18181f] text-neutral-300 hover:text-white border border-[#2b2b36]'
@@ -657,7 +658,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                   setSelectedCategoryId(null);
                   setSelectedCountryId(null);
                 }}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                   discoveryMode === 'countries' || Boolean(selectedCountry)
                     ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20'
                     : 'bg-[#18181f] text-neutral-300 hover:text-white border border-[#2b2b36]'
@@ -706,12 +707,12 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                 </span>
               </div>
 
-              {!isAuthenticated && onNavigate && (
+              {!isAuthenticated && (
                 <div className="flex items-center gap-3 text-xs text-neutral-400">
                   <span>Browsing public content as Guest</span>
                   <button
                     type="button"
-                    onClick={() => onNavigate('landing')}
+                    onClick={() => openGuestAuthPrompt('unlock subscriptions, PPV content, and creator messaging')}
                     className="px-3 py-1.5 rounded-lg bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold transition-all cursor-pointer"
                   >
                     Sign In for Full Access
@@ -892,17 +893,17 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                 <button
                   type="button"
                   onClick={() => setCountryDetailTab('videos')}
-                  className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer text-left ${
                     countryDetailTab === 'videos'
                       ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20'
                       : 'bg-[#18181f] text-neutral-400 hover:text-white border border-[#2b2b36]'
                   }`}
                 >
-                  <Video className="w-4 h-4" />
+                  <Video className="w-4 h-4 shrink-0" />
                   <span>
                     Videos &amp; Posts from {selectedCountry.flag} {selectedCountry.name}
                   </span>
-                  <span className="px-2 py-0.5 rounded-md bg-black/20 text-xs font-black tabular-nums">
+                  <span className="px-2 py-0.5 rounded-md bg-black/20 text-xs font-black tabular-nums shrink-0">
                     {selectedCountryVideos.length}
                   </span>
                 </button>
@@ -910,17 +911,17 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                 <button
                   type="button"
                   onClick={() => setCountryDetailTab('creators')}
-                  className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer text-left ${
                     countryDetailTab === 'creators'
                       ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
                       : 'bg-[#18181f] text-neutral-400 hover:text-white border border-[#2b2b36]'
                   }`}
                 >
-                  <Users className="w-4 h-4" />
+                  <Users className="w-4 h-4 shrink-0" />
                   <span>
                     Creators from {selectedCountry.flag} {selectedCountry.name}
                   </span>
-                  <span className="px-2 py-0.5 rounded-md bg-black/20 text-xs font-black tabular-nums">
+                  <span className="px-2 py-0.5 rounded-md bg-black/20 text-xs font-black tabular-nums shrink-0">
                     {selectedCountryCreators.length}
                   </span>
                 </button>
@@ -1109,22 +1110,25 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
 
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <h3 className="text-base font-bold text-white group-hover:text-[#fce7b0] transition-colors">
+                                  <h3 className="text-base font-bold text-white group-hover:text-[#fce7b0] transition-colors truncate">
                                     {creator.name}
                                   </h3>
+                                  <VerifiedBadge creatorId={creator.id} size="sm" />
                                 </div>
-                                <p className="text-xs text-neutral-400 font-medium inline-flex items-center gap-1">
-                                  <span>@{creator.username}</span>
-                                  <VerifiedBadge creatorId={creator.id} size="xs" />
+                                <p className="text-xs text-neutral-400 font-medium">
+                                  @{creator.username}
                                 </p>
                               </div>
 
                               <p className="text-xs text-neutral-400 line-clamp-2">{creator.bio}</p>
 
                               <div className="flex flex-wrap gap-1.5 pt-1">
-                                {(creator.categories && creator.categories.length > 0
-                                  ? creator.categories
-                                  : [creator.category]
+                                {Array.from(
+                                  new Set(
+                                    creator.categories && creator.categories.length > 0
+                                      ? creator.categories
+                                      : [creator.category]
+                                  )
                                 )
                                   .slice(0, 3)
                                   .map(cat => (
@@ -1309,7 +1313,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-4 sm:gap-5">
                 {displayedCategories.map(cat => {
                   const stat = categoryStats.get(cat.id);
                   const postCount = stat?.postCount || 0;
@@ -1469,7 +1473,7 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 3xl:grid-cols-5 gap-4">
                 {displayedCountries.map(country => {
                   const stat = countryStats.get(country.id);
                   const videoCount = stat?.videoPostCount || 0;

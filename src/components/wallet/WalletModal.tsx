@@ -72,7 +72,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
-      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl relative max-h-[92dvh] overflow-y-auto animate-in zoom-in-95">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl relative max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 acovon-modal-panel">
         
         <button
           type="button"
@@ -179,10 +179,10 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
             </div>
 
             {/* Quick action buttons */}
-            <div className="flex gap-3">
+            <div className="flex flex-wrap xs:flex-nowrap gap-3">
               <button
                 onClick={() => setActiveTab('deposit')}
-                className="flex-1 py-3 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                className="flex-1 min-w-[140px] py-3 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
                 <ArrowDownLeft className="w-4 h-4" />
                 <span>Deposit Instant Funds</span>
@@ -191,7 +191,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               {isCreator && (
                 <button
                   onClick={() => setActiveTab('withdraw')}
-                  className="flex-1 py-3 bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="flex-1 min-w-[140px] py-3 bg-[#18181c] hover:bg-[#22222a] border border-[#27272a] text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <ArrowUpRight className="w-4 h-4" />
                   <span>Request Payout</span>
@@ -206,7 +206,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               </div>
               <div className="space-y-2">
                 {userTransactions.slice(0, 3).map(tx => (
-                  <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+                  <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 text-xs">
                     <div>
                       <div className="font-medium text-white">{tx.description}</div>
                       <div className="text-[10px] text-neutral-500 font-mono">{tx.createdAt} · {tx.id}</div>
@@ -228,7 +228,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               <label className="block text-xs font-medium text-neutral-300 mb-2">
                 Select Pre-set Deposit Amount
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 xs:grid-cols-4 gap-2">
                 {[25, 50, 100, 250].map(amt => (
                   <button
                     key={amt}
@@ -347,7 +347,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
               <div className="text-center py-8 text-neutral-500 text-xs">No transactions logged yet.</div>
             ) : (
               userTransactions.map(tx => (
-                <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+                <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 text-xs">
                   <div>
                     <div className="font-semibold text-neutral-200">{tx.description}</div>
                     <div className="text-[10px] text-neutral-500 font-mono">

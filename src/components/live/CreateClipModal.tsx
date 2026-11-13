@@ -54,8 +54,8 @@ export const CreateClipModal: React.FC<CreateClipModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#121215] border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 text-white">
+    <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-[#121215] border border-zinc-800 rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 text-white acovon-modal-panel">
         
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -146,7 +146,7 @@ export const CreateClipModal: React.FC<CreateClipModalProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3 pt-2">
               <button
                 type="button"
                 onClick={onClose}
@@ -184,7 +184,7 @@ export const CreateClipModal: React.FC<CreateClipModalProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
               <button
                 onClick={handleCopyLink}
                 className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-200 font-medium flex items-center gap-1.5 transition-colors"

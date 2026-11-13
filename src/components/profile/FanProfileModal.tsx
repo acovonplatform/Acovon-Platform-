@@ -69,26 +69,26 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
   const purchasedPosts = posts.filter(p => purchases.some(pur => pur.postId === p.id));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-[#121215] border border-[#27272a] rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-5 overflow-y-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 my-auto acovon-modal-panel">
         
         {/* Profile Header */}
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-[#18181f] via-[#141418] to-[#18181f] border-b border-[#26262b] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="p-4 sm:p-6 bg-gradient-to-r from-[#18181f] via-[#141418] to-[#18181f] border-b border-[#26262b] flex items-start sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <img 
               src={currentUser.avatar} 
               alt={currentUser.name} 
-              className="w-16 h-16 rounded-2xl object-cover border-2 border-[#d4af37] shadow-xl"
+              className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-[#d4af37] shadow-xl shrink-0"
             />
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-brand font-bold text-lg text-white">{currentUser.name}</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase bg-[#d4af37]/20 text-[#fce7b0] border border-[#d4af37]/30">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-brand font-bold text-base sm:text-lg text-white truncate">{currentUser.name}</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono uppercase bg-[#d4af37]/20 text-[#fce7b0] border border-[#d4af37]/30 shrink-0">
                   {currentUser.role}
                 </span>
               </div>
-              <p className="text-xs text-neutral-400">@{currentUser.username} · Member since {currentUser.dateJoined}</p>
-              <div className="flex items-center gap-4 text-xs font-mono text-neutral-300 mt-1">
+              <p className="text-xs text-neutral-400 truncate">@{currentUser.username} · Member since {currentUser.dateJoined}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-neutral-300 mt-1">
                 <span>Wallet: <strong className="text-[#fce7b0]">${currentUser.walletBalance.toFixed(2)}</strong></span>
                 <span>Following: <strong className="text-white">{following.length}</strong></span>
                 <span>Subscriptions: <strong className="text-white">{subscriptions.filter(s => s.status === 'active').length}</strong></span>
@@ -98,14 +98,14 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
 
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-[#1e1e24] hover:bg-[#282830] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-full bg-[#1e1e24] hover:bg-[#282830] text-neutral-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Navigation Navigation Bar */}
-        <div className="flex items-center gap-1 p-2 bg-[#141418] border-b border-[#26262b] overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 p-2 bg-[#141418] border-b border-[#26262b] overflow-x-auto no-scrollbar shrink-0">
           {[
             { id: 'following', label: 'Following', count: followedCreators.length, icon: Users },
             { id: 'subscriptions', label: 'Subscriptions', count: subscriptions.filter(s => s.status === 'active').length, icon: Crown },
@@ -135,7 +135,7 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
         </div>
 
         {/* Tab Viewport */}
-        <div className="flex-1 p-5 overflow-y-auto max-h-[55vh]">
+        <div className="flex-1 min-h-0 p-4 sm:p-5 overflow-y-auto">
           
           {/* TAB 1: Following List */}
           {activeTab === 'following' && (
@@ -146,7 +146,7 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 </div>
               ) : (
                 followedCreators.map(creator => (
-                  <div key={creator.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl flex items-center justify-between gap-3">
+                  <div key={creator.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3">
                     <button
                       onClick={() => {
                         onClose();
@@ -205,7 +205,7 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 subscriptions.map(sub => {
                   const creator = creators.find(c => c.id === sub.creatorId);
                   return (
-                    <div key={sub.id} className="p-4 bg-[#18181c] border border-[#27272a] rounded-2xl flex items-center justify-between gap-4">
+                    <div key={sub.id} className="p-4 bg-[#18181c] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3 sm:gap-4">
                       <div className="flex items-center gap-3">
                         <img 
                           src={creator?.avatar} 
@@ -327,7 +327,7 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 </div>
               ) : (
                 likedPosts.map(post => (
-                  <div key={post.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl flex items-center justify-between gap-3">
+                  <div key={post.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <img 
                         src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
@@ -381,7 +381,7 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 </div>
               ) : (
                 purchasedPosts.map(post => (
-                  <div key={post.id} className="p-3.5 bg-[#18181c] border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3">
+                  <div key={post.id} className="p-3.5 bg-[#18181c] border border-amber-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <img 
                         src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
