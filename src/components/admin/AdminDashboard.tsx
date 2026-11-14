@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import {
@@ -25,6 +25,7 @@ import {
   LifeBuoy,
   Sliders,
   UserCog,
+  UserCheck,
   FileText,
   Settings,
   Search,
@@ -73,12 +74,14 @@ type AdminSectionId =
   | 'platform_config'
   | 'video_pipeline'
   | 'creator_verification'
+  | 'creator_applications'
   | 'recommendation_engine'
   | 'announcement_management'
   | 'branding_studio'
   | 'language_management';
 
 import { AdminCreatorVerificationSection } from './AdminCreatorVerificationSection';
+import { AdminCreatorApplicationsSection } from './AdminCreatorApplicationsSection';
 import { AdminRecommendationEngineSection } from './AdminRecommendationEngineSection';
 import { AdminAnnouncementManagementSection } from './AdminAnnouncementManagementSection';
 import { AdminBrandingStudioSection } from './AdminBrandingStudioSection';
@@ -115,9 +118,55 @@ const ADMIN_ROLE_LABELS: Record<AdminPermissionLevel, { label: string; badgeClas
 
 export interface AdminDashboardProps {
   onExit?: () => void;
+  initialSection?: AdminSectionId;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
+class AdminSectionErrorBoundary extends Component<
+  { sectionId: string; onReset?: () => void; children: ReactNode },
+  { hasError: boolean; errorMessage: string }
+> {
+  constructor(props: { sectionId: string; onReset?: () => void; children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMessage: error?.message || 'Unexpected rendering error' };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`[AdminDashboard] Section "${this.props.sectionId}" error:`, error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-[#121216] border border-rose-500/40 rounded-2xl p-6 space-y-3 text-xs">
+          <div className="flex items-center gap-2 text-rose-300 font-bold text-sm">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Unable to render module: {this.props.sectionId}</span>
+          </div>
+          <p className="text-neutral-400 font-mono text-[11px] break-words">
+            {this.state.errorMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, errorMessage: '' });
+              this.props.onReset?.();
+            }}
+            className="px-3.5 py-2 bg-[#1e1e26] hover:bg-[#282834] border border-[#32323e] rounded-xl text-white font-semibold cursor-pointer"
+          >
+            Retry Module
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialSection = 'overview' }) => {
   const {
     currentUser,
     adminLogout,
@@ -162,9 +211,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     updateLivestreamRecording,
     toggleCreatorSubscriptionPlanActive,
     deleteStatus,
-    showDemoBadges,
-    setShowDemoBadges,
-    resetDemoContent,
     videoMediaRecords,
     videoProcessingJobs,
     videoProcessingConfig,
@@ -179,11 +225,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     hasBrandingPermission,
     toggleAdminBrandingPermission,
     supportedLanguages,
-    activeLanguageCode
+    activeLanguageCode,
+    refreshCreatorApplications
   } = useApp();
 
-  const [activeSection, setActiveSection] = useState<AdminSectionId>('overview');
+  useEffect(() => {
+    refreshCreatorApplications({ reconcile: true }).catch(() => {});
+  }, []);
+
+  const [activeSection, setActiveSection] = useState<AdminSectionId>(initialSection);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [feedbackBanner, setFeedbackBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const navigateToSection = (sectionId: AdminSectionId) => {
+    setActiveSection(sectionId);
+    if (sectionId === 'users') {
+      setUserPage(1);
+    }
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        if (workspaceRef.current) {
+          const rect = workspaceRef.current.getBoundingClientRect();
+          if (rect.top < 0 || rect.top > window.innerHeight * 0.65) {
+            workspaceRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      });
+    }
+  };
 
   const notifyFeedback = (type: 'success' | 'error', text: string) => {
     setFeedbackBanner({ type, text });
@@ -211,12 +280,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
   // Section 3: Creator Management State
   const [creatorSearch, setCreatorSearch] = useState('');
-  const [selectedCreatorId, setSelectedCreatorId] = useState<string>(creators[0]?.id || 'creator_elena');
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string>(creators[0]?.id || '');
   const [verifNotesInput, setVerifNotesInput] = useState<Record<string, string>>({});
   const [verifStatusFilter, setVerifStatusFilter] = useState<'all' | 'pending' | 'info_requested' | 'approved' | 'rejected'>('all');
 
   // Section 4: Content Management State
-  const [contentTab, setContentTab] = useState<'posts' | 'recordings' | 'statuses' | 'private_safety' | 'demo'>('posts');
+  const [contentTab, setContentTab] = useState<'posts' | 'recordings' | 'statuses' | 'private_safety'>('posts');
   const [contentSearch, setContentSearch] = useState('');
   const [contentMediaFilter, setContentMediaFilter] = useState<'all' | 'video' | 'image' | 'ppv' | 'subscribers' | 'highlights'>('all');
   const [contentModFilter, setContentModFilter] = useState<'all' | ContentModerationStatus>('all');
@@ -235,7 +304,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [txStatusFilter, setTxStatusFilter] = useState<string>('all');
   const [txPage, setTxPage] = useState(1);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
-  const [adjTargetUserId, setAdjTargetUserId] = useState('user_fan_1');
+  const [adjTargetUserId, setAdjTargetUserId] = useState('');
   const [adjType, setAdjType] = useState<'refund' | 'adjustment' | 'chargeback'>('refund');
   const [adjAmount, setAdjAmount] = useState('25.00');
   const [adjReason, setAdjReason] = useState('');
@@ -250,7 +319,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   // Section 11: Support Center State
   const [ticketFilter, setTicketFilter] = useState<'all' | SupportTicket['status']>('all');
   const [ticketCatFilter, setTicketCatFilter] = useState<string>('all');
-  const [selectedTicketId, setSelectedTicketId] = useState<string>(supportTickets[0]?.id || 'tkt_501');
+  const [selectedTicketId, setSelectedTicketId] = useState<string>(supportTickets[0]?.id || '');
   const [ticketReplyInput, setTicketReplyInput] = useState('');
 
   // Section 12: Categories & Commission State
@@ -276,20 +345,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [auditCategoryFilter, setAuditCategoryFilter] = useState<string>('all');
   const [auditSeverityFilter, setAuditSeverityFilter] = useState<string>('all');
 
-  // Helper to identify newly registered accounts vs pre-seeded demo accounts
+  // Helper to identify newly registered accounts vs operational admin accounts
   const isNewSignUpAccount = (u: User | CreatorProfile) => {
     const seededIds = new Set([
       'user_admin_1',
+      'user_admin_super',
+      'user_admin_ops',
       'user_mod_1',
       'user_fin_1',
-      'user_sup_1',
-      'user_fan_1',
-      'user_fan_2',
-      'user_fan_3',
-      'creator_elena'
+      'user_sup_1'
     ]);
     if (seededIds.has(u.id)) return false;
-    if (/^creator_\d+$/.test(u.id)) return false;
     return true;
   };
 
@@ -297,11 +363,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   // Unified Real-Time Platform Metrics & Aggregations
   // ============================================================================
   const allUnifiedUsers = useMemo(() => {
+    const fallbackAvatar = '';
+    const sanitizeAccount = (raw: User | CreatorProfile): User | CreatorProfile => {
+      const parsedBalance = Number(raw.walletBalance);
+      const id = String(raw.id || '');
+      return {
+        ...raw,
+        id,
+        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name : 'Member',
+        username:
+          typeof raw.username === 'string' && raw.username.trim()
+            ? raw.username
+            : `user_${id.slice(0, 6) || 'member'}`,
+        email: typeof raw.email === 'string' ? raw.email : '',
+        avatar: typeof raw.avatar === 'string' && raw.avatar.trim() ? raw.avatar : fallbackAvatar,
+        role: (raw.role || 'fan') as UserRole,
+        accountStatus: (raw.accountStatus || 'active') as AccountStatus,
+        walletBalance: Number.isFinite(parsedBalance) ? parsedBalance : 0,
+        dateJoined: typeof raw.dateJoined === 'string' && raw.dateJoined.trim() ? raw.dateJoined : '2026-01-01'
+      };
+    };
+
     const map = new Map<string, User | CreatorProfile>();
-    Object.values(users).forEach(u => map.set(u.id, u));
-    creators.forEach(c => {
+    Object.values(users || {}).forEach(u => {
+      if (!u || typeof u !== 'object' || !u.id) return;
+      map.set(u.id, sanitizeAccount(u));
+    });
+    (creators || []).forEach(c => {
+      if (!c || typeof c !== 'object' || !c.id) return;
       const existing = map.get(c.id);
-      map.set(c.id, existing ? { ...c, ...existing, role: c.role } : c);
+      map.set(c.id, sanitizeAccount(existing ? { ...c, ...existing, role: c.role || existing.role } : c));
     });
     const list = Array.from(map.values());
     return list.sort((a, b) => {
@@ -310,16 +401,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       if (aIsNew !== bIsNew) return bIsNew - aIsNew;
 
       const aHasPendingApp =
-        a.creatorApplicationStatus === 'pending' || verifications.some(v => v.userId === a.id && v.status === 'pending')
+        a.creatorApplicationStatus === 'pending' ||
+        (verifications || []).some(v => v && v.userId === a.id && v.status === 'pending')
           ? 1
           : 0;
       const bHasPendingApp =
-        b.creatorApplicationStatus === 'pending' || verifications.some(v => v.userId === b.id && v.status === 'pending')
+        b.creatorApplicationStatus === 'pending' ||
+        (verifications || []).some(v => v && v.userId === b.id && v.status === 'pending')
           ? 1
           : 0;
       if (aHasPendingApp !== bHasPendingApp) return bHasPendingApp - aHasPendingApp;
 
-      return (b.dateJoined || '').localeCompare(a.dateJoined || '');
+      return String(b.dateJoined || '').localeCompare(String(a.dateJoined || ''));
     });
   }, [users, creators, verifications]);
 
@@ -330,12 +423,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       approved: 2,
       rejected: 3
     };
-    return [...verifications].sort((a, b) => {
-      const pa = priority[a.status] ?? 4;
-      const pb = priority[b.status] ?? 4;
-      if (pa !== pb) return pa - pb;
-      return (b.submittedAt || '').localeCompare(a.submittedAt || '');
-    });
+    return [...(verifications || [])]
+      .filter(v => Boolean(v && typeof v === 'object'))
+      .sort((a, b) => {
+        const pa = priority[a.status] ?? 4;
+        const pb = priority[b.status] ?? 4;
+        if (pa !== pb) return pa - pb;
+        return String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''));
+      });
   }, [verifications]);
 
   const metrics = useMemo(() => {
@@ -491,7 +586,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       label: 'User Management',
       icon: Users,
       badge: metrics.totalUsers,
-      allowedRoles: ['super_admin', 'admin', 'moderator', 'support_admin']
+      allowedRoles: ['super_admin', 'admin', 'moderator', 'support_admin', 'finance_admin']
     },
     {
       id: 'creators',
@@ -605,8 +700,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       allowedRoles: ['super_admin', 'admin', 'moderator']
     },
     {
-      id: 'creator_verification',
+      id: 'creator_applications',
       num: '17',
+      label: 'Creator Applications Queue',
+      icon: UserCheck,
+      badge: (verifications || []).filter(v => v.status === 'pending' || v.status === 'info_requested').length || undefined,
+      allowedRoles: ['super_admin', 'admin', 'moderator']
+    },
+    {
+      id: 'creator_verification',
+      num: '18',
       label: 'Creator Verification (Blue Badge)',
       icon: ShieldCheck,
       badge: (creatorVerificationRecords || []).filter(r => r.status === 'verified').length || undefined,
@@ -743,10 +846,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         </div>
       )}
 
-      {/* Main 1440px Enterprise Workspace: Left 19-Item Sidebar + Right Content Area */}
-      <div className="max-w-[1440px] 3xl:max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 flex flex-col lg:flex-row gap-4 sm:gap-6 items-start overflow-x-hidden">
-        {/* 19-Section Sidebar */}
-        <aside className="w-full lg:w-64 shrink-0 bg-[#121216] border border-[#232329] rounded-2xl p-2.5 lg:sticky lg:top-20">
+      {/* Main 1440px Enterprise Workspace: Left Sidebar + Right Content Area */}
+      <div className="max-w-[1440px] 3xl:max-w-[1680px] mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 flex flex-col lg:flex-row gap-4 sm:gap-6 items-start overflow-x-clip">
+        {/* Section Sidebar */}
+        <aside className="w-full lg:w-64 shrink-0 bg-[#121216] border border-[#232329] rounded-2xl p-2.5 lg:sticky lg:top-20 z-10">
           <div className="px-3 py-2 border-b border-[#232329] mb-2 flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
               Control Modules ({sidebarItems.length})
@@ -754,12 +857,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             <span className="text-[10px] font-mono text-[#d4af37]">RBAC Active</span>
           </div>
 
-          {/* Mobile Quick-Jump Selector so mobile admins can switch among all 19 modules with 1 tap */}
+          {/* Mobile Quick-Jump Selector so mobile admins can switch among all modules with 1 tap */}
           <div className="lg:hidden mb-2 px-1">
             <select
               aria-label="Select Admin Module"
               value={activeSection}
-              onChange={(e) => setActiveSection(e.target.value as AdminSectionId)}
+              onChange={(e) => navigateToSection(e.target.value as AdminSectionId)}
               className="w-full bg-[#18181f] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-xs font-semibold text-[#fce7b0] focus:outline-none focus:border-[#d4af37]"
             >
               {sidebarItems.map(item => (
@@ -782,7 +885,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveSection(item.id)}
+                  onClick={() => navigateToSection(item.id)}
                   className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap lg:whitespace-normal text-left shrink-0 ${
                     isSelected
                       ? 'bg-[#1c1a12] text-[#fce7b0] border border-[#d4af37]/40'
@@ -811,7 +914,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         </aside>
 
         {/* Active Module Workspace */}
-        <div className="flex-1 min-w-0 w-full space-y-6 overflow-x-hidden">
+        <div ref={workspaceRef} className="flex-1 min-w-0 w-full space-y-6 overflow-x-clip">
+          <AdminSectionErrorBoundary key={activeSection} sectionId={activeSection} onReset={() => setActiveSection('overview')}>
           {/* ================================================================
               01. OVERVIEW — Real-Time Platform Statistics & Visual Analytics
           ================================================================ */}
@@ -827,7 +931,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setActiveSection('branding_studio')}
+                    onClick={() => navigateToSection('branding_studio')}
                     className="px-3.5 py-2 bg-[#1c1a12] hover:bg-[#242116] border border-[#d4af37]/40 rounded-xl text-xs text-[#fce7b0] font-semibold flex items-center gap-1.5 cursor-pointer"
                   >
                     <Palette className="w-3.5 h-3.5 text-[#d4af37]" />
@@ -869,7 +973,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
               {/* Complete 23 Real-Time Platform Statistics Grid */}
               <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5 gap-3.5">
-                <div onClick={() => setActiveSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Total Registered Users</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">{metrics.totalUsers}</div>
                   <div className="text-[11px] text-neutral-500 mt-1">
@@ -877,13 +981,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Active Fans &amp; Patrons</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">{metrics.activeFans}</div>
                   <div className="text-[11px] text-emerald-400 mt-1">Verified 18+ accounts</div>
                 </div>
 
-                <div onClick={() => setActiveSection('creators')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('creators')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Active Creators</div>
                   <div className="text-2xl font-bold font-mono text-[#fce7b0] tabular-nums mt-1">{metrics.activeCreators}</div>
                   <div className="text-[11px] text-neutral-400 mt-1">
@@ -891,13 +995,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('users')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Suspended / Restricted</div>
                   <div className="text-2xl font-bold font-mono text-rose-400 tabular-nums mt-1">{metrics.suspendedOrBanned}</div>
                   <div className="text-[11px] text-neutral-500 mt-1">Enforced safety holds</div>
                 </div>
 
-                <div onClick={() => setActiveSection('content')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('content')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Published Posts &amp; Media</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">{metrics.totalPublishedPosts}</div>
                   <div className="text-[11px] text-neutral-400 mt-1">
@@ -905,7 +1009,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('live')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('live')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Livestreams &amp; Replays</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">
                     {metrics.activeStreamsCount} Live
@@ -915,7 +1019,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('subscriptions')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('subscriptions')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Subscriptions Activity</div>
                   <div className="text-2xl font-bold font-mono text-emerald-400 tabular-nums mt-1">
                     {metrics.activeSubsCount} Active
@@ -925,7 +1029,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Total Platform Revenue (GMV)</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">
                     ${metrics.grossPlatformVolume.toLocaleString()}
@@ -935,7 +1039,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Creator Net Earnings</div>
                   <div className="text-2xl font-bold font-mono text-[#fce7b0] tabular-nums mt-1">
                     ${metrics.creatorTotalEarned.toLocaleString()}
@@ -943,7 +1047,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   <div className="text-[11px] text-neutral-400 mt-1">80% average creator share</div>
                 </div>
 
-                <div onClick={() => setActiveSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">PPV, Tips &amp; Live Replays</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">
                     ${(metrics.ppvRevenue + metrics.tipsAndGiftsRevenue + metrics.liveTicketAndReplayRevenue).toFixed(2)}
@@ -953,7 +1057,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('financials')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Custom Videos, Calls &amp; DMs</div>
                   <div className="text-2xl font-bold font-mono text-white tabular-nums mt-1">
                     ${(metrics.customVideoRevenue + metrics.videoCallRevenue + metrics.paidMessageRevenue).toFixed(2)}
@@ -963,7 +1067,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   </div>
                 </div>
 
-                <div onClick={() => setActiveSection('payouts')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
+                <div onClick={() => navigateToSection('payouts')} className="p-4 bg-[#121216] hover:bg-[#16161c] border border-[#232329] rounded-xl cursor-pointer transition-colors">
                   <div className="text-[11px] text-neutral-400">Pending Payouts &amp; Disputes</div>
                   <div className="text-2xl font-bold font-mono text-amber-400 tabular-nums mt-1">
                     ${metrics.pendingPayoutsAmount.toFixed(2)}
@@ -998,7 +1102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       onClick={() => {
                         setUserRoleFilter('all');
                         setUserPage(1);
-                        setActiveSection('users');
+                        navigateToSection('users');
                       }}
                       className="px-3 py-1.5 bg-[#1a1a22] hover:bg-[#23232e] border border-[#2e2e38] rounded-xl text-[11px] font-semibold text-[#fce7b0] cursor-pointer shrink-0"
                     >
@@ -1009,8 +1113,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
                     {allUnifiedUsers.slice(0, 8).map(u => {
                       const isNew = isNewSignUpAccount(u);
-                      const userVerif = verifications.find(
-                        v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase()
+                      const uname = String(u.username || '').toLowerCase();
+                      const userVerif = (verifications || []).find(
+                        v => v && (v.userId === u.id || (uname && String(v.username || '').toLowerCase() === uname))
                       );
                       const appStatus = userVerif?.status || u.creatorApplicationStatus;
                       return (
@@ -1019,11 +1124,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex flex-wrap items-center justify-between gap-3 text-xs transition-colors"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src={u.avatar}
-                              alt={u.name}
-                              className="w-9 h-9 rounded-full object-cover border border-[#2e2e38] shrink-0"
-                            />
+                            {u.avatar ? (
+                              <img
+                                src={u.avatar}
+                                alt={u.name}
+                                className="w-9 h-9 rounded-full object-cover border border-[#2e2e38] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-[#24242d] border border-[#2e2e38] flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                                {(u.name || 'M').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold text-white truncate">{u.name}</span>
@@ -1059,7 +1170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                               type="button"
                               onClick={() => {
                                 setSelectedUserDetailId(u.id);
-                                setActiveSection('users');
+                                navigateToSection('users');
                               }}
                               className="px-2.5 py-1 bg-[#23232e] hover:bg-[#2c2c3a] text-white rounded-lg text-[11px] cursor-pointer"
                             >
@@ -1091,7 +1202,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       type="button"
                       onClick={() => {
                         setVerifStatusFilter('all');
-                        setActiveSection('creators');
+                        navigateToSection('creator_applications');
                       }}
                       className="px-3 py-1.5 bg-[#1a1a22] hover:bg-[#23232e] border border-[#2e2e38] rounded-xl text-[11px] font-semibold text-[#fce7b0] cursor-pointer shrink-0"
                     >
@@ -1111,11 +1222,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           className="p-3 bg-[#18181f] hover:bg-[#1d1d26] rounded-xl border border-[#272730] flex flex-wrap items-center justify-between gap-3 text-xs transition-colors"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <img
-                              src={v.selfieUrl}
-                              alt={v.name}
-                              className="w-9 h-9 rounded-lg object-cover border border-[#2e2e38] shrink-0"
-                            />
+                            {v.selfieUrl ? (
+                              <img
+                                src={v.selfieUrl}
+                                alt={v.name}
+                                className="w-9 h-9 rounded-lg object-cover border border-[#2e2e38] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-lg bg-[#24242d] border border-[#2e2e38] flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                                {(v.name || 'C').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold text-white truncate">
@@ -1139,16 +1256,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {v.status !== 'approved' && (
+                            {(v.status === 'pending' || v.status === 'info_requested') && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  reviewVerification(
+                                onClick={async () => {
+                                  const res = await reviewVerification(
                                     v.id,
                                     'approved',
                                     'Biometric 18+ ID and facial selfie match verified.'
                                   );
-                                  notifyFeedback('success', `Approved creator application for ${v.name}.`);
+                                  if (res.success) {
+                                    notifyFeedback('success', `Approved creator application for ${v.name}. Account upgraded to Creator.`);
+                                  } else {
+                                    notifyFeedback('error', res.error || 'Failed to approve application.');
+                                  }
                                 }}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-[11px] cursor-pointer"
                               >
@@ -1158,8 +1279,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             <button
                               type="button"
                               onClick={() => {
-                                setVerifStatusFilter('all');
-                                setActiveSection('creators');
+                                navigateToSection('creator_applications');
                               }}
                               className="px-2.5 py-1 bg-[#23232e] hover:bg-[#2c2c3a] text-white rounded-lg text-[11px] cursor-pointer"
                             >
@@ -1235,7 +1355,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <div key={c.id} className="space-y-1 text-xs">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
-                                <img src={c.avatar} alt={c.name} className="w-5 h-5 rounded-full object-cover" />
+                                {c.avatar ? (
+                                  <img src={c.avatar} alt={c.name} className="w-5 h-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-[#24242d] flex items-center justify-center text-[9px] font-bold text-[#fce7b0]">
+                                    {(c.name || 'C').slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
                                 <span className="text-white font-medium">{c.name}</span>
                                 <span className="text-[10px] text-neutral-500">· {c.subscribersCount} subs</span>
                               </div>
@@ -1326,17 +1452,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               02. USER MANAGEMENT
           ================================================================ */}
           {activeSection === 'users' && (() => {
+            const safeVerifications = (verifications || []).filter(v => Boolean(v && typeof v === 'object'));
+            const q = String(userSearch || '').trim().toLowerCase();
             const filteredUsers = allUnifiedUsers.filter(u => {
-              const q = userSearch.toLowerCase();
+              const uName = String(u.name || '').toLowerCase();
+              const uUsername = String(u.username || '').toLowerCase();
+              const uEmail = String(u.email || '').toLowerCase();
+              const uCountry = String(u.country || '').toLowerCase();
               const matchesSearch =
                 !q ||
-                u.name.toLowerCase().includes(q) ||
-                u.username.toLowerCase().includes(q) ||
-                u.email.toLowerCase().includes(q) ||
-                (u.country || '').toLowerCase().includes(q);
+                uName.includes(q) ||
+                uUsername.includes(q) ||
+                uEmail.includes(q) ||
+                uCountry.includes(q);
               const hasCreatorApp =
                 (u.creatorApplicationStatus && u.creatorApplicationStatus !== 'not_applied') ||
-                verifications.some(v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase());
+                safeVerifications.some(
+                  v =>
+                    v.userId === u.id ||
+                    (uEmail && String(v.email || '').toLowerCase() === uEmail) ||
+                    (uUsername && String(v.username || '').toLowerCase() === uUsername)
+                );
               const matchesRole =
                 userRoleFilter === 'all'
                   ? true
@@ -1352,7 +1488,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
             const pageSize = 10;
             const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
-            const paginatedUsers = filteredUsers.slice((userPage - 1) * pageSize, userPage * pageSize);
+            const safeUserPage = Math.min(Math.max(1, userPage), totalPages);
+            const paginatedUsers = filteredUsers.slice((safeUserPage - 1) * pageSize, safeUserPage * pageSize);
             const inspectedUser = selectedUserDetailId
               ? allUnifiedUsers.find(u => u.id === selectedUserDetailId) || null
               : null;
@@ -1399,7 +1536,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             : 'bg-[#18181f] border-[#272730] text-neutral-300'
                         }`}
                       >
-                        Creator Applicants ({verifications.length})
+                        Creator Applicants ({safeVerifications.length})
                       </button>
                     </div>
                   </div>
@@ -1423,7 +1560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     >
                       <option value="all">All Roles ({allUnifiedUsers.length})</option>
                       <option value="new_signups">New Sign-Ups ({metrics.newSignUpsCount})</option>
-                      <option value="creator_applicants">Creator Applicants ({verifications.length})</option>
+                      <option value="creator_applicants">Creator Applicants ({safeVerifications.length})</option>
                       <option value="fan">Fans</option>
                       <option value="creator">Creators</option>
                       <option value="admin">Admins</option>
@@ -1456,154 +1593,182 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#1c1c22]">
-                        {paginatedUsers.map(u => {
-                          const accStatus = u.accountStatus || 'active';
-                          const isNew = isNewSignUpAccount(u);
-                          const matchedVerif = verifications.find(
-                            v => v.userId === u.id || v.username.toLowerCase() === u.username.toLowerCase()
-                          );
-                          const creatorAppStatus = matchedVerif?.status || u.creatorApplicationStatus;
-                          return (
-                            <tr key={u.id} className="hover:bg-[#16161d] transition-colors">
-                              <td className="py-3.5 pr-4 min-w-[220px] whitespace-normal">
-                                <div className="flex items-center gap-3">
-                                  <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover border border-[#2e2e38]" />
-                                  <div>
-                                    <div className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
-                                      <span>{u.name}</span>
-                                      {u.isVerified && <CheckCircle2 className="w-3.5 h-3.5 text-[#d4af37]" />}
-                                      {isNew && (
-                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[9px] uppercase">
-                                          New Sign-Up
-                                        </span>
-                                      )}
+                        {paginatedUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-neutral-500">
+                              No user accounts match the selected filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedUsers.map(u => {
+                            const accStatus = u.accountStatus || 'active';
+                            const isNew = isNewSignUpAccount(u);
+                            const uUsername = String(u.username || '').toLowerCase();
+                            const uEmail = String(u.email || '').toLowerCase();
+                            const matchedVerif = safeVerifications.find(
+                              v =>
+                                v.userId === u.id ||
+                                (uEmail && String(v.email || '').toLowerCase() === uEmail) ||
+                                (uUsername && String(v.username || '').toLowerCase() === uUsername)
+                            );
+                            const creatorAppStatus = matchedVerif?.status || u.creatorApplicationStatus;
+                            const safeBalance = Number.isFinite(Number(u.walletBalance)) ? Number(u.walletBalance) : 0;
+                            return (
+                              <tr key={u.id} className="hover:bg-[#16161d] transition-colors">
+                                <td className="py-3.5 pr-4 min-w-[220px] whitespace-normal">
+                                  <div className="flex items-center gap-3">
+                                    {u.avatar ? (
+                                      <img
+                                        src={u.avatar}
+                                        alt={u.name || 'User'}
+                                        className="w-9 h-9 rounded-full object-cover border border-[#2e2e38]"
+                                      />
+                                    ) : (
+                                      <div className="w-9 h-9 rounded-full bg-[#24242d] border border-[#2e2e38] flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                                        {(u.name || 'M').slice(0, 2).toUpperCase()}
+                                      </div>
+                                    )}
+                                    <div>
+                                      <div className="font-semibold text-white flex items-center gap-1.5 flex-wrap">
+                                        <span>{u.name || 'Member'}</span>
+                                        {u.isVerified && <CheckCircle2 className="w-3.5 h-3.5 text-[#d4af37]" />}
+                                        {isNew && (
+                                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[9px] uppercase">
+                                            New Sign-Up
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-neutral-400">@{u.username || 'member'} · {u.email || 'No email'}</div>
                                     </div>
-                                    <div className="text-[11px] text-neutral-400">@{u.username} · {u.email}</div>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 pr-4">
-                                <div className="capitalize font-mono text-neutral-200">
-                                  {u.adminPermissionLevel ? u.adminPermissionLevel.replace('_', ' ') : u.role}
-                                </div>
-                                {creatorAppStatus && creatorAppStatus !== 'not_applied' && (
-                                  <div className="mt-1">
-                                    <span
-                                      className={`inline-block px-1.5 py-0.5 rounded font-mono text-[9px] uppercase border ${
-                                        creatorAppStatus === 'approved'
-                                          ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                                          : creatorAppStatus === 'rejected'
-                                          ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
-                                          : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-                                      }`}
-                                    >
-                                      Creator App: {creatorAppStatus.replace('_', ' ')}
-                                    </span>
+                                </td>
+                                <td className="py-3.5 pr-4">
+                                  <div className="capitalize font-mono text-neutral-200">
+                                    {u.adminPermissionLevel ? String(u.adminPermissionLevel).replace(/_/g, ' ') : (u.role || 'fan')}
                                   </div>
-                                )}
-                              </td>
-                              <td className="py-3.5 pr-4">
-                                <span
-                                  className={`font-mono text-[11px] uppercase ${
-                                    accStatus === 'active'
-                                      ? 'text-emerald-400'
-                                      : accStatus === 'restricted'
-                                      ? 'text-amber-400'
-                                      : 'text-rose-400 font-semibold'
-                                  }`}
-                                >
-                                  {accStatus}
-                                </span>
-                                {u.statusReason && (
-                                  <div className="text-[10px] text-neutral-500 max-w-[180px] truncate">{u.statusReason}</div>
-                                )}
-                              </td>
-                              <td className="py-3.5 pr-4 text-neutral-400">
-                                <div>{u.dateJoined}</div>
-                                <div className="text-[10px] text-neutral-500">{u.country || 'Global'}</div>
-                              </td>
-                              <td className="py-3.5 pr-4 font-mono text-[#fce7b0] tabular-nums">
-                                ${u.walletBalance.toFixed(2)}
-                              </td>
-                              <td className="py-3.5 text-right">
-                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                  {matchedVerif && (
+                                  {creatorAppStatus && creatorAppStatus !== 'not_applied' && (
+                                    <div className="mt-1">
+                                      <span
+                                        className={`inline-block px-1.5 py-0.5 rounded font-mono text-[9px] uppercase border ${
+                                          creatorAppStatus === 'approved'
+                                            ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                            : creatorAppStatus === 'rejected'
+                                            ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                                            : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                                        }`}
+                                      >
+                                        Creator App: {String(creatorAppStatus).replace(/_/g, ' ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3.5 pr-4">
+                                  <span
+                                    className={`font-mono text-[11px] uppercase ${
+                                      accStatus === 'active'
+                                        ? 'text-emerald-400'
+                                        : accStatus === 'restricted'
+                                        ? 'text-amber-400'
+                                        : 'text-rose-400 font-semibold'
+                                    }`}
+                                  >
+                                    {accStatus}
+                                  </span>
+                                  {u.statusReason && (
+                                    <div className="text-[10px] text-neutral-500 max-w-[180px] truncate">{u.statusReason}</div>
+                                  )}
+                                </td>
+                                <td className="py-3.5 pr-4 text-neutral-400">
+                                  <div>{u.dateJoined || '—'}</div>
+                                  <div className="text-[10px] text-neutral-500">{u.country || 'Global'}</div>
+                                </td>
+                                <td className="py-3.5 pr-4 font-mono text-[#fce7b0] tabular-nums">
+                                  ${safeBalance.toFixed(2)}
+                                </td>
+                                <td className="py-3.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    {matchedVerif && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setVerifStatusFilter('all');
+                                          navigateToSection('creator_applications');
+                                        }}
+                                        className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37]/30 border border-[#d4af37]/40 text-[#fce7b0] rounded-lg cursor-pointer text-[11px] font-semibold"
+                                      >
+                                        Review App
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setVerifStatusFilter('all');
-                                        setActiveSection('creators');
-                                      }}
-                                      className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37]/30 border border-[#d4af37]/40 text-[#fce7b0] rounded-lg cursor-pointer text-[11px] font-semibold"
+                                      onClick={() => setSelectedUserDetailId(u.id)}
+                                      className="px-2.5 py-1 bg-[#1e1e26] hover:bg-[#282833] text-neutral-200 rounded-lg cursor-pointer text-[11px]"
                                     >
-                                      Review App
+                                      Inspect
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => setSelectedUserDetailId(u.id)}
-                                    className="px-2.5 py-1 bg-[#1e1e26] hover:bg-[#282833] text-neutral-200 rounded-lg cursor-pointer text-[11px]"
-                                  >
-                                    Inspect
-                                  </button>
-                                  {accStatus === 'active' ? (
-                                    <>
+                                    {accStatus === 'active' ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const res = adminUpdateUserAccount(u.id, {
+                                              accountStatus: 'restricted',
+                                              statusReason: 'Temporary administrative restriction applied'
+                                            });
+                                            if (res.success) notifyFeedback('success', `Restricted account @${u.username}.`);
+                                            else notifyFeedback('error', res.error || 'Action denied.');
+                                          }}
+                                          className="px-2.5 py-1 bg-amber-950/50 hover:bg-amber-900/60 border border-amber-500/30 text-amber-300 rounded-lg cursor-pointer text-[11px]"
+                                        >
+                                          Restrict
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setConfirmReasonInput('Violation of ACOVON Terms of Service');
+                                            setConfirmDialog({
+                                              title: `Suspend or Ban @${u.username}`,
+                                              description: `This action immediately revokes platform access for ${u.name} and records an administrative security event.`,
+                                              confirmLabel: 'Confirm Suspension',
+                                              danger: true,
+                                              requireReason: true,
+                                              onConfirm: reason => {
+                                                const res = adminUpdateUserAccount(u.id, {
+                                                  accountStatus: 'suspended',
+                                                  statusReason: reason
+                                                });
+                                                if (res.success) notifyFeedback('success', `Account @${u.username} suspended.`);
+                                                else notifyFeedback('error', res.error || 'Unauthorized.');
+                                              }
+                                            });
+                                          }}
+                                          className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 rounded-lg cursor-pointer text-[11px]"
+                                        >
+                                          Suspend
+                                        </button>
+                                      </>
+                                    ) : (
                                       <button
+                                        type="button"
                                         onClick={() => {
                                           const res = adminUpdateUserAccount(u.id, {
-                                            accountStatus: 'restricted',
-                                            statusReason: 'Temporary administrative restriction applied'
+                                            accountStatus: 'active',
+                                            statusReason: 'Account restored by administrator'
                                           });
-                                          if (res.success) notifyFeedback('success', `Restricted account @${u.username}.`);
-                                          else notifyFeedback('error', res.error || 'Action denied.');
+                                          if (res.success) notifyFeedback('success', `Restored account @${u.username} to Active.`);
+                                          else notifyFeedback('error', res.error || 'Unauthorized.');
                                         }}
-                                        className="px-2.5 py-1 bg-amber-950/50 hover:bg-amber-900/60 border border-amber-500/30 text-amber-300 rounded-lg cursor-pointer text-[11px]"
+                                        className="px-2.5 py-1 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 rounded-lg cursor-pointer text-[11px]"
                                       >
-                                        Restrict
+                                        Restore Account
                                       </button>
-                                      <button
-                                        onClick={() => {
-                                          setConfirmReasonInput('Violation of ACOVON Terms of Service');
-                                          setConfirmDialog({
-                                            title: `Suspend or Ban @${u.username}`,
-                                            description: `This action immediately revokes platform access for ${u.name} and records an administrative security event.`,
-                                            confirmLabel: 'Confirm Suspension',
-                                            danger: true,
-                                            requireReason: true,
-                                            onConfirm: reason => {
-                                              const res = adminUpdateUserAccount(u.id, {
-                                                accountStatus: 'suspended',
-                                                statusReason: reason
-                                              });
-                                              if (res.success) notifyFeedback('success', `Account @${u.username} suspended.`);
-                                              else notifyFeedback('error', res.error || 'Unauthorized.');
-                                            }
-                                          });
-                                        }}
-                                        className="px-2.5 py-1 bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 rounded-lg cursor-pointer text-[11px]"
-                                      >
-                                        Suspend
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <button
-                                      onClick={() => {
-                                        const res = adminUpdateUserAccount(u.id, {
-                                          accountStatus: 'active',
-                                          statusReason: 'Account restored by administrator'
-                                        });
-                                        if (res.success) notifyFeedback('success', `Restored account @${u.username} to Active.`);
-                                        else notifyFeedback('error', res.error || 'Unauthorized.');
-                                      }}
-                                      className="px-2.5 py-1 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 rounded-lg cursor-pointer text-[11px]"
-                                    >
-                                      Restore Account
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1611,21 +1776,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   {/* Pagination */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-neutral-400">
                     <span>
-                      Showing {filteredUsers.length === 0 ? 0 : (userPage - 1) * pageSize + 1}–{Math.min(userPage * pageSize, filteredUsers.length)} of {filteredUsers.length} accounts
+                      Showing {filteredUsers.length === 0 ? 0 : (safeUserPage - 1) * pageSize + 1}–{Math.min(safeUserPage * pageSize, filteredUsers.length)} of {filteredUsers.length} accounts
                     </span>
                     <div className="flex items-center gap-2">
                       <button
-                        disabled={userPage <= 1}
+                        type="button"
+                        disabled={safeUserPage <= 1}
                         onClick={() => setUserPage(p => Math.max(1, p - 1))}
                         className="px-3 py-1 rounded-lg bg-[#18181f] disabled:opacity-40 text-white cursor-pointer"
                       >
                         Previous
                       </button>
                       <span className="font-mono">
-                        Page {userPage} / {totalPages}
+                        Page {safeUserPage} / {totalPages}
                       </span>
                       <button
-                        disabled={userPage >= totalPages}
+                        type="button"
+                        disabled={safeUserPage >= totalPages}
                         onClick={() => setUserPage(p => Math.min(totalPages, p + 1))}
                         className="px-3 py-1 rounded-lg bg-[#18181f] disabled:opacity-40 text-white cursor-pointer"
                       >
@@ -1640,7 +1807,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                   <div className="bg-[#121216] border border-[#d4af37]/40 rounded-2xl p-4 sm:p-6 space-y-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
-                        <img src={inspectedUser.avatar} alt={inspectedUser.name} className="w-14 h-14 rounded-2xl object-cover border border-[#d4af37] shrink-0" />
+                        {inspectedUser.avatar ? (
+                          <img
+                            src={inspectedUser.avatar}
+                            alt={inspectedUser.name || 'User'}
+                            className="w-14 h-14 rounded-2xl object-cover border border-[#d4af37] shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-2xl bg-[#24242d] border border-[#d4af37] flex items-center justify-center text-base font-bold text-[#fce7b0] shrink-0">
+                            {(inspectedUser.name || 'M').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-base font-bold text-white">{inspectedUser.name}</h3>
@@ -1650,11 +1827,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             </span>
                           </div>
                           <p className="text-xs text-neutral-400 mt-0.5 break-words">
-                            Email: {inspectedUser.email} · Joined: {inspectedUser.dateJoined} · Country: {inspectedUser.country || 'United States'} · Last Login: {inspectedUser.lastLoginAt || 'Today'}
+                            Email: {inspectedUser.email || '—'} · Joined: {inspectedUser.dateJoined || '—'} · Country: {inspectedUser.country || 'United States'} · Last Login: {inspectedUser.lastLoginAt || 'Today'}
                           </p>
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => setSelectedUserDetailId(null)}
                         className="p-1.5 text-neutral-400 hover:text-white cursor-pointer shrink-0"
                       >
@@ -1687,6 +1865,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Verified Badge:</span>
                           <button
+                            type="button"
                             onClick={() => {
                               const res = adminUpdateUserAccount(inspectedUser.id, { isVerified: !inspectedUser.isVerified });
                               if (res.success) notifyFeedback('success', `Updated verification status for ${inspectedUser.name}.`);
@@ -1700,6 +1879,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Permanent Ban:</span>
                           <button
+                            type="button"
                             onClick={() => {
                               setConfirmReasonInput('Severe Terms of Service violation');
                               setConfirmDialog({
@@ -1728,10 +1908,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       {/* User Subscriptions */}
                       <div className="p-4 bg-[#18181f] rounded-xl border border-[#272730] space-y-2">
                         <div className="font-semibold text-white">Subscription History</div>
-                        {subscriptions.filter(s => s.fanId === inspectedUser.id || s.creatorId === inspectedUser.id).length === 0 ? (
+                        {(subscriptions || []).filter(s => s.fanId === inspectedUser.id || s.creatorId === inspectedUser.id).length === 0 ? (
                           <p className="text-neutral-500 text-[11px]">No subscriptions recorded for this user.</p>
                         ) : (
-                          subscriptions
+                          (subscriptions || [])
                             .filter(s => s.fanId === inspectedUser.id || s.creatorId === inspectedUser.id)
                             .slice(0, 4)
                             .map(s => (
@@ -1746,20 +1926,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       {/* User Transactions */}
                       <div className="p-4 bg-[#18181f] rounded-xl border border-[#272730] space-y-2">
                         <div className="font-semibold text-white">Recent Wallet Ledger</div>
-                        {transactions.filter(t => t.userId === inspectedUser.id).length === 0 ? (
+                        {(transactions || []).filter(t => t.userId === inspectedUser.id).length === 0 ? (
                           <p className="text-neutral-500 text-[11px]">No wallet transactions recorded.</p>
                         ) : (
-                          transactions
+                          (transactions || [])
                             .filter(t => t.userId === inspectedUser.id)
                             .slice(0, 4)
-                            .map(t => (
-                              <div key={t.id} className="flex items-center justify-between py-1 border-b border-[#23232b] last:border-0 text-[11px]">
-                                <span className="text-neutral-300 truncate max-w-[160px]">{t.description}</span>
-                                <span className={`font-mono ${t.amount >= 0 ? 'text-emerald-400' : 'text-white'}`}>
-                                  {t.amount >= 0 ? '+' : ''}${t.amount.toFixed(2)}
-                                </span>
-                              </div>
-                            ))
+                            .map(t => {
+                              const txAmount = Number(t.amount) || 0;
+                              return (
+                                <div key={t.id} className="flex items-center justify-between py-1 border-b border-[#23232b] last:border-0 text-[11px]">
+                                  <span className="text-neutral-300 truncate max-w-[160px]">{t.description}</span>
+                                  <span className={`font-mono ${txAmount >= 0 ? 'text-emerald-400' : 'text-white'}`}>
+                                    {txAmount >= 0 ? '+' : ''}${txAmount.toFixed(2)}
+                                  </span>
+                                </div>
+                              );
+                            })
                         )}
                       </div>
                     </div>
@@ -1818,8 +2001,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                   <div className="space-y-3">
                     {filteredVerifications.map(v => {
+                      const vUsername = String(v.username || '').toLowerCase();
                       const applicantAccount = allUnifiedUsers.find(
-                        u => u.id === v.userId || u.username.toLowerCase() === v.username.toLowerCase()
+                        u => u.id === v.userId || (vUsername && String(u.username || '').toLowerCase() === vUsername)
                       );
                       return (
                       <div key={v.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
@@ -1844,7 +2028,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             )}
                           </div>
                           <div className="text-neutral-400">
-                            Account Email: <strong className="text-neutral-200">{applicantAccount?.email || `${v.username}@acovon.com`}</strong> · Document: <strong className="text-neutral-200 capitalize">{v.documentType.replace('_', ' ')}</strong> · ID Number: <strong className="font-mono text-neutral-200">{v.documentNumber}</strong> · Submitted: {v.submittedAt}
+                            Account Email: <strong className="text-neutral-200">{v.email || applicantAccount?.email || `${v.username}@acovon.com`}</strong> · Document: <strong className="text-neutral-200 capitalize">{v.documentType.replace('_', ' ')}</strong> · ID Number: <strong className="font-mono text-neutral-200">{v.documentNumber}</strong> · Submitted: {v.submittedAt}
                           </div>
                           {v.applicationData?.bio && (
                             <div className="text-neutral-300 italic">"{v.applicationData.bio}"</div>
@@ -1856,6 +2040,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <img src={v.selfieUrl} alt="Selfie" className="w-12 h-12 rounded-lg object-cover border border-[#2e2e38]" title="Live Facial Selfie" />
                           <img src={v.documentFileUrl} alt="ID Doc" className="w-16 h-12 rounded-lg object-cover border border-[#2e2e38]" title="Government Photo ID" />
 
+                          {(v.status === 'pending' || v.status === 'info_requested') && (
                           <div className="flex flex-col gap-2 w-full sm:w-auto sm:min-w-[230px]">
                             <input
                               type="text"
@@ -1866,27 +2051,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             />
                             <div className="flex items-center gap-1.5">
                               <button
-                                onClick={() => {
-                                  reviewVerification(v.id, 'approved', verifNotesInput[v.id] || 'Biometric 18+ ID and facial selfie match verified.');
-                                  notifyFeedback('success', `Approved creator application for ${v.name}.`);
+                                onClick={async () => {
+                                  const res = await reviewVerification(v.id, 'approved', verifNotesInput[v.id] || 'Biometric 18+ ID and facial selfie match verified.');
+                                  notifyFeedback(res.success ? 'success' : 'error', res.success ? `Approved creator application for ${v.name}.` : (res.error || 'Approval failed.'));
                                 }}
                                 className="flex-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg cursor-pointer text-[11px]"
                               >
                                 Approve
                               </button>
                               <button
-                                onClick={() => {
-                                  reviewVerification(v.id, 'info_requested', verifNotesInput[v.id] || 'Please upload an unobstructed photo of your passport bio page.');
-                                  notifyFeedback('success', `Requested additional verification info from ${v.name}.`);
+                                onClick={async () => {
+                                  const res = await reviewVerification(v.id, 'info_requested', verifNotesInput[v.id] || 'Please upload an unobstructed photo of your passport bio page.');
+                                  notifyFeedback(res.success ? 'success' : 'error', res.success ? `Requested additional verification info from ${v.name}.` : (res.error || 'Action failed.'));
                                 }}
                                 className="flex-1 px-2.5 py-1.5 bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/40 text-amber-200 font-semibold rounded-lg cursor-pointer text-[11px]"
                               >
                                 Request Info
                               </button>
                               <button
-                                onClick={() => {
-                                  reviewVerification(v.id, 'rejected', verifNotesInput[v.id] || 'Document expired or unverifiable.');
-                                  notifyFeedback('success', `Rejected application for ${v.name}.`);
+                                onClick={async () => {
+                                  const res = await reviewVerification(v.id, 'rejected', verifNotesInput[v.id] || 'Document expired or unverifiable.');
+                                  notifyFeedback(res.success ? 'success' : 'error', res.success ? `Rejected application for ${v.name}.` : (res.error || 'Rejection failed.'));
                                 }}
                                 className="px-2.5 py-1.5 bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/40 text-rose-200 font-semibold rounded-lg cursor-pointer text-[11px]"
                               >
@@ -1894,6 +2079,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                               </button>
                             </div>
                           </div>
+                          )}
                         </div>
                       </div>
                       );
@@ -1938,7 +2124,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     <div className="space-y-5">
                       <div className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <img src={selectedCreator.avatar} alt={selectedCreator.name} className="w-16 h-16 rounded-2xl object-cover border-2 border-[#d4af37]" />
+                          {selectedCreator.avatar ? (
+                            <img src={selectedCreator.avatar} alt={selectedCreator.name} className="w-16 h-16 rounded-2xl object-cover border-2 border-[#d4af37]" />
+                          ) : (
+                            <div className="w-16 h-16 rounded-2xl bg-[#24242d] border-2 border-[#d4af37] flex items-center justify-center text-lg font-bold text-[#fce7b0] shrink-0">
+                              {(selectedCreator.name || 'C').slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-base font-bold text-white">{selectedCreator.name}</span>
@@ -1953,7 +2145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                             </div>
                             <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mt-2 text-xs font-mono tabular-nums">
                               <span className="text-[#fce7b0]">Total Earned: ${selectedCreator.totalEarnings.toLocaleString()}</span>
-                              <span className="text-white">Wallet: ${selectedCreator.walletBalance.toFixed(2)}</span>
+                              <span className="text-white">Wallet: ${(Number(selectedCreator.walletBalance) || 0).toFixed(2)}</span>
                               <span className="text-amber-400">Pending: ${(selectedCreator.pendingBalance || 0).toFixed(2)}</span>
                               <span className="text-emerald-400">Withdrawn: ${selectedCreator.withdrawnAmount.toLocaleString()}</span>
                             </div>
@@ -2126,7 +2318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     <div>
                       <h2 className="text-lg font-bold text-white">04. Platform-Wide Content Oversight</h2>
                       <p className="text-xs text-neutral-400 mt-0.5">
-                        Review, approve, restrict, remove, or restore photos, videos, PPV vault media, stories, livestream recordings, and demo assets.
+                        Review, approve, restrict, remove, or restore photos, videos, PPV vault media, stories, and livestream recordings.
                       </p>
                     </div>
 
@@ -2136,8 +2328,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         { id: 'posts', label: `Posts & Media (${posts.length})` },
                         { id: 'recordings', label: `Live Recordings (${livestreams.length})` },
                         { id: 'statuses', label: `24h Stories (${statuses.length})` },
-                        { id: 'private_safety', label: 'Authorized Safety Access' },
-                        { id: 'demo', label: 'Demo Library' }
+                        { id: 'private_safety', label: 'Authorized Safety Access' }
                       ].map(t => (
                         <button
                           key={t.id}
@@ -2468,53 +2659,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                               </div>
                               {isUnlockedForAudit && (
                                 <div className="p-3 bg-[#121216] border border-[#2e2e38] rounded-lg text-neutral-300 font-mono text-[11px]">
-                                  [DECRYPTED REPORTED MESSAGE RECORD #{rep.targetId}]: "Here is an unreleased sneak peek from today’s private showroom fitting in Paris" — Attachment: Paris_Showroom_Fitting_Look01.jpg ($15.00 Paid Media). No phishing link detected.
+                                  [AUTHORIZED AUDIT INSPECTION #{rep.targetId}]: {rep.targetTitle} — Reason: {rep.reason}.
                                 </div>
                               )}
                             </div>
                           );
                         })}
-                    </div>
-                  )}
-
-                  {/* SUB-TAB 5: Demo Content Governance */}
-                  {contentTab === 'demo' && (
-                    <div className="space-y-4 text-xs">
-                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-[#18181f] rounded-xl border border-[#272730]">
-                        <div>
-                          <div className="font-bold text-white">Display "DEMO" Transparency Badges</div>
-                          <div className="text-neutral-400">Clearly marks seeded showcase creators and posts across the platform.</div>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={showDemoBadges}
-                          onChange={e => setShowDemoBadges(e.target.checked)}
-                          className="w-5 h-5 accent-[#d4af37] cursor-pointer shrink-0"
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-[#18181f] rounded-xl border border-[#272730]">
-                        <div>
-                          <div className="font-bold text-white">Restore Factory Demo Content Library</div>
-                          <div className="text-neutral-400">Resets all 10 demo creators, 40+ posts, stories, and livestreams to default state.</div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            resetDemoContent();
-                            logAdminAction({
-                              category: 'platform_settings',
-                              action: 'Restored Factory Demo Content Library',
-                              targetType: 'DemoCatalog',
-                              targetId: 'demo_seed',
-                              targetLabel: 'Demo Content Catalog',
-                              details: 'Reset local storage posts, creators, livestreams, and stories.'
-                            });
-                            notifyFeedback('success', 'Demo content library restored.');
-                          }}
-                          className="px-4 py-2 bg-[#d4af37] text-black font-semibold rounded-xl cursor-pointer"
-                        >
-                          Reset Demo Content
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -3868,7 +4018,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                       return (
                         <div key={adm.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
                           <div className="flex items-center gap-3.5 min-w-0">
-                            <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50 shrink-0" />
+                            {adm.avatar ? (
+                              <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50 shrink-0" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-[#24242d] border border-[#d4af37]/50 flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
+                                {(adm.name || 'A').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-bold text-white text-sm">{adm.name}</span>
@@ -4305,27 +4461,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         <Power className="w-3.5 h-3.5" />
                         <span>{videoProcessingConfig.queuePaused ? 'Resume Queue Workers' : 'Pause Background Queue'}</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          startVideoOptimizationJob({
-                            creatorId: 'creator_elena',
-                            creatorName: 'Elena Vance',
-                            fileName: `admin_reprocess_4k_${Date.now().toString().slice(-4)}.mov`,
-                            fileSize: 412 * 1024 * 1024,
-                            format: 'MOV (ProRes 422)',
-                            width: 3840,
-                            height: 2160,
-                            durationSeconds: 185,
-                            frameRate: 60,
-                            sourceContext: 'creator_studio',
-                            visibility: 'subscribers'
-                          });
-                          notifyFeedback('success', 'Dispatched 4K Master Video into background compression pipeline.');
-                        }}
-                        className="px-3.5 py-2 bg-[#d4af37] hover:bg-[#e5c158] text-black font-bold rounded-xl cursor-pointer"
-                      >
-                        + Test 4K Pipeline Job
-                      </button>
                     </div>
                   </div>
 
@@ -4605,7 +4740,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           })()}
 
           {/* ==================================================================
-              SECTION 17: CREATOR VERIFICATION MANAGEMENT (PAID BLUE BADGE)
+              SECTION 17: CREATOR APPLICATIONS QUEUE
+          ================================================================== */}
+          {activeSection === 'creator_applications' && (
+            <AdminCreatorApplicationsSection />
+          )}
+
+          {/* ==================================================================
+              SECTION 18: CREATOR VERIFICATION MANAGEMENT (PAID BLUE BADGE)
           ================================================================== */}
           {activeSection === 'creator_verification' && (
             <AdminCreatorVerificationSection />
@@ -4638,6 +4780,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           {activeSection === 'language_management' && (
             <AdminLanguageManagementSection />
           )}
+          </AdminSectionErrorBoundary>
         </div>
       </div>
 
@@ -4667,7 +4810,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 >
                   {allUnifiedUsers.map(u => (
                     <option key={u.id} value={u.id}>
-                      {u.name} (@{u.username}) — Balance: ${u.walletBalance.toFixed(2)}
+                      {u.name} (@{u.username}) — Balance: ${(Number(u.walletBalance) || 0).toFixed(2)}
                     </option>
                   ))}
                 </select>

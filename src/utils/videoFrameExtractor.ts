@@ -58,61 +58,7 @@ export function computeAspectRatioLabel(width: number, height: number): string {
   return `${ratio.toFixed(2)}:1`;
 }
 
-const SAMPLE_VIDEO_META: Record<
-  string,
-  { width: number; height: number; durationSeconds: number; frames: string[]; timestamps: number[] }
-> = {
-  sample1: {
-    width: 960,
-    height: 540,
-    durationSeconds: 5,
-    frames: [
-      '/videos/thumbs/sample1_frame_1.webp',
-      '/videos/thumbs/sample1_frame_2.webp',
-      '/videos/thumbs/sample1_frame_3.webp',
-      '/videos/thumbs/sample1_frame_4.webp'
-    ],
-    timestamps: [0.5, 1.5, 2.5, 4.0]
-  },
-  sample2: {
-    width: 960,
-    height: 400,
-    durationSeconds: 47,
-    frames: [
-      '/videos/thumbs/sample2_frame_1.webp',
-      '/videos/thumbs/sample2_frame_2.webp',
-      '/videos/thumbs/sample2_frame_3.webp',
-      '/videos/thumbs/sample2_frame_4.webp'
-    ],
-    timestamps: [3, 12, 24, 38]
-  },
-  sample3: {
-    width: 1280,
-    height: 720,
-    durationSeconds: 10,
-    frames: [
-      '/videos/thumbs/sample3_frame_1.webp',
-      '/videos/thumbs/sample3_frame_2.webp',
-      '/videos/thumbs/sample3_frame_3.webp',
-      '/videos/thumbs/sample3_frame_4.webp'
-    ],
-    timestamps: [1, 3, 6, 8]
-  },
-  sample4: {
-    width: 854,
-    height: 480,
-    durationSeconds: 52,
-    frames: [
-      '/videos/thumbs/sample4_frame_1.webp',
-      '/videos/thumbs/sample4_frame_2.webp',
-      '/videos/thumbs/sample4_frame_3.webp',
-      '/videos/thumbs/sample4_frame_4.webp'
-    ],
-    timestamps: [6, 16, 26, 38]
-  }
-};
-
-export function getLocalSampleThumbnails(videoUrl?: string): {
+export function getLocalSampleThumbnails(_videoUrl?: string): {
   thumbnailUrl: string;
   previewFrames: string[];
   width: number;
@@ -120,33 +66,7 @@ export function getLocalSampleThumbnails(videoUrl?: string): {
   durationSeconds: number;
   frames: ExtractedVideoFrame[];
 } | null {
-  if (!videoUrl) return null;
-  const match = videoUrl.match(/\/videos\/(sample[1-4])\.mp4/i);
-  if (!match) return null;
-  const key = match[1].toLowerCase();
-  const meta = SAMPLE_VIDEO_META[key];
-  if (!meta) return null;
-  const aspectRatio = computeAspectRatioLabel(meta.width, meta.height);
-  const frames: ExtractedVideoFrame[] = meta.frames.map((url, idx) => ({
-    id: `${key}_f_${idx + 1}`,
-    url,
-    timestampSeconds: meta.timestamps[idx] ?? idx * 2,
-    timestampFormatted: formatVideoTimestamp(meta.timestamps[idx] ?? idx * 2),
-    width: meta.width,
-    height: meta.height,
-    aspectRatio,
-    lumaMean: 118,
-    contrastScore: idx === 1 ? 140 : 120,
-    isAutoRecommended: idx === 1
-  }));
-  return {
-    thumbnailUrl: meta.frames[1] || meta.frames[0],
-    previewFrames: meta.frames,
-    width: meta.width,
-    height: meta.height,
-    durationSeconds: meta.durationSeconds,
-    frames
-  };
+  return null;
 }
 
 function measureCanvasLumaContrast(

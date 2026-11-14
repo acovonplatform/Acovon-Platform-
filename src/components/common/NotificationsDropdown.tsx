@@ -49,15 +49,23 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isAdminOrMod =
+    activeRole === 'admin' ||
+    activeRole === 'moderator' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'moderator';
   const effectiveRole: 'fan' | 'creator' = isCreator ? 'creator' : 'fan';
 
-  // Filter activity notifications so announcement notifications respect strict audience isolation
+  // Filter activity notifications with strict role & user isolation
   const roleFilteredNotifications = notifications.filter(n => {
+    if (n.targetRole === 'admin') {
+      return isAdminOrMod;
+    }
     if (n.targetAudience) {
       if (n.targetAudience === 'fans_only' && effectiveRole !== 'fan') return false;
       if (n.targetAudience === 'creators_only' && effectiveRole !== 'creator') return false;
     }
-    return !n.userId || n.userId === currentUser.id || n.userId === 'user_fan_1';
+    return !n.userId || n.userId === currentUser.id;
   });
 
   const visibleAnnouncements = getVisibleAnnouncementsForCurrentUser();
@@ -88,6 +96,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
     else if (linkUrl?.includes('messages')) onNavigate('messages');
     else if (linkUrl?.includes('live')) onNavigate('live');
     else if (linkUrl?.includes('wallet')) onNavigate('creator-studio');
+    else if (linkUrl?.includes('admin')) onNavigate('admin-panel');
   };
 
   const getNotifIcon = (type: string) => {

@@ -219,23 +219,15 @@ export const VideoCallModal: React.FC = () => {
         {/* State 2: Active Connected Call */}
         {videoCallSession.status === 'connected' && (
           <>
-            {/* Remote Creator Stream Simulation */}
-            <div className="absolute inset-0 w-full h-full bg-black">
-              <video
-                src="/videos/sample1.mp4"
-                autoPlay
-                loop
-                muted
-                playsInline
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (!el.src.includes('/videos/sample1.mp4')) {
-                    el.src = '/videos/sample1.mp4';
-                    el.load();
-                  }
-                }}
-                className="w-full h-full object-cover"
-              />
+            {/* Remote Creator Peer Canvas */}
+            <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-[#0e0e14] via-[#121218] to-black flex items-center justify-center">
+              <div className="flex flex-col items-center justify-center text-center gap-3 px-6">
+                <div className="w-24 h-24 rounded-full bg-[#181820] border-2 border-[#d4af37]/60 flex items-center justify-center text-2xl font-bold text-[#fce7b0] shadow-xl">
+                  {(videoCallSession.creatorName || 'C').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="text-sm font-semibold text-white">{videoCallSession.creatorName}</div>
+                <div className="text-xs text-emerald-400 font-mono">1-on-1 Encrypted WebRTC Session Connected</div>
+              </div>
               
               {/* Creator label */}
               <div className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 max-w-[calc(100%-175px)] sm:max-w-[calc(100%-290px)] bg-black/75 backdrop-blur-md border border-[#27272a] px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-medium text-neutral-200 flex items-center gap-1.5 z-10">

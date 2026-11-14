@@ -862,3 +862,261 @@ export async function submitSupabaseAccountDeletionRequest(
 
   return { success: true, requestId };
 }
+
+// ============================================================================
+// 5. CENTRALIZED CREATOR APPLICATIONS & SUPABASE REALTIME SYNC
+// ============================================================================
+export interface SupabaseCreatorApplicationRow {
+  id: string;
+  user_id: string;
+  name: string;
+  username: string;
+  email: string;
+  avatar: string;
+  document_type: 'passport' | 'drivers_license' | 'national_id';
+  document_number: string;
+  document_file_url: string;
+  selfie_url: string;
+  status: 'pending' | 'approved' | 'rejected' | 'info_requested';
+  submitted_at: string;
+  reviewed_by_admin_id?: string | null;
+  reviewed_by_admin_name?: string | null;
+  reviewed_at?: string | null;
+  notes?: string | null;
+  application_data?: Record<string, any> | null;
+}
+
+export interface SupabaseApplicationsQueryResult {
+  rows: SupabaseCreatorApplicationRow[];
+  available: boolean;
+  error?: string;
+  code?: string;
+}
+
+export async function fetchAllSupabaseCreatorApplicationsWithStatus(): Promise<SupabaseApplicationsQueryResult> {
+  if (!supabase) return { rows: [], available: false, error: 'Supabase client unavailable' };
+  try {
+    const { data, error } = await supabase
+      .from('creator_applications')
+      .select('*')
+      .order('submitted_at', { ascending: false });
+    if (error) {
+      return {
+        rows: [],
+        available: false,
+        error: error.message,
+        code: (error as any).code ? String((error as any).code) : undefined
+      };
+    }
+    return {
+      rows: Array.isArray(data) ? (data as SupabaseCreatorApplicationRow[]) : [],
+      available: true
+    };
+  } catch (err: unknown) {
+    return {
+      rows: [],
+      available: false,
+      error: err instanceof Error ? err.message : 'Supabase query error'
+    };
+  }
+}
+
+export async function fetchAllSupabaseCreatorApplications(): Promise<SupabaseCreatorApplicationRow[]> {
+  const res = await fetchAllSupabaseCreatorApplicationsWithStatus();
+  return res.rows;
+}
+
+export function mapSupabaseRowToVerification(row: SupabaseCreatorApplicationRow) {
+  const submittedAt = row.submitted_at
+    ? String(row.submitted_at).replace('T', ' ').slice(0, 16)
+    : new Date().toISOString().replace('T', ' ').slice(0, 16);
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    name: String(row.name || 'Creator Applicant'),
+    username: String(row.username || 'applicant'),
+    email: String(row.email || ''),
+    avatar: String(row.avatar || row.selfie_url || ''),
+    documentType: (row.document_type || 'drivers_license') as 'passport' | 'drivers_license' | 'national_id',
+    documentNumber: String(row.document_number || ''),
+    documentFileUrl: String(row.document_file_url || ''),
+    selfieUrl: String(row.selfie_url || row.avatar || ''),
+    status: (row.status || 'pending') as 'pending' | 'approved' | 'rejected' | 'info_requested',
+    submittedAt,
+    reviewedByAdminId: row.reviewed_by_admin_id || undefined,
+    reviewedByAdminName: row.reviewed_by_admin_name || undefined,
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at).replace('T', ' ').slice(0, 16) : undefined,
+    notes: row.notes || undefined,
+    source: 'supabase_sync',
+    applicationData: (row.application_data || undefined) as any
+  };
+}
+
+export async function submitCreatorApplicationToSupabase(params: {
+  id: string;
+  userId: string;
+  name: string;
+  username: string;
+  email: string;
+  avatar?: string;
+  documentType: 'passport' | 'drivers_license' | 'national_id';
+  documentNumber: string;
+  documentFileUrl: string;
+  selfieUrl: string;
+  notes?: string;
+  applicationData?: Record<string, any>;
+  adminNotification?: {
+    id: string;
+    title: string;
+    message: string;
+    eventKey?: string;
+  };
+}): Promise<{ synced: boolean; error?: string; code?: string }> {
+  if (!supabase) return { synced: false, error: 'Supabase client unavailable' };
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const sessionUserId = sessionData?.session?.user?.id;
+    const effectiveUserId = sessionUserId || params.userId;
+    if (!sessionData?.session) {
+      return { synced: false, error: 'No active browser Supabase Auth session' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from('creator_applications').upsert(
+      {
+        id: params.id,
+        user_id: effectiveUserId,
+        name: params.name,
+        username: params.username,
+        email: params.email,
+        avatar: params.avatar || '',
+        document_type: params.documentType,
+        document_number: params.documentNumber,
+        document_file_url: params.documentFileUrl,
+        selfie_url: params.selfieUrl,
+        status: 'pending',
+        submitted_at: nowIso,
+        notes: params.notes || '',
+        application_data: params.applicationData || {},
+        updated_at: nowIso
+      },
+      { onConflict: 'id' }
+    );
+    if (error) {
+      return {
+        synced: false,
+        error: error.message,
+        code: (error as any).code ? String((error as any).code) : undefined
+      };
+    }
+
+    if (params.adminNotification) {
+      await supabase
+        .from('notifications')
+        .upsert(
+          {
+            id: params.adminNotification.id,
+            user_id: effectiveUserId,
+            target_role: 'admin',
+            application_id: params.id,
+            type: 'verification',
+            title: params.adminNotification.title,
+            message: params.adminNotification.message,
+            read: false,
+            event_key: params.adminNotification.eventKey || `creator_app_submitted_${params.id}`
+          },
+          { onConflict: 'event_key' }
+        )
+        .then(() => {});
+    }
+
+    return { synced: true };
+  } catch (err: unknown) {
+    return {
+      synced: false,
+      error: err instanceof Error ? err.message : 'Supabase write error'
+    };
+  }
+}
+
+export async function approveCreatorApplicationViaSupabaseRpc(
+  applicationId: string,
+  notes?: string
+): Promise<{ supported: boolean; success: boolean; error?: string }> {
+  if (!supabase) return { supported: false, success: false };
+  try {
+    const { error } = await supabase.rpc('approve_creator_application', {
+      p_application_id: applicationId,
+      p_notes: notes || 'Creator application approved by administrator.'
+    });
+    if (error) {
+      const code = String((error as any).code || '');
+      if (code === 'PGRST202' || code === 'PGRST205' || code === '42883') {
+        return { supported: false, success: false };
+      }
+      return { supported: true, success: false, error: error.message };
+    }
+    return { supported: true, success: true };
+  } catch {
+    return { supported: false, success: false };
+  }
+}
+
+export async function rejectCreatorApplicationViaSupabaseRpc(
+  applicationId: string,
+  notes?: string
+): Promise<{ supported: boolean; success: boolean; error?: string }> {
+  if (!supabase) return { supported: false, success: false };
+  try {
+    const { error } = await supabase.rpc('reject_creator_application', {
+      p_application_id: applicationId,
+      p_notes: notes || 'Creator application was not approved.'
+    });
+    if (error) {
+      const code = String((error as any).code || '');
+      if (code === 'PGRST202' || code === 'PGRST205' || code === '42883') {
+        return { supported: false, success: false };
+      }
+      return { supported: true, success: false, error: error.message };
+    }
+    return { supported: true, success: true };
+  } catch {
+    return { supported: false, success: false };
+  }
+}
+
+export function subscribeToCreatorApplicationsRealtime(
+  onChange: () => void
+): () => void {
+  if (!supabase) return () => {};
+  try {
+    const channel = supabase
+      .channel('acovon-creator-applications-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'creator_applications' },
+        () => {
+          onChange();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => {
+          onChange();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase?.removeChannel(channel);
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    return () => {};
+  }
+}
+

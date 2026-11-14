@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../supabaseClient.js';
-import { X, AlertCircle, CheckCircle2, KeyRound, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 
 interface AuthModalProps {
@@ -44,7 +44,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [requiresEmailVerification, setRequiresEmailVerification] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
-  const [showSampleCredentials, setShowSampleCredentials] = useState(false);
 
   const switchMode = (nextMode: 'register' | 'login' | 'forgot_password') => {
     setMode(nextMode);
@@ -188,7 +187,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Ensure authenticated Supabase user is loaded into app session
-    const localAuth = authenticateAccount(email, password);
+    const localAuth = authenticateAccount(email, password, signInData.user?.id);
     if (!localAuth.success && signInData.user) {
       const fallbackUsername = (signInData.user.email?.split('@')[0] || 'member')
         .toLowerCase()
@@ -212,13 +211,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     window.history.pushState({}, '', '/');
     onSuccess();
     onClose();
-  };
-
-  const fillExistingAccount = (sampleEmail: string) => {
-    setEmail(sampleEmail);
-    setPassword('acovon2025');
-    setError(null);
-    setConfirmationMessage(null);
   };
 
   return (
@@ -293,7 +285,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Jordan Cross"
+                  placeholder="Your full legal name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
@@ -305,7 +297,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. jordancross"
+                  placeholder="your_username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
@@ -425,60 +417,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               : 'Send Recovery Link'}
           </button>
         </form>
-
-        {/* Quick-Fill Existing Accounts Helper for Testing Automatic Role Detection */}
-        {mode === 'login' && (
-          <div className="mt-4 pt-3 border-t border-[#27272a]/70">
-            <button
-              type="button"
-              onClick={() => setShowSampleCredentials((prev) => !prev)}
-              className="w-full flex items-center justify-between text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer py-1"
-            >
-              <span className="flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-[#d4af37]" />
-                <span>Fill existing account email to test automatic role detection</span>
-              </span>
-              {showSampleCredentials ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-
-            {showSampleCredentials && (
-              <div className="mt-2 grid grid-cols-1 gap-1.5 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => fillExistingAccount('jordan@example.com')}
-                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-white font-medium break-all">jordan@example.com</span>
-                  <span className="text-[10px] text-neutral-400">Standard Fan Account</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillExistingAccount('chloe@atelier.paris')}
-                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-white font-medium break-all">chloe@atelier.paris</span>
-                  <span className="text-[10px] text-amber-400">Pending Creator App (Logs in as Fan)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillExistingAccount('elena@acovon.creator')}
-                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-white font-medium break-all">elena@acovon.creator</span>
-                  <span className="text-[10px] text-[#d4af37]">Approved Creator Account</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillExistingAccount('julian.sterling@acovon.com')}
-                  className="flex flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg bg-[#18181c] hover:bg-[#222228] border border-[#27272a] text-left transition-colors cursor-pointer"
-                >
-                  <span className="text-white font-medium break-all">julian.sterling@acovon.com</span>
-                  <span className="text-[10px] text-emerald-400">Super Admin Account</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="mt-4 pt-3 border-t border-[#27272a] text-center text-xs text-neutral-400">
           {mode === 'register' ? (

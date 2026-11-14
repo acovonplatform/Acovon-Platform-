@@ -78,6 +78,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
     currentUser, 
     posts, 
     subscriptions, 
+    purchases,
+    messages,
     promotions, 
     customRequests,
     livestreams,
@@ -149,7 +151,51 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
   const highlightClips = myPosts.filter(p => p.isHighlight);
   const mySubscribersCount = creator.subscribersCount || 0;
   const myEarnings = creator.totalEarnings || 0;
-  const mrr = (mySubscribersCount * 22.5).toFixed(0);
+
+  const myActiveSubs = subscriptions.filter(s => s.creatorId === creator.id && s.status === 'active');
+  const myAllSubs = subscriptions.filter(s => s.creatorId === creator.id);
+  const mrr = myActiveSubs.reduce((sum, s) => sum + Number(s.monthlyPrice || 0), 0);
+  const subRetentionPct = myAllSubs.length > 0 ? ((myActiveSubs.length / myAllSubs.length) * 100).toFixed(1) : '0.0';
+  const scheduledPosts = myPosts.filter(p => Boolean(p.isDraft || p.scheduledFor));
+  const myFollowersCount = creator.followersCount || 0;
+  const followerToPaidConversionPct = myFollowersCount > 0 ? ((mySubscribersCount / myFollowersCount) * 100).toFixed(2) : '0.00';
+
+  const myPurchases = purchases.filter(p => p.creatorId === creator.id);
+  const ppvRevenue = myPurchases.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const avgPpvPrice = myPurchases.length > 0 ? ppvRevenue / myPurchases.length : 0;
+
+  const activeThreadCount = Object.values(messages).filter(thread => Array.isArray(thread) && thread.length > 0).length;
+  const myPendingRequestsCount = customRequests.filter(
+    r => r.creatorId === creator.id && (r.status === 'pending' || r.status === 'new_request' || r.status === 'awaiting_creator_review')
+  ).length;
+
+  const totalCommunityLikes = myPosts.reduce((sum, p) => sum + (p.likesCount || 0), 0);
+  const totalCommunityComments = myPosts.reduce((sum, p) => sum + (p.commentsCount || 0), 0);
+  const totalCommunityInteractions = totalCommunityLikes + totalCommunityComments;
+
+  const completedTxs = transactions.filter(tx => tx.status === 'completed');
+  const paidMsgTxs = completedTxs.filter(tx => tx.type === 'paid_message');
+  const paidMsgGross = paidMsgTxs.reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
+  const avgPaidMsgPrice = paidMsgTxs.length > 0 ? paidMsgGross / paidMsgTxs.length : 0;
+
+  const tipTxs = completedTxs.filter(tx => tx.type === 'tip');
+  const tipGross = tipTxs.reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
+
+  const creatorStreams = livestreams.filter(s => s.creatorId === creator.id);
+  const liveGross = creatorStreams.reduce((sum, s) => sum + Number(s.totalRevenue || 0) + Number(s.replayGrossRevenue || 0), 0);
+  const liveTicketsSold = creatorStreams.reduce((sum, s) => sum + (s.purchasedViewerIds?.length || 0), 0);
+  const avgConcurrentViewers = creatorStreams.length > 0
+    ? Math.round(creatorStreams.reduce((sum, s) => sum + (s.viewerCount || 0), 0) / creatorStreams.length)
+    : 0;
+
+  const customReqGross = customRequests
+    .filter(r => r.creatorId === creator.id && (r.status === 'completed' || r.status === 'delivered'))
+    .reduce((sum, r) => sum + Number(r.price || 0), 0);
+  const videoCallTxs = completedTxs.filter(tx => tx.type === 'video_call');
+  const videoCallGross = videoCallTxs.reduce((sum, tx) => sum + Math.abs(Number(tx.amount || 0)), 0);
+  const totalDistGross = mrr + ppvRevenue + customReqGross + videoCallGross + tipGross;
+  const pctOfGross = (val: number) => (totalDistGross > 0 ? Math.round((val / totalDistGross) * 100) : 0);
+  const arpu = mySubscribersCount > 0 ? myEarnings / mySubscribersCount : 0;
 
   // Studio Sections & Sub-items definition
   const sections: {
@@ -543,33 +589,6 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                     >
                       Open Content Publisher
                     </button>
-                    <button
-                      onClick={() => {
-                        startVideoOptimizationJob({
-                          creatorId: creator.id,
-                          creatorName: creator.name,
-                          sourceContext: 'creator_studio',
-                          fileName: `Studio_Vault_Drop_4K_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.mp4`,
-                          fileSize: 512 * 1024 * 1024,
-                          mimeType: 'video/mp4',
-                          sourceUrl: '/videos/sample3.mp4',
-                          thumbnailUrl: '/videos/thumbs/sample3_frame_2.webp',
-                          previewFrames: [
-                            '/videos/thumbs/sample3_frame_1.webp',
-                            '/videos/thumbs/sample3_frame_2.webp',
-                            '/videos/thumbs/sample3_frame_3.webp',
-                            '/videos/thumbs/sample3_frame_4.webp'
-                          ],
-                          width: 1280,
-                          height: 720,
-                          durationSeconds: 10,
-                          frameRate: 60
-                        });
-                      }}
-                      className="w-full px-4 py-2.5 bg-[#18181f] hover:bg-[#22222c] border border-[#d4af37]/40 text-[#fce7b0] font-semibold text-xs rounded-xl transition-colors cursor-pointer"
-                    >
-                      + Queue Background 4K Video Compression Test (512 MB)
-                    </button>
                   </div>
                 </div>
 
@@ -592,7 +611,7 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
 
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                     {videoProcessingJobs
-                      .filter(j => j.creatorId === creator.id || j.creatorId === 'creator_1')
+                      .filter(j => j.creatorId === creator.id)
                       .map(job => {
                         const origMb = (job.originalFileSize / (1024 * 1024)).toFixed(1);
                         const optMb = job.optimizedFileSize
@@ -710,27 +729,32 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
             <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-white">Scheduled Publishing Queue</h3>
-                <span className="text-xs text-neutral-400">2 drops queued for this week</span>
+                <span className="text-xs text-neutral-400">
+                  {scheduledPosts.length} {scheduledPosts.length === 1 ? 'drop' : 'drops'} queued
+                </span>
               </div>
-              <div className="space-y-3">
-                {[
-                  { title: 'Behind The Scenes: Milan Haute Couture Fall Edition', time: 'Tomorrow at 18:00 UTC', type: 'PPV Video ($14.99)' },
-                  { title: 'Exclusive Masterclass: Music Production Stems & Vocals', time: 'Friday at 20:00 UTC', type: 'Subscriber Exclusive' }
-                ].map((s, idx) => (
-                  <div key={idx} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div className="space-y-1 min-w-0">
-                      <div className="font-semibold text-white">{s.title}</div>
-                      <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
-                        <span>{s.time}</span>
+              {scheduledPosts.length === 0 ? (
+                <div className="p-6 text-center bg-[#18181c] border border-[#27272a] rounded-xl text-xs text-neutral-400">
+                  No scheduled or draft drops queued.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {scheduledPosts.map(s => (
+                    <div key={s.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="space-y-1 min-w-0">
+                        <div className="font-semibold text-white truncate">{s.content || 'Scheduled Drop'}</div>
+                        <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />
+                          <span>{s.scheduledFor || 'Draft'}</span>
+                        </div>
                       </div>
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0] shrink-0 uppercase">
+                        {s.visibility.replace('_', ' ')}
+                      </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#22222a] text-[#fce7b0] shrink-0">
-                      {s.type}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -748,17 +772,19 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                 <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl space-y-1">
                   <div className="text-xs text-neutral-400">Total Active Subscribers</div>
                   <div className="text-2xl font-bold font-mono text-white">{mySubscribersCount.toLocaleString()}</div>
-                  <div className="text-[11px] text-emerald-400">+12% new subscribers this month</div>
+                  <div className="text-[11px] text-neutral-400">
+                    {myActiveSubs.length} {myActiveSubs.length === 1 ? 'active membership' : 'active memberships'}
+                  </div>
                 </div>
                 <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl space-y-1">
                   <div className="text-xs text-neutral-400">Monthly Recurring Revenue</div>
-                  <div className="text-2xl font-bold font-mono text-[#fce7b0]">${Number(mrr).toLocaleString()}</div>
-                  <div className="text-[11px] text-neutral-400">Calculated after platform fee</div>
+                  <div className="text-2xl font-bold font-mono text-[#fce7b0]">${mrr.toFixed(2)}</div>
+                  <div className="text-[11px] text-neutral-400">Active subscription billing</div>
                 </div>
                 <div className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl space-y-1">
                   <div className="text-xs text-neutral-400">Subscriber Retention</div>
-                  <div className="text-2xl font-bold font-mono text-emerald-400">94.2%</div>
-                  <div className="text-[11px] text-neutral-400">30-day renewal completion</div>
+                  <div className="text-2xl font-bold font-mono text-emerald-400">{subRetentionPct}%</div>
+                  <div className="text-[11px] text-neutral-400">Active / total memberships</div>
                 </div>
               </div>
 
@@ -794,14 +820,18 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                   <h3 className="text-sm font-bold text-white">Free Followers Funnel</h3>
                   <p className="text-xs text-neutral-400">Followers can see public updates and be converted into paid subscribers.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-white tabular-nums">14,250 Followers</div>
+                <div className="text-xl font-bold font-mono text-white tabular-nums">
+                  {myFollowersCount.toLocaleString()} Followers
+                </div>
               </div>
               <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="font-semibold text-neutral-200">Free to Paid Conversion Rate</span>
-                  <div className="text-[11px] text-neutral-500">Industry benchmark: 2.5%</div>
+                  <div className="text-[11px] text-neutral-500">Followers who become paying subscribers</div>
                 </div>
-                <span className="text-base font-bold font-mono text-emerald-400 tabular-nums">9.96%</span>
+                <span className="text-base font-bold font-mono text-emerald-400 tabular-nums">
+                  {followerToPaidConversionPct}%
+                </span>
               </div>
             </div>
           )}
@@ -820,8 +850,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               </p>
               <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs">
-                  <div className="font-semibold text-white">Active Message Threads: 18</div>
-                  <div className="text-[11px] text-[#fce7b0]">3 pending paid unlock requests</div>
+                  <div className="font-semibold text-white">Active Message Threads: {activeThreadCount}</div>
+                  <div className="text-[11px] text-[#fce7b0]">{myPendingRequestsCount} pending custom requests</div>
                 </div>
                 <button
                   onClick={() => window.location.href = '#messages'}
@@ -838,15 +868,20 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
             <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
               <h3 className="text-sm font-bold text-white">Community Engagement</h3>
               <p className="text-xs text-neutral-400">
-                Post comments, poll results, and community feedback from your active fanbase.
+                Post comments, likes, and community interactions from your active fanbase.
               </p>
               <div className="p-4 bg-[#18181c] rounded-xl space-y-2 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-300">
-                  <span>Community Sentiment Score</span>
-                  <span className="font-mono text-emerald-400 font-bold">98.4% Positive</span>
+                  <span>Total Post Interactions (Likes &amp; Comments)</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    {totalCommunityInteractions.toLocaleString()} ({totalCommunityLikes} likes · {totalCommunityComments} comments)
+                  </span>
                 </div>
                 <div className="w-full bg-[#121215] h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full w-[98.4%]" />
+                  <div
+                    className="bg-emerald-500 h-full transition-all"
+                    style={{ width: totalCommunityInteractions > 0 ? '100%' : '0%' }}
+                  />
                 </div>
               </div>
             </div>
@@ -884,14 +919,14 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                   <h3 className="text-sm font-bold text-white">Pay-Per-View Content Vault</h3>
                   <p className="text-xs text-neutral-400">Individual unlock revenue generated by locked posts and video teasers.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$9,228.00 Earned</div>
+                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">${ppvRevenue.toFixed(2)} Earned</div>
               </div>
               <div className="p-4 bg-[#18181c] rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
                   <span className="font-semibold text-white">Average PPV Unlock Price</span>
-                  <div className="text-[11px] text-neutral-500">Across 615 total unlocks</div>
+                  <div className="text-[11px] text-neutral-500">Across {myPurchases.length} total unlocks</div>
                 </div>
-                <span className="font-mono font-bold text-white tabular-nums">$15.00</span>
+                <span className="font-mono font-bold text-white tabular-nums">${avgPpvPrice.toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -913,18 +948,24 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               </div>
 
               <div className="space-y-3">
-                {customRequests.slice(0, 3).map(req => (
-                  <div key={req.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div className="min-w-0">
-                      <div className="font-bold text-white truncate">{req.title}</div>
-                      <div className="text-[11px] text-neutral-400 truncate">For {req.recipientName} · By @{req.fanUsername}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold text-[#fce7b0] tabular-nums">${req.price.toFixed(2)}</div>
-                      <span className="text-[10px] text-emerald-400 uppercase font-bold">{req.status}</span>
-                    </div>
+                {customRequests.length === 0 ? (
+                  <div className="p-6 text-center bg-[#121215] border border-[#27272a] rounded-2xl text-xs text-neutral-400">
+                    No custom video requests yet.
                   </div>
-                ))}
+                ) : (
+                  customRequests.slice(0, 3).map(req => (
+                    <div key={req.id} className="p-4 bg-[#121215] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">{req.title}</div>
+                        <div className="text-[11px] text-neutral-400 truncate">For {req.recipientName} · By @{req.fanUsername}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-mono font-bold text-[#fce7b0] tabular-nums">${req.price.toFixed(2)}</div>
+                        <span className="text-[10px] text-emerald-400 uppercase font-bold">{req.status}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -937,11 +978,11 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
                 <div className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
                   <div className="text-neutral-400">Paid Message Earnings</div>
-                  <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$1,538.00</div>
+                  <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">${paidMsgGross.toFixed(2)}</div>
                 </div>
                 <div className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
                   <div className="text-neutral-400">Average Message Price</div>
-                  <div className="text-xl font-bold font-mono text-white tabular-nums">$15.00</div>
+                  <div className="text-xl font-bold font-mono text-white tabular-nums">${avgPaidMsgPrice.toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -950,21 +991,30 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Tips and Gifts */}
           {activeSubItem === 'tips_gifts' && (
             <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 space-y-4">
-              <h3 className="text-sm font-bold text-white">Tips and Virtual Gifts</h3>
-              <p className="text-xs text-neutral-400">Tips received during live broadcasts and directly on feed posts.</p>
-              <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
-                {[
-                  { name: 'Virtual Champagne', value: '$25.00', count: 48 },
-                  { name: 'Super Diamond', value: '$50.00', count: 18 },
-                  { name: 'Golden Acovon Crown', value: '$100.00', count: 9 }
-                ].map((g, i) => (
-                  <div key={i} className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
-                    <div className="font-semibold text-white">{g.name}</div>
-                    <div className="text-lg font-mono font-bold text-[#fce7b0] tabular-nums">{g.value}</div>
-                    <div className="text-[10px] text-neutral-500">{g.count} gifts received</div>
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Tips and Virtual Gifts</h3>
+                  <p className="text-xs text-neutral-400">Tips received during live broadcasts and directly on feed posts.</p>
+                </div>
+                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">${tipGross.toFixed(2)}</div>
               </div>
+              {tipTxs.length === 0 ? (
+                <div className="p-6 text-center bg-[#18181c] rounded-xl text-xs text-neutral-400">
+                  No tips or virtual gifts received yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xs:grid-cols-3 gap-3">
+                  {tipTxs.slice(0, 6).map(tx => (
+                    <div key={tx.id} className="p-4 bg-[#18181c] rounded-xl text-xs space-y-1">
+                      <div className="font-semibold text-white truncate">{tx.description}</div>
+                      <div className="text-lg font-mono font-bold text-[#fce7b0] tabular-nums">
+                        ${Math.abs(Number(tx.amount || 0)).toFixed(2)}
+                      </div>
+                      <div className="text-[10px] text-neutral-500">{tx.createdAt}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -976,12 +1026,12 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                   <h3 className="text-sm font-bold text-white">Livestream &amp; Replay Revenue Streams</h3>
                   <p className="text-xs text-neutral-400">PPV ticket sales, official paid replay unlocks, highlight chat badges, and live tips.</p>
                 </div>
-                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">$6,959.00 Gross</div>
+                <div className="text-xl font-bold font-mono text-[#fce7b0] tabular-nums">${liveGross.toFixed(2)} Gross</div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-4 bg-[#18181c] rounded-xl space-y-1">
                   <div className="font-semibold text-white">PPV Live Ticket Gross</div>
-                  <div className="text-[11px] text-neutral-400">324 tickets sold across pay-per-view live broadcasts.</div>
+                  <div className="text-[11px] text-neutral-400">{liveTicketsSold} tickets sold across pay-per-view live broadcasts.</div>
                 </div>
                 <div className="p-4 bg-[#18181c] rounded-xl space-y-1 flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -1467,17 +1517,17 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-5 bg-[#121215] border border-[#27272a] rounded-2xl">
                 <div className="text-xs text-neutral-400 mb-1">Average Concurrent Viewers</div>
-                <div className="text-2xl font-bold font-mono text-white">1,620</div>
-                <div className="text-[11px] text-emerald-400 mt-1">+24% vs last month</div>
+                <div className="text-2xl font-bold font-mono text-white">{avgConcurrentViewers.toLocaleString()}</div>
+                <div className="text-[11px] text-neutral-400 mt-1">Across {creatorStreams.length} broadcasts</div>
               </div>
               <div className="p-5 bg-[#121215] border border-[#27272a] rounded-2xl">
-                <div className="text-xs text-neutral-400 mb-1">Live Chat Messages / Min</div>
-                <div className="text-2xl font-bold font-mono text-[#fce7b0]">142 msg/min</div>
-                <div className="text-[11px] text-neutral-400 mt-1">High engagement velocity</div>
+                <div className="text-xs text-neutral-400 mb-1">PPV Live Tickets Sold</div>
+                <div className="text-2xl font-bold font-mono text-[#fce7b0]">{liveTicketsSold.toLocaleString()}</div>
+                <div className="text-[11px] text-neutral-400 mt-1">Total livestream ticket purchases</div>
               </div>
               <div className="p-5 bg-[#121215] border border-[#27272a] rounded-2xl">
                 <div className="text-xs text-neutral-400 mb-1">Highlight Clips Created</div>
-                <div className="text-2xl font-bold font-mono text-white">{highlightClips.length || 8}</div>
+                <div className="text-2xl font-bold font-mono text-white">{highlightClips.length}</div>
                 <div className="text-[11px] text-neutral-400 mt-1">Saved to content library</div>
               </div>
             </div>
@@ -1615,8 +1665,8 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl space-y-1">
                   <div className="text-xs text-neutral-400">Total Lifetime Gross</div>
-                  <div className="text-2xl font-bold font-mono text-white">${myEarnings.toLocaleString()}</div>
-                  <div className="text-[11px] text-emerald-400">+18.4% growth</div>
+                  <div className="text-2xl font-bold font-mono text-white">${myEarnings.toFixed(2)}</div>
+                  <div className="text-[11px] text-neutral-400">Cumulative recorded volume</div>
                 </div>
                 <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl space-y-1">
                   <div className="text-xs text-neutral-400">Available Payout Balance</div>
@@ -1626,9 +1676,9 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
                   </button>
                 </div>
                 <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl space-y-1">
-                  <div className="text-xs text-neutral-400">Average Monthly Revenue</div>
-                  <div className="text-2xl font-bold font-mono text-white">$12,850.00</div>
-                  <div className="text-[11px] text-neutral-400">Recurring baseline</div>
+                  <div className="text-xs text-neutral-400">Monthly Recurring Baseline</div>
+                  <div className="text-2xl font-bold font-mono text-white">${mrr.toFixed(2)}</div>
+                  <div className="text-[11px] text-neutral-400">Active tier subscriptions</div>
                 </div>
               </div>
 
@@ -1636,18 +1686,18 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
               <div className="bg-[#121215] border border-[#26262b] rounded-2xl p-6 space-y-4">
                 <h4 className="text-sm font-bold text-white">Gross Revenue Distribution</h4>
                 <div className="w-full h-3 bg-neutral-900 rounded-full overflow-hidden flex">
-                  <div style={{ width: '48%' }} className="bg-[#d4af37]" title="Subscriptions 48%" />
-                  <div style={{ width: '24%' }} className="bg-emerald-500" title="PPV Vault 24%" />
-                  <div style={{ width: '16%' }} className="bg-blue-500" title="Custom Videos 16%" />
-                  <div style={{ width: '8%' }} className="bg-purple-500" title="Video Calls 8%" />
-                  <div style={{ width: '4%' }} className="bg-rose-500" title="Tips 4%" />
+                  <div style={{ width: `${pctOfGross(mrr)}%` }} className="bg-[#d4af37]" title={`Subscriptions ${pctOfGross(mrr)}%`} />
+                  <div style={{ width: `${pctOfGross(ppvRevenue)}%` }} className="bg-emerald-500" title={`PPV Vault ${pctOfGross(ppvRevenue)}%`} />
+                  <div style={{ width: `${pctOfGross(customReqGross)}%` }} className="bg-blue-500" title={`Custom Videos ${pctOfGross(customReqGross)}%`} />
+                  <div style={{ width: `${pctOfGross(videoCallGross)}%` }} className="bg-purple-500" title={`Video Calls ${pctOfGross(videoCallGross)}%`} />
+                  <div style={{ width: `${pctOfGross(tipGross)}%` }} className="bg-rose-500" title={`Tips ${pctOfGross(tipGross)}%`} />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
-                  <div className="text-xs"><span className="text-[#d4af37] font-bold">48%</span> Subscriptions</div>
-                  <div className="text-xs"><span className="text-emerald-400 font-bold">24%</span> PPV Vault</div>
-                  <div className="text-xs"><span className="text-blue-400 font-bold">16%</span> Custom Videos</div>
-                  <div className="text-xs"><span className="text-purple-400 font-bold">8%</span> Video Calls</div>
-                  <div className="text-xs"><span className="text-rose-400 font-bold">4%</span> Tips & Gifts</div>
+                  <div className="text-xs"><span className="text-[#d4af37] font-bold">{pctOfGross(mrr)}%</span> Subscriptions</div>
+                  <div className="text-xs"><span className="text-emerald-400 font-bold">{pctOfGross(ppvRevenue)}%</span> PPV Vault</div>
+                  <div className="text-xs"><span className="text-blue-400 font-bold">{pctOfGross(customReqGross)}%</span> Custom Videos</div>
+                  <div className="text-xs"><span className="text-purple-400 font-bold">{pctOfGross(videoCallGross)}%</span> Video Calls</div>
+                  <div className="text-xs"><span className="text-rose-400 font-bold">{pctOfGross(tipGross)}%</span> Tips &amp; Gifts</div>
                 </div>
               </div>
             </div>
@@ -1658,18 +1708,18 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl">
                 <div className="text-xs text-neutral-400 mb-1">Fan Conversion Rate</div>
-                <div className="text-2xl font-bold font-mono text-white">4.82%</div>
-                <div className="text-[11px] text-neutral-500 mt-1">Profile visits to paid patrons</div>
+                <div className="text-2xl font-bold font-mono text-white">{followerToPaidConversionPct}%</div>
+                <div className="text-[11px] text-neutral-500 mt-1">Followers to paid patrons</div>
               </div>
               <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl">
                 <div className="text-xs text-neutral-400 mb-1">Average Revenue Per User (ARPU)</div>
-                <div className="text-2xl font-bold font-mono text-[#fce7b0]">$27.10</div>
-                <div className="text-[11px] text-neutral-500 mt-1">Blended monthly gross per active fan</div>
+                <div className="text-2xl font-bold font-mono text-[#fce7b0]">${arpu.toFixed(2)}</div>
+                <div className="text-[11px] text-neutral-500 mt-1">Lifetime gross per active subscriber</div>
               </div>
               <div className="p-5 bg-[#121215] border border-[#26262b] rounded-2xl">
-                <div className="text-xs text-neutral-400 mb-1">Private Call Hours Billed</div>
-                <div className="text-2xl font-bold font-mono text-white">28.4 hrs</div>
-                <div className="text-[11px] text-neutral-500 mt-1">Billed at ${creator.callRatePerMinute.toFixed(2)}/min</div>
+                <div className="text-xs text-neutral-400 mb-1">Private Call Revenue</div>
+                <div className="text-2xl font-bold font-mono text-white">${videoCallGross.toFixed(2)}</div>
+                <div className="text-[11px] text-neutral-500 mt-1">Billed at ${(creator.callRatePerMinute || 0).toFixed(2)}/min</div>
               </div>
             </div>
           )}
@@ -1677,23 +1727,23 @@ export const CreatorDashboard: React.FC<CreatorDashboardProps> = ({
           {/* Sub-item: Audience Analytics */}
           {activeSubItem === 'audience_analytics' && (
             <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-6 space-y-4">
-              <h4 className="text-sm font-bold text-white">Audience Demographics & Top Regions</h4>
+              <h4 className="text-sm font-bold text-white">Audience Breakdown</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div className="p-3 bg-[#18181c] rounded-xl space-y-1">
-                  <div className="text-neutral-400">United States</div>
-                  <div className="text-lg font-bold font-mono text-white">45%</div>
+                  <div className="text-neutral-400">Active Subscribers</div>
+                  <div className="text-lg font-bold font-mono text-white">{mySubscribersCount.toLocaleString()}</div>
                 </div>
                 <div className="p-3 bg-[#18181c] rounded-xl space-y-1">
-                  <div className="text-neutral-400">United Kingdom</div>
-                  <div className="text-lg font-bold font-mono text-white">20%</div>
+                  <div className="text-neutral-400">Followers</div>
+                  <div className="text-lg font-bold font-mono text-white">{myFollowersCount.toLocaleString()}</div>
                 </div>
                 <div className="p-3 bg-[#18181c] rounded-xl space-y-1">
-                  <div className="text-neutral-400">European Union</div>
-                  <div className="text-lg font-bold font-mono text-white">18%</div>
+                  <div className="text-neutral-400">Published Posts</div>
+                  <div className="text-lg font-bold font-mono text-white">{myPosts.length}</div>
                 </div>
                 <div className="p-3 bg-[#18181c] rounded-xl space-y-1">
-                  <div className="text-neutral-400">Canada & Australia</div>
-                  <div className="text-lg font-bold font-mono text-white">17%</div>
+                  <div className="text-neutral-400">Post Interactions</div>
+                  <div className="text-lg font-bold font-mono text-white">{totalCommunityInteractions.toLocaleString()}</div>
                 </div>
               </div>
             </div>

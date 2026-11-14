@@ -71,18 +71,16 @@ export const AdminRecommendationEngineSection: React.FC = () => {
 
   // Real computed analytics from actual platform events
   const analyticsStats = useMemo(() => {
-    const forYouImpressions =
-      filteredEvents.filter(
-        e =>
-          (e.eventType === 'post_impression' || e.eventType === 'video_impression') &&
-          (e.sourceSurface === 'for_you' || e.surface === 'for_you')
-      ).length + 48;
-    const freePostsImpressions =
-      filteredEvents.filter(
-        e =>
-          (e.eventType === 'post_impression' || e.eventType === 'video_impression') &&
-          (e.sourceSurface === 'free_posts' || e.surface === 'free_posts')
-      ).length + 34;
+    const forYouImpressions = filteredEvents.filter(
+      e =>
+        (e.eventType === 'post_impression' || e.eventType === 'video_impression') &&
+        (e.sourceSurface === 'for_you' || e.surface === 'for_you')
+    ).length;
+    const freePostsImpressions = filteredEvents.filter(
+      e =>
+        (e.eventType === 'post_impression' || e.eventType === 'video_impression') &&
+        (e.sourceSurface === 'free_posts' || e.surface === 'free_posts')
+    ).length;
 
     const videoStarts = filteredEvents.filter(
       e => e.eventType === 'video_started' || e.eventType === 'video_watched' || e.eventType === 'video_completed'
@@ -94,7 +92,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
         ? Math.round(
             watchEvents.reduce((sum, e) => sum + (e.watchDurationSeconds || 0), 0) / watchEvents.length
           )
-        : 42;
+        : 0;
 
     const completionEvents = filteredEvents.filter(
       e => typeof (e.completionPercentage ?? e.completionPercent) === 'number'
@@ -105,7 +103,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
             completionEvents.reduce((sum, e) => sum + (e.completionPercentage ?? e.completionPercent ?? 0), 0) /
               completionEvents.length
           )
-        : 84;
+        : 0;
 
     const likesFromRecs = filteredEvents.filter(
       e => e.eventType === 'post_liked' || e.eventType === 'video_liked' || e.eventType === 'photo_liked'

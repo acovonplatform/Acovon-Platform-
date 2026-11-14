@@ -346,21 +346,46 @@ export interface CustomVideoRequest {
   deliveredAt?: string;
 }
 
+export type VideoCallStatus =
+  | 'calling'
+  | 'ringing'
+  | 'accepted'
+  | 'connecting'
+  | 'connected'
+  | 'ended'
+  | 'declined'
+  | 'missed'
+  | 'failed'
+  | 'requesting'
+  | 'completed'
+  | 'cancelled'
+  | 'rejected';
+
 export interface VideoCallSession {
   id: string;
   creatorId: string;
   fanId: string;
   creatorName: string;
+  creatorUsername?: string;
+  creatorAvatar?: string;
   fanName: string;
+  fanUsername?: string;
+  fanAvatar?: string;
   ratePerMinute: number;
-  status: 'requesting' | 'connecting' | 'connected' | 'completed' | 'cancelled' | 'rejected';
+  status: VideoCallStatus;
   durationSeconds: number;
   totalCost: number;
   platformFee: number;
   creatorEarnings: number;
   spendingLimit: number;
+  requestedAt?: string;
+  acceptedAt?: string;
+  connectedAt?: string;
   startedAt?: string;
   endedAt?: string;
+  billingSettled?: boolean;
+  connectionError?: string;
+  endReason?: string;
 }
 
 export interface ChatAttachmentItem {
@@ -502,16 +527,20 @@ export interface CreatorVerification {
   userId: string;
   name: string;
   username: string;
+  email?: string;
+  avatar?: string;
   documentType: 'passport' | 'drivers_license' | 'national_id';
   documentNumber: string;
   documentFileUrl: string;
   selfieUrl: string;
   status: 'pending' | 'approved' | 'rejected' | 'info_requested';
   submittedAt: string;
+  updatedAt?: string;
   reviewedByAdminId?: string;
   reviewedByAdminName?: string;
   reviewedAt?: string;
   notes?: string;
+  source?: string;
   applicationData?: CreatorApplicationData;
 }
 
@@ -544,6 +573,9 @@ export interface AppNotification {
   linkUrl?: string;
   announcementId?: string;
   targetAudience?: 'fans_only' | 'creators_only' | 'everyone';
+  targetRole?: 'fan' | 'creator' | 'admin' | 'user';
+  applicationId?: string;
+  eventKey?: string;
 }
 
 export type LivestreamAccessMode = 'public' | 'all_subscribers' | 'selected_plan' | 'pay_per_view' | 'private_invite';
@@ -591,6 +623,8 @@ export interface RecordingSettings {
   participantConsentConfirmed?: boolean;
 }
 
+export type LivestreamProvider = 'webrtc_live' | 'cloudflare_stream' | 'obs_rtmps';
+
 export interface Livestream {
   id: string;
   creatorId: string;
@@ -608,13 +642,30 @@ export interface Livestream {
   privatePasscode?: string; // For mode 5: Private Invitation
   allowedUserIds?: string[]; // For mode 5: specific invites
   status: LivestreamStatus;
+  provider?: LivestreamProvider;
+  streamSessionId?: string;
+  cloudflareInputUid?: string;
+  whipIngestUrl?: string;
+  rtmpsIngestUrl?: string;
+  rtmpsStreamKey?: string;
+  hlsPlaybackUrl?: string;
+  dashPlaybackUrl?: string;
+  webrtcPlaybackUrl?: string;
+  playbackTokenRequired?: boolean;
   viewerCount: number;
   totalRevenue: number;
   startedAt?: string;
+  startedAtIso?: string;
   scheduledFor?: string;
   endedAt?: string;
+  endedAtIso?: string;
   expectedDurationMinutes: number;
   videoStreamUrl: string;
+  recordingUrl?: string;
+  recordingDurationSeconds?: number;
+  recordingFileSizeBytes?: number;
+  liveAudioMuted?: boolean;
+  liveCameraDisabled?: boolean;
   settings: {
     enableTips: boolean;
     enableGifts: boolean;
@@ -1547,4 +1598,21 @@ export interface PostCountryRelation {
   creator_id: string;
   video_country_id: string;
 }
+
+export interface CreatorApplicationAuditRecord {
+  id: string;
+  applicationId: string;
+  applicantUserId: string;
+  applicantEmail: string;
+  applicantName: string;
+  previousStatus: string;
+  newStatus: string;
+  action: 'submitted' | 'approved' | 'rejected' | 'info_requested' | 'reconciled';
+  adminId: string;
+  adminName: string;
+  adminRole: string;
+  notes: string;
+  timestamp: string;
+}
+
 

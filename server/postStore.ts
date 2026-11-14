@@ -13,7 +13,7 @@ import {
   resolveCategoryRecord,
   resolveCountryRecord
 } from '../src/data/globalTaxonomy';
-import { MOCK_POSTS } from '../src/data/mockData';
+
 
 export interface StoredPostsDB {
   createdPosts: Record<string, Post>;
@@ -181,12 +181,9 @@ export class AuthoritativePostStore {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
           const legacyUpdated = parsed.updatedPosts && typeof parsed.updatedPosts === 'object' ? parsed.updatedPosts : {};
-          const mockIds = new Set(MOCK_POSTS.map(p => p.id));
           for (const [pid, postObj] of Object.entries(legacyUpdated)) {
-            if (!mockIds.has(pid) && postObj && typeof postObj === 'object') {
+            if (postObj && typeof postObj === 'object') {
               db.createdPosts[pid] = postObj as Post;
-            } else if (postObj && typeof postObj === 'object') {
-              db.updatedPosts[pid] = postObj as Post;
             }
           }
           db.deletedPostIds = Array.isArray(parsed.deletedPostIds) ? parsed.deletedPostIds : [];
@@ -317,29 +314,20 @@ export class AuthoritativePostStore {
     if (db.createdPosts[postId]) {
       return deepClone(db.createdPosts[postId]);
     }
-    const base = MOCK_POSTS.find(p => p.id === postId);
     const override = db.updatedPosts[postId];
-    if (base && override) {
-      return deepClone({ ...base, ...override });
-    }
     if (override) {
       return deepClone(override);
-    }
-    if (base) {
-      return deepClone(base);
     }
     return undefined;
   }
 
   getUnifiedPosts(options?: { includeDeleted?: boolean; includeBaseline?: boolean }): Post[] {
     const includeDeleted = options?.includeDeleted === true;
-    const includeBaseline = options?.includeBaseline !== false;
     const db = this.readPostsDB();
     const deletedSet = new Set(db.deletedPostIds || []);
-    const seenIds = new Set<string>();
     const result: Post[] = [];
 
-    // 1. User-created persisted posts first (newest first by createdAtIso)
+    // User-created persisted posts (newest first by createdAtIso)
     const createdList = Object.values(db.createdPosts || {}).sort((a, b) => {
       const tA = a.createdAtIso ? Date.parse(a.createdAtIso) : 0;
       const tB = b.createdAtIso ? Date.parse(b.createdAtIso) : 0;
@@ -355,25 +343,7 @@ export class AuthoritativePostStore {
         merged.isDeletedByCreator = true;
         merged.moderationStatus = 'removed';
       }
-      seenIds.add(merged.id);
       result.push(merged);
-    }
-
-    // 2. Baseline catalog posts merged with persisted overrides (never overwriting created posts)
-    if (includeBaseline) {
-      for (const base of MOCK_POSTS) {
-        if (seenIds.has(base.id)) continue;
-        const override = db.updatedPosts[base.id];
-        const merged: Post = deepClone(override ? { ...base, ...override } : base);
-        const isDel = deletedSet.has(merged.id) || Boolean(merged.isDeletedByCreator);
-        if (isDel && !includeDeleted) continue;
-        if (isDel) {
-          merged.isDeletedByCreator = true;
-          merged.moderationStatus = 'removed';
-        }
-        seenIds.add(merged.id);
-        result.push(merged);
-      }
     }
 
     return result;
@@ -416,14 +386,13 @@ export class AuthoritativePostStore {
     }
 
     const db = this.readPostsDB();
-    const mockIdSet = new Set(MOCK_POSTS.map(p => p.id));
 
     // Strict Permanent Unique UUID enforcement (never reuse or overwrite another post ID)
     let postId = typeof postData.id === 'string' ? postData.id.trim() : '';
     if (!postId) {
       postId = crypto.randomUUID();
     }
-    if (db.createdPosts[postId] || db.updatedPosts[postId] || mockIdSet.has(postId) || db.deletedPostIds.includes(postId)) {
+    if (db.createdPosts[postId] || db.updatedPosts[postId] || db.deletedPostIds.includes(postId)) {
       return {
         success: false,
         statusCode: 409,
@@ -606,16 +575,13 @@ export class AuthoritativePostStore {
     }
 
     const db = this.readPostsDB();
-    const baselineMock = MOCK_POSTS.find(p => p.id === postId);
     const storedCreated = db.createdPosts[postId];
     const storedOverride = db.updatedPosts[postId];
 
     const storedPost: Post | undefined = storedCreated
       ? deepClone(storedOverride ? { ...storedCreated, ...storedOverride } : storedCreated)
       : storedOverride
-      ? deepClone(baselineMock ? { ...baselineMock, ...storedOverride } : storedOverride)
-      : baselineMock
-      ? deepClone(baselineMock)
+      ? deepClone(storedOverride)
       : existingPostFallback
       ? deepClone(existingPostFallback)
       : undefined;
@@ -1020,11 +986,9 @@ export class AuthoritativePostStore {
     }
 
     const db = this.readPostsDB();
-    const baselineMock = MOCK_POSTS.find(p => p.id === postId);
     const storedPost =
       db.createdPosts[postId] ||
       db.updatedPosts[postId] ||
-      baselineMock ||
       existingPostFallback;
 
     const authoritativeOwnerId = storedPost?.creatorId || postOwnerId;
@@ -1194,7 +1158,7 @@ export class AuthoritativePostStore {
     return {
       checkedAt: new Date().toISOString(),
       totalCreatedPosts: Object.keys(db.createdPosts).length,
-      totalBaselinePosts: MOCK_POSTS.length,
+      totalBaselinePosts: 0,
       totalOverrides: Object.keys(db.updatedPosts).length,
       totalDeletedIds: db.deletedPostIds.length,
       totalRevisionPosts: Object.keys(revDb.revisionsByPostId).length,

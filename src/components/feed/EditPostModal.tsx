@@ -602,7 +602,7 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
 
   const currentMedia = mediaList[0];
   const isCurrentVideo = currentMedia?.type === 'video';
-  const estimatedViews = post.viewsCount || Math.max(120, Math.round((post.likesCount || 15) * 14.3));
+  const estimatedViews = post.viewsCount || 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
@@ -1145,50 +1145,6 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
                 )}
               </div>
 
-              {/* Switcher to replace post video with another studio video and regenerate real cover frames */}
-              <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
-                <span className="text-[10px] text-neutral-400">Replace with studio asset:</span>
-                <div className="flex items-center gap-1">
-                  {[
-                    '/videos/sample1.mp4',
-                    '/videos/sample2.mp4',
-                    '/videos/sample3.mp4',
-                    '/videos/sample4.mp4'
-                  ].map((sampleUrl, idx) => (
-                    <button
-                      key={sampleUrl}
-                      type="button"
-                      onClick={async () => {
-                        const newMediaId = `vmedia_rep_${Date.now()}`;
-                        setLastReplacementFile(undefined);
-                        setAutoSelectCover(true);
-                        setMediaList([
-                          {
-                            id: `media_rep_${Date.now()}`,
-                            videoMediaId: newMediaId,
-                            type: 'video',
-                            url: sampleUrl,
-                            thumbnailUrl: '',
-                            previewUrl: sampleUrl,
-                            previewFrames: [],
-                            availableResolutions: ['1080p', '720p', '480p'],
-                            availableCodecs: ['AV1']
-                          }
-                        ]);
-                        setIsMediaReplaced(true);
-                        await runVideoFrameExtraction({
-                          sourceUrl: sampleUrl,
-                          videoMediaId: newMediaId,
-                          forceResetThumbnail: true
-                        });
-                      }}
-                      className="px-2 py-0.5 rounded bg-[#22222c] hover:bg-[#2c2c38] text-[10px] text-neutral-300 border border-[#323242] cursor-pointer"
-                    >
-                      Clip {idx + 1}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
 

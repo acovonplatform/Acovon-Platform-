@@ -81,7 +81,6 @@ export const PostCard: React.FC<PostCardProps> = ({
     toggleSavePost,
     activePlayingVideoId,
     setActivePlayingVideoId,
-    showDemoBadges,
     videoMediaRecords,
     saveVideoPlaybackPosition,
     getVideoPlaybackPosition,
@@ -111,10 +110,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [isNearViewport, setIsNearViewport] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [localComments, setLocalComments] = useState<string[]>([
-    'Incredible aesthetic and direction!',
-    'The quality on Acovon is unrivaled.'
-  ]);
+  const [localComments, setLocalComments] = useState<string[]>([]);
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
@@ -677,12 +673,18 @@ export const PostCard: React.FC<PostCardProps> = ({
               className="cursor-pointer group flex items-center gap-2.5 sm:gap-3 text-left focus:outline-none min-w-0 flex-1"
             >
               <div className="relative shrink-0">
-                <img
-                  src={post.creatorAvatar}
-                  alt={post.creatorName}
-                  referrerPolicy="no-referrer"
-                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#d4af37]/40 group-hover:border-[#d4af37] transition-colors"
-                />
+                {post.creatorAvatar ? (
+                  <img
+                    src={post.creatorAvatar}
+                    alt={post.creatorName}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#d4af37]/40 group-hover:border-[#d4af37] transition-colors"
+                  />
+                ) : (
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1d1d24] border border-[#d4af37]/40 group-hover:border-[#d4af37] transition-colors flex items-center justify-center text-xs sm:text-sm font-bold text-[#fce7b0]">
+                    {(post.creatorName || post.creatorUsername || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 font-semibold text-neutral-100 group-hover:text-[#fce7b0] transition-colors text-xs sm:text-sm min-w-0">
@@ -757,12 +759,6 @@ export const PostCard: React.FC<PostCardProps> = ({
                   </button>
                 )
               )
-            )}
-
-            {showDemoBadges && post.isDemo && (
-              <span className="hidden sm:inline-block text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
-                DEMO
-              </span>
             )}
 
             {/* 3-Dot Personalization & Report Dropdown Menu */}

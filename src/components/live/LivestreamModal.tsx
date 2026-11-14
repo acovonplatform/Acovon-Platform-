@@ -295,11 +295,17 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
             {/* Creator Info & Live Badge */}
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
               <div className="relative shrink-0">
-                <img
-                  src={stream.creatorAvatar}
-                  alt={stream.creatorName}
-                  className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover border-2 border-[#d4af37]"
-                />
+                {stream.creatorAvatar ? (
+                  <img
+                    src={stream.creatorAvatar}
+                    alt={stream.creatorName}
+                    className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover border-2 border-[#d4af37]"
+                  />
+                ) : (
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#1d1d24] border-2 border-[#d4af37] flex items-center justify-center text-xs sm:text-sm font-bold text-[#fce7b0]">
+                    {(stream.creatorName || 'C').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-emerald-500 rounded-full border-2 border-black" />
               </div>
 
@@ -434,22 +440,30 @@ export const LivestreamModal: React.FC<LivestreamModalProps> = ({
             {canWatchVideo ? (
               <>
                 {/* Active Video Stream */}
-                <video
-                  ref={videoRef}
-                  src={stream.videoStreamUrl || '/videos/sample1.mp4'}
-                  autoPlay
-                  loop
-                  muted={isMuted}
-                  playsInline
-                  onError={(e) => {
-                    const el = e.currentTarget;
-                    if (!el.src.includes('/videos/sample1.mp4')) {
-                      el.src = '/videos/sample1.mp4';
-                      el.load();
-                    }
-                  }}
-                  className="w-full h-full object-cover"
-                />
+                {stream.videoStreamUrl ? (
+                  <video
+                    ref={videoRef}
+                    src={stream.videoStreamUrl}
+                    autoPlay
+                    loop
+                    muted={isMuted}
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950 text-center p-6 space-y-2">
+                    {stream.coverImage && (
+                      <img
+                        src={stream.coverImage}
+                        alt={stream.title}
+                        className="absolute inset-0 w-full h-full object-cover opacity-30"
+                      />
+                    )}
+                    <div className="relative z-10 px-4 py-2 rounded-xl bg-black/75 border border-zinc-800 text-xs text-zinc-300">
+                      {stream.status === 'scheduled' ? 'Stream starts soon' : 'Waiting for broadcast video feed'}
+                    </div>
+                  </div>
+                )}
 
                 {/* Floating Celebration Overlay (When someone sends gift/tip) */}
                 {celebrationGift && (

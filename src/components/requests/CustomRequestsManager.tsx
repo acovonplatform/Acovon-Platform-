@@ -375,13 +375,6 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                 src={selectedVideo}
                 controls
                 autoPlay
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (!el.src.includes('/videos/sample1.mp4')) {
-                    el.src = '/videos/sample1.mp4';
-                    el.load();
-                  }
-                }}
                 className="w-full h-full object-contain"
               />
             </div>
@@ -444,13 +437,6 @@ export const CustomRequestsManager: React.FC<CustomRequestsManagerProps> = ({
                         controls
                         playsInline
                         preload="metadata"
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          if (!el.src.includes('/videos/sample1.mp4')) {
-                            el.src = '/videos/sample1.mp4';
-                            el.load();
-                          }
-                        }}
                         className="w-full h-full object-contain"
                       />
                     </div>

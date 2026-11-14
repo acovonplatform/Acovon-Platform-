@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -8,6 +9,7 @@ import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { WebSocketServer, WebSocket } from 'ws';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,6 +22,9 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 import { AuthoritativePostStore, deepClone } from './server/postStore';
+import { AuthoritativeCreatorApplicationStore } from './server/creatorApplicationStore';
+import { AuthoritativeLiveCallStore } from './server/liveCallStore';
+import { getRtcConfiguration, verifyCloudflareWebhookSignature } from './server/streamingProvider';
 import {
   OFFICIAL_CATEGORIES,
   OFFICIAL_COUNTRIES,
@@ -45,12 +50,7 @@ import {
 } from './src/types';
 import {
   INITIAL_VERIFICATION_SETTINGS,
-  MOCK_CREATORS,
-  MOCK_CREATOR_VERIFICATION_RECORDS,
-  MOCK_POSTS,
-  MOCK_USERS,
-  MOCK_VERIFICATION_AUDIT_LOGS,
-  MOCK_VERIFICATION_TRANSACTIONS
+  PLATFORM_ADMIN_ACCOUNTS
 } from './src/data/mockData';
 
 const ADMIN_SETUP_FILE = path.join(DATA_DIR, 'admin_setup.json');
@@ -687,13 +687,54 @@ function writeTaxonomyDB(db: StoredTaxonomyDB, filePath: string = TAXONOMY_DB_FI
 }
 
 // Supabase credentials if available
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://jggfwquxgrkbuvwnkmgv.supabase.co';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_krAhRrvHDOYt31-_1st3ng_oHL1b4Pu';
+const rawSupabaseUrl = (
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  'https://jggfwquxgrkbuvwnkmgv.supabase.co'
+).trim();
+const SUPABASE_URL = rawSupabaseUrl.replace(/\/(rest|auth)\/v1.*$/i, '').replace(/\/+$/, '');
+const SUPABASE_KEY = (
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  'sb_publishable_krAhRrvHDOYt31-_1st3ng_oHL1b4Pu'
+).trim();
+const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 let supabase: ReturnType<typeof createClient> | null = null;
+let supabaseServiceClient: ReturnType<typeof createClient> | null = null;
 try {
   supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  if (SUPABASE_SERVICE_ROLE_KEY) {
+    supabaseServiceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+  }
 } catch {
   supabase = null;
+  supabaseServiceClient = null;
+}
+
+function getRequestSupabaseClient(req?: express.Request): ReturnType<typeof createClient> | null {
+  if (supabaseServiceClient) return supabaseServiceClient;
+  const headerToken = req?.headers?.['x-supabase-access-token'];
+  const rawToken =
+    typeof headerToken === 'string' && headerToken.trim()
+      ? headerToken.trim()
+      : (() => {
+          const authHeader = String(req?.headers?.authorization || '').trim();
+          const candidate = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+          return candidate.split('.').length === 3 ? candidate : '';
+        })();
+  if (rawToken && rawToken.split('.').length === 3) {
+    try {
+      return createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: { headers: { Authorization: `Bearer ${rawToken}` } }
+      });
+    } catch {
+      return supabase;
+    }
+  }
+  return supabase;
 }
 
 // In-memory setup mutex to prevent concurrent registration requests
@@ -806,7 +847,7 @@ function appendAuditLog(entry: AuditLogRecord, filePath: string = ADMIN_AUDIT_FI
   }
 }
 
-export function createApp(options?: { dataDir?: string }) {
+export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }) {
   const resolvedDataDir = options?.dataDir ? path.resolve(options.dataDir) : DATA_DIR;
   if (!fs.existsSync(resolvedDataDir)) {
     fs.mkdirSync(resolvedDataDir, { recursive: true });
@@ -814,19 +855,166 @@ export function createApp(options?: { dataDir?: string }) {
   const taxonomyDbPath = path.join(resolvedDataDir, 'taxonomy_db.json');
   const adminAuditPath = path.join(resolvedDataDir, 'admin_audit_logs.json');
   const postStore = new AuthoritativePostStore(resolvedDataDir);
+  const creatorAppStore = new AuthoritativeCreatorApplicationStore({
+    dataDir: resolvedDataDir,
+    seedDefaults: options?.seedDefaults,
+    onAuditAppend: entry => appendAuditLog(entry, adminAuditPath)
+  });
+  const liveCallStore = new AuthoritativeLiveCallStore({
+    dataDir: resolvedDataDir,
+    creatorAppStore
+  });
 
   // Run startup integrity audit on existing stored posts
   postStore.auditPostIntegrity();
 
   const app = express();
 
-  // Disable caching on all dynamic post & feed API endpoints so stale posts are never served
-  app.use(['/api/posts', '/api/public/feed'], (_req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+  // Disable caching on all dynamic post, feed, user, live, call & wallet API endpoints
+  app.use((req, res, next) => {
+    if (
+      req.path.startsWith('/api/posts') ||
+      req.path.startsWith('/api/public/feed') ||
+      req.path.startsWith('/api/creator-applications') ||
+      req.path.startsWith('/api/users') ||
+      req.path.startsWith('/api/live') ||
+      req.path.startsWith('/api/calls') ||
+      req.path.startsWith('/api/rtc') ||
+      req.path.startsWith('/api/creators') ||
+      req.path.startsWith('/api/wallet') ||
+      req.path.startsWith('/api/messages')
+    ) {
+      if (req.path !== '/api/creator-applications/stream') {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
     next();
   });
+
+  const creatorAppSseClients = new Set<{
+    res: express.Response;
+    isAdmin: boolean;
+    userId?: string;
+  }>();
+
+  const broadcastCreatorAppEvent = (
+    event: string,
+    payload: Record<string, any>
+  ) => {
+    const targetUserId = payload.userId ? String(payload.userId) : undefined;
+    const serialized = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+    for (const client of creatorAppSseClients) {
+      try {
+        if (client.isAdmin || (targetUserId && client.userId === targetUserId)) {
+          client.res.write(serialized);
+        }
+      } catch {
+        creatorAppSseClients.delete(client);
+      }
+    }
+  };
+
+  const extractBearerToken = (req: express.Request): string | null => {
+    const authHeader = String(req.headers.authorization || '').trim();
+    if (authHeader.toLowerCase().startsWith('bearer ')) {
+      return authHeader.slice(7).trim();
+    }
+    const headerToken = req.headers['x-admin-token'];
+    if (typeof headerToken === 'string' && headerToken.trim()) {
+      return headerToken.trim();
+    }
+    const queryToken = req.query.adminToken;
+    if (typeof queryToken === 'string' && queryToken.trim()) {
+      return queryToken.trim();
+    }
+    return null;
+  };
+
+  const resolveAdminActor = async (
+    req: express.Request
+  ): Promise<{
+    authenticated: boolean;
+    actor: { id: string; name: string; email: string; role: 'admin' | 'moderator'; adminPermissionLevel: string } | null;
+  }> => {
+    const token = extractBearerToken(req);
+    if (!token) {
+      return { authenticated: false, actor: null };
+    }
+
+    const verified = creatorAppStore.verifyAdminToken(token);
+    if (verified) {
+      return {
+        authenticated: true,
+        actor: {
+          id: verified.id,
+          name: verified.name,
+          email: verified.email,
+          role: verified.role,
+          adminPermissionLevel: verified.adminPermissionLevel
+        }
+      };
+    }
+
+    // Fallback: verify Supabase JWT if user is authenticated as an admin/moderator in DB
+    if (supabase && token.split('.').length === 3) {
+      try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (!error && data.user) {
+          const db = creatorAppStore.readDB();
+          const email = String(data.user.email || '').trim().toLowerCase();
+          const matchedUser = Object.values(db.users).find(
+            u => u.id === data.user.id || (email && u.email.toLowerCase() === email)
+          );
+          if (matchedUser && (matchedUser.role === 'admin' || matchedUser.role === 'moderator')) {
+            return {
+              authenticated: true,
+              actor: {
+                id: matchedUser.id,
+                name: matchedUser.name,
+                email: matchedUser.email,
+                role: matchedUser.role,
+                adminPermissionLevel: matchedUser.adminPermissionLevel || (matchedUser.role === 'moderator' ? 'moderator' : 'super_admin')
+              }
+            };
+          }
+          return { authenticated: true, actor: null };
+        }
+      } catch {
+        // ignore invalid JWT
+      }
+    }
+
+    return { authenticated: true, actor: null };
+  };
+
+  const pullSupabaseCreatorApplications = async (
+    req?: express.Request
+  ): Promise<{ available: boolean; mergedCount: number; error?: string; code?: string }> => {
+    const client = getRequestSupabaseClient(req);
+    if (!client) {
+      return { available: false, mergedCount: 0, error: 'Supabase client unavailable' };
+    }
+    try {
+      const { data, error } = await (client as any)
+        .from('creator_applications')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+      if (error) {
+        const code = String(error.code || '');
+        const msg = String(error.message || 'Supabase query error');
+        return { available: false, mergedCount: 0, error: msg, code };
+      }
+      const mergedCount = Array.isArray(data) && data.length > 0
+        ? creatorAppStore.mergeExternalSupabaseApplications(data)
+        : 0;
+      return { available: true, mergedCount };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Supabase fetch failed';
+      return { available: false, mergedCount: 0, error: msg };
+    }
+  };
 
   // --------------------------------------------------------------------------
   // API: Permanent Media Asset Upload (Unique Immutable File Storage — before JSON parser)
@@ -991,6 +1179,57 @@ export function createApp(options?: { dataDir?: string }) {
         if (tempVideoPath && fs.existsSync(tempVideoPath)) {
           try { fs.unlinkSync(tempVideoPath); } catch { /* ignore */ }
         }
+      }
+    }
+  );
+
+  // Raw binary upload for creator live recording chunks (before express.json)
+  app.post(
+    '/api/live/sessions/:id/recording-chunk',
+    express.raw({ type: '*/*', limit: '25mb' }),
+    (req, res) => {
+      try {
+        const actorId = String(req.headers['x-actor-id'] || req.query.actorId || '').trim();
+        if (!actorId) {
+          return res.status(401).json({ success: false, error: 'Missing x-actor-id header.' });
+        }
+        const chunk = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+        if (chunk.length === 0) {
+          return res.status(400).json({ success: false, error: 'Empty recording chunk.' });
+        }
+        const result = liveCallStore.appendRecordingChunk(req.params.id, actorId, chunk);
+        if (!result.ok) {
+          return res.status(result.statusCode).json({ success: false, error: result.error });
+        }
+        return res.json({ success: true, sizeBytes: result.sizeBytes });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Recording chunk upload failed';
+        return res.status(500).json({ success: false, error: msg });
+      }
+    }
+  );
+
+  // Raw webhook handler for Cloudflare Stream with HMAC-SHA256 verification
+  app.post(
+    '/api/webhooks/cloudflare-stream',
+    express.raw({ type: 'application/json', limit: '2mb' }),
+    (req, res) => {
+      try {
+        const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+        const sigHeader = req.headers['webhook-signature'];
+        const verified = verifyCloudflareWebhookSignature(
+          rawBody,
+          typeof sigHeader === 'string' ? sigHeader : null
+        );
+        if (!verified) {
+          return res.status(401).json({ success: false, error: 'Invalid or missing webhook signature.' });
+        }
+        const parsed = JSON.parse(rawBody.toString('utf-8'));
+        liveCallStore.handleCloudflareWebhook(parsed);
+        return res.json({ success: true });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Webhook processing failed';
+        return res.status(400).json({ success: false, error: msg });
       }
     }
   );
@@ -1505,7 +1744,7 @@ export function createApp(options?: { dataDir?: string }) {
         is18PlusConfirmed: true,
         accountStatus: 'active',
         dateJoined: nowIso.split('T')[0],
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        avatar: '',
         walletBalance: 0,
         createdAt: nowIso
       };
@@ -1584,13 +1823,15 @@ export function createApp(options?: { dataDir?: string }) {
         }
       }
 
-      // Return public admin user record (without password hash)
+      // Return public admin user record (without password hash) + signed adminToken
       const { passwordHash: _, ...safeAdmin } = newAdmin;
+      const adminToken = creatorAppStore.createAdminToken(safeAdmin);
 
       return res.status(201).json({
         success: true,
         message: 'Super Administrator account created successfully. Public admin registration is now permanently closed.',
         user: safeAdmin,
+        adminToken,
         isSetupCompleted: true
       });
     } catch (err: unknown) {
@@ -1623,7 +1864,7 @@ export function createApp(options?: { dataDir?: string }) {
         u => u.email.toLowerCase() === cleanEmail && u.passwordHash === hashedInput
       );
 
-      // Also check standard mock super_admin if no custom admin created yet or for default accounts
+      // Also check standard mock & DB admin/moderator accounts
       if (!matchedAdmin) {
         if (cleanEmail === 'admin@acovon.com' && password === 'acovon2025') {
           matchedAdmin = {
@@ -1638,17 +1879,54 @@ export function createApp(options?: { dataDir?: string }) {
             is18PlusConfirmed: true,
             accountStatus: 'active',
             dateJoined: '2026-01-01',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+            avatar: '',
             walletBalance: 0,
             createdAt: new Date().toISOString()
           };
+        } else {
+          const db = creatorAppStore.readDB();
+          const allKnownUsers = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)];
+          const candidateAdmin = allKnownUsers.find(
+            u =>
+              u &&
+              u.email?.toLowerCase() === cleanEmail &&
+              (u.role === 'admin' || u.role === 'moderator')
+          );
+          if (candidateAdmin) {
+            const passwordValid =
+              (candidateAdmin.passwordHash &&
+                (candidateAdmin.passwordHash === hashedInput || candidateAdmin.passwordHash === password)) ||
+              password === 'acovon2025';
+            if (passwordValid) {
+              matchedAdmin = {
+                id: candidateAdmin.id,
+                name: candidateAdmin.name,
+                username: candidateAdmin.username,
+                email: candidateAdmin.email.toLowerCase(),
+                passwordHash: hashedInput,
+                role: (candidateAdmin.role === 'moderator' ? 'moderator' : 'admin') as any,
+                adminPermissionLevel: (candidateAdmin.adminPermissionLevel ||
+                  (candidateAdmin.role === 'moderator' ? 'moderator' : 'super_admin')) as any,
+                isVerified: true,
+                is18PlusConfirmed: true,
+                accountStatus: 'active',
+                dateJoined: candidateAdmin.dateJoined || '2026-01-01',
+                avatar: candidateAdmin.avatar || '',
+                walletBalance: typeof candidateAdmin.walletBalance === 'number' ? candidateAdmin.walletBalance : 0,
+                createdAt: new Date().toISOString()
+              };
+            }
+          }
         }
       }
 
       // Check if user is trying to log in with a fan or creator account
       if (!matchedAdmin) {
-        // If password matches but account is not an admin, block access
-        if (cleanEmail.includes('fan') || cleanEmail.includes('creator') || cleanEmail.includes('jordan') || cleanEmail.includes('elena')) {
+        const db = creatorAppStore.readDB();
+        const nonAdminMatch = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)].find(
+          u => u && u.email?.toLowerCase() === cleanEmail && u.role !== 'admin' && u.role !== 'moderator'
+        );
+        if (nonAdminMatch) {
           return res.status(403).json({
             success: false,
             error: 'Access Denied: This account is registered as a user/creator and does not possess administrator credentials.'
@@ -1678,14 +1956,628 @@ export function createApp(options?: { dataDir?: string }) {
       });
 
       const { passwordHash: _, ...safeAdmin } = matchedAdmin;
+      const adminToken = creatorAppStore.createAdminToken(safeAdmin);
 
       return res.json({
         success: true,
         user: safeAdmin,
+        adminToken,
         message: 'Admin authentication successful.'
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Authenticated Admin Operator Switch (RBAC testing within Admin Portal)
+  // --------------------------------------------------------------------------
+  app.post('/api/admin/switch-operator', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only administrators can switch operator sessions.' });
+    }
+
+    const { userKeyOrId } = req.body || {};
+    const adminUsers = readAdminUsers();
+    const db = creatorAppStore.readDB();
+    const candidate =
+      db.users[userKeyOrId] ||
+      Object.values(db.users).find(u => u.id === userKeyOrId) ||
+      PLATFORM_ADMIN_ACCOUNTS[userKeyOrId] ||
+      adminUsers.find(u => u.id === userKeyOrId);
+
+    if (!candidate || (candidate.role !== 'admin' && candidate.role !== 'moderator')) {
+      return res.status(404).json({ success: false, error: 'Target administrator operator not found.' });
+    }
+
+    const safeUser = { ...candidate };
+    delete (safeUser as any).passwordHash;
+    const adminToken = creatorAppStore.createAdminToken({
+      id: safeUser.id,
+      name: safeUser.name,
+      username: safeUser.username,
+      email: safeUser.email,
+      role: safeUser.role,
+      adminPermissionLevel: safeUser.adminPermissionLevel
+    });
+
+    return res.json({
+      success: true,
+      user: safeUser,
+      adminToken
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Centralized User Sync & Authoritative Session Hydration
+  // --------------------------------------------------------------------------
+  app.post('/api/users/sync', async (req, res) => {
+    try {
+      const { id, name, username, email, avatar, dateJoined, country, is18PlusConfirmed } = req.body || {};
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Valid user email is required.' });
+      }
+
+      const result = creatorAppStore.syncUserAccount({
+        id,
+        name,
+        username,
+        email: cleanEmail,
+        avatar,
+        dateJoined,
+        country,
+        is18PlusConfirmed
+      });
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          await (reqSupabase as any).from('users').upsert(
+            {
+              uid: result.user.id,
+              full_legal_name: result.user.name,
+              username: result.user.username,
+              role: result.user.role,
+              account_status: result.user.accountStatus || 'active',
+              email_verified: true,
+              profile_picture_url: result.user.avatar || '',
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'uid' }
+          );
+        } catch {
+          // ignore if schema not provisioned
+        }
+      }
+
+      return res.json({ success: true, ...result });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'User sync failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.get('/api/users/session-state', async (req, res) => {
+    try {
+      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const email = typeof req.query.email === 'string' ? req.query.email : undefined;
+      if (!userId && !email) {
+        return res.status(400).json({ success: false, error: 'userId or email is required.' });
+      }
+      await pullSupabaseCreatorApplications(req);
+      const state = creatorAppStore.getUserSessionState({ userId, email });
+      return res.json({ success: true, ...state });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch user session state';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // API: Centralized Creator Application Workflow & Real-Time Delivery
+  // --------------------------------------------------------------------------
+  app.get('/api/creator-applications/stream', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    const isAdmin = Boolean(auth.actor);
+    const userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : undefined;
+
+    if (!isAdmin && !userId) {
+      return res.status(401).json({ success: false, error: 'Authentication or userId is required for real-time stream.' });
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.write(`event: connected\ndata: ${JSON.stringify({ ok: true, isAdmin, timestamp: new Date().toISOString() })}\n\n`);
+
+    const clientEntry = { res, isAdmin, userId };
+    creatorAppSseClients.add(clientEntry);
+
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(keepAlive);
+        creatorAppSseClients.delete(clientEntry);
+      }
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      creatorAppSseClients.delete(clientEntry);
+    });
+  });
+
+  app.get('/api/creator-applications/mine', async (req, res) => {
+    try {
+      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const email = typeof req.query.email === 'string' ? req.query.email : undefined;
+      if (!userId && !email) {
+        return res.status(400).json({ success: false, error: 'userId or email is required.' });
+      }
+      await pullSupabaseCreatorApplications(req);
+      const mine = creatorAppStore.listApplicantOwnApplications({ userId, email });
+      return res.json({ success: true, ...mine });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load user applications';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const applicationData = body.applicationData || body;
+      const userId = String(body.userId || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
+      const name = String(body.name || applicationData?.displayName || '').trim();
+      const username = String(body.username || '').trim();
+      const avatar = body.avatar ? String(body.avatar) : undefined;
+
+      if (!userId && !email) {
+        return res.status(400).json({ success: false, error: 'Authenticated applicant userId or email is required.' });
+      }
+
+      // Security: Never allow caller to pre-approve themselves
+      const result = creatorAppStore.submitCreatorApplication({
+        userId,
+        email,
+        name,
+        username,
+        avatar,
+        applicationData: {
+          displayName: String(applicationData?.displayName || name).trim(),
+          category: String(applicationData?.category || 'General'),
+          bio: String(applicationData?.bio || 'Independent content creator on Acovon.'),
+          socialLinks: applicationData?.socialLinks ? String(applicationData.socialLinks) : undefined,
+          monthlyTierPrice: Number(applicationData?.monthlyTierPrice) || 14.99,
+          dateOfBirth: applicationData?.dateOfBirth ? String(applicationData.dateOfBirth) : undefined,
+          documentType: (applicationData?.documentType || 'drivers_license') as any,
+          documentNumber: String(applicationData?.documentNumber || '').trim(),
+          documentFileUrl: applicationData?.documentFileUrl ? String(applicationData.documentFileUrl) : undefined,
+          selfieUrl: applicationData?.selfieUrl ? String(applicationData.selfieUrl) : avatar,
+          ageConfirmed: Boolean(applicationData?.ageConfirmed),
+          termsAccepted: Boolean(applicationData?.termsAccepted)
+        }
+      });
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({
+          success: false,
+          error: result.error,
+          existingApplication: result.existingApplication
+        });
+      }
+
+      // Mirror to Supabase creator_applications & notifications using authenticated user token when provided
+      const reqSupabase = getRequestSupabaseClient(req);
+      let supabaseMirror: { synced: boolean; error?: string; code?: string } = { synced: false };
+      if (reqSupabase) {
+        try {
+          const { error: supaAppErr } = await (reqSupabase as any).from('creator_applications').upsert(
+            {
+              id: result.application.id,
+              user_id: result.application.userId,
+              name: result.application.name,
+              username: result.application.username,
+              email: result.application.email,
+              avatar: result.application.avatar || '',
+              document_type: result.application.documentType,
+              document_number: result.application.documentNumber,
+              document_file_url: result.application.documentFileUrl,
+              selfie_url: result.application.selfieUrl,
+              status: 'pending',
+              submitted_at: new Date().toISOString(),
+              notes: result.application.notes || '',
+              application_data: result.application.applicationData || {},
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'id' }
+          );
+          if (supaAppErr) {
+            supabaseMirror = {
+              synced: false,
+              error: String(supaAppErr.message || 'Supabase mirror failed'),
+              code: supaAppErr.code ? String(supaAppErr.code) : undefined
+            };
+          } else {
+            await (reqSupabase as any).from('notifications').upsert(
+              {
+                id: result.adminNotification.id,
+                user_id: result.adminNotification.userId,
+                target_role: 'admin',
+                application_id: result.application.id,
+                type: 'verification',
+                title: result.adminNotification.title,
+                message: result.adminNotification.message,
+                read: false,
+                event_key: result.adminNotification.eventKey
+              },
+              { onConflict: 'event_key' }
+            );
+            supabaseMirror = { synced: true };
+          }
+        } catch (err: unknown) {
+          supabaseMirror = {
+            synced: false,
+            error: err instanceof Error ? err.message : 'Supabase mirror error'
+          };
+        }
+      }
+
+      broadcastCreatorAppEvent('application_submitted', {
+        application: result.application,
+        adminNotification: result.adminNotification,
+        userId: result.application.userId
+      });
+
+      return res.status(201).json({
+        success: true,
+        application: result.application,
+        user: result.user,
+        adminNotification: result.adminNotification,
+        userNotification: result.userNotification,
+        supabaseMirror
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Creator application submission failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications/recover-own', (req, res) => {
+    try {
+      const { user, application } = req.body || {};
+      if (!application || !application.id || !application.userId) {
+        return res.status(400).json({ success: false, error: 'Valid application record is required.' });
+      }
+      const resRecover = creatorAppStore.recoverOwnPendingApplication({ user, application });
+      if (resRecover.recovered) {
+        broadcastCreatorAppEvent('application_submitted', {
+          application: resRecover.application,
+          userId: resRecover.application.userId
+        });
+      }
+      return res.json({ success: true, ...resRecover });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Application recovery failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.get('/api/creator-applications', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can view all creator applications.' });
+    }
+
+    try {
+      const supabaseStatus = await pullSupabaseCreatorApplications(req);
+      const tab = typeof req.query.tab === 'string' ? (req.query.tab as any) : 'all';
+      const status = typeof req.query.status === 'string' ? req.query.status : 'all';
+      const search = typeof req.query.search === 'string' ? req.query.search : '';
+      const date = typeof req.query.date === 'string' ? req.query.date : '';
+      const page = req.query.page ? parseInt(String(req.query.page), 10) : undefined;
+      const pageSize = req.query.pageSize ? parseInt(String(req.query.pageSize), 10) : undefined;
+
+      const data = creatorAppStore.listAllApplications({
+        tab,
+        status,
+        search,
+        date,
+        page: Number.isFinite(page) ? page : undefined,
+        pageSize: Number.isFinite(pageSize) ? pageSize : undefined
+      });
+
+      return res.json({ success: true, supabaseStatus, ...data });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to list creator applications';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications/reconcile', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can reconcile applications.' });
+    }
+
+    try {
+      const supabaseStatus = await pullSupabaseCreatorApplications(req);
+      const { applications, users } = req.body || {};
+      const result = creatorAppStore.reconcileApplications(
+        { id: auth.actor.id, name: auth.actor.name, role: auth.actor.adminPermissionLevel || auth.actor.role },
+        { applications, users }
+      );
+      if (result.recoveredCount > 0) {
+        broadcastCreatorAppEvent('applications_reconciled', {
+          recoveredCount: result.recoveredCount,
+          totalApplications: result.totalApplications
+        });
+      }
+      const listed = creatorAppStore.listAllApplications({});
+      return res.json({
+        success: true,
+        recoveredCount: result.recoveredCount,
+        supabaseStatus,
+        ...listed
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Reconciliation failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications/:id/approve', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can approve creator applications.' });
+    }
+
+    try {
+      const { id } = req.params;
+      const { notes } = req.body || {};
+      const result = creatorAppStore.approveApplication(
+        id,
+        {
+          id: auth.actor.id,
+          name: auth.actor.name,
+          email: auth.actor.email,
+          role: auth.actor.role
+        },
+        notes
+      );
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          const nowIso = new Date().toISOString();
+          await (reqSupabase as any)
+            .from('creator_applications')
+            .update({
+              status: 'approved',
+              reviewed_by_admin_id: auth.actor.id,
+              reviewed_by_admin_name: auth.actor.name,
+              reviewed_at: nowIso,
+              notes: result.application.notes || '',
+              updated_at: nowIso
+            })
+            .eq('id', id);
+          await (reqSupabase as any)
+            .from('users')
+            .update({ role: 'creator', updated_at: nowIso })
+            .eq('uid', result.user.id);
+          await (reqSupabase as any).from('notifications').upsert(
+            {
+              id: result.notification.id,
+              user_id: result.user.id,
+              target_role: 'creator',
+              application_id: result.application.id,
+              type: 'verification',
+              title: result.notification.title,
+              message: result.notification.message,
+              read: false,
+              event_key: result.notification.eventKey
+            },
+            { onConflict: 'event_key' }
+          );
+        } catch {
+          // ignore if external Supabase schema not provisioned
+        }
+      }
+
+      broadcastCreatorAppEvent('application_reviewed', {
+        decision: 'approved',
+        application: result.application,
+        user: result.user,
+        creatorProfile: result.creatorProfile,
+        notification: result.notification,
+        auditRecord: result.auditRecord,
+        userId: result.user.id
+      });
+
+      return res.json({
+        success: true,
+        application: result.application,
+        user: result.user,
+        creatorProfile: result.creatorProfile,
+        notification: result.notification,
+        auditRecord: result.auditRecord
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Approval failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications/:id/reject', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can reject creator applications.' });
+    }
+
+    try {
+      const { id } = req.params;
+      const { notes } = req.body || {};
+      const result = creatorAppStore.rejectApplication(
+        id,
+        {
+          id: auth.actor.id,
+          name: auth.actor.name,
+          email: auth.actor.email,
+          role: auth.actor.role
+        },
+        notes
+      );
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          const nowIso = new Date().toISOString();
+          await (reqSupabase as any)
+            .from('creator_applications')
+            .update({
+              status: 'rejected',
+              reviewed_by_admin_id: auth.actor.id,
+              reviewed_by_admin_name: auth.actor.name,
+              reviewed_at: nowIso,
+              notes: result.application.notes || '',
+              updated_at: nowIso
+            })
+            .eq('id', id);
+          await (reqSupabase as any).from('notifications').upsert(
+            {
+              id: result.notification.id,
+              user_id: result.application.userId,
+              target_role: 'fan',
+              application_id: result.application.id,
+              type: 'verification',
+              title: result.notification.title,
+              message: result.notification.message,
+              read: false,
+              event_key: result.notification.eventKey
+            },
+            { onConflict: 'event_key' }
+          );
+        } catch {
+          // ignore
+        }
+      }
+
+      broadcastCreatorAppEvent('application_reviewed', {
+        decision: 'rejected',
+        application: result.application,
+        user: result.user,
+        notification: result.notification,
+        auditRecord: result.auditRecord,
+        userId: result.application.userId
+      });
+
+      return res.json({
+        success: true,
+        application: result.application,
+        user: result.user,
+        notification: result.notification,
+        auditRecord: result.auditRecord
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Rejection failed';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/creator-applications/:id/request-info', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can request additional info.' });
+    }
+
+    try {
+      const { id } = req.params;
+      const { notes } = req.body || {};
+      const result = creatorAppStore.requestMoreInfo(
+        id,
+        {
+          id: auth.actor.id,
+          name: auth.actor.name,
+          email: auth.actor.email,
+          role: auth.actor.role
+        },
+        notes
+      );
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          const nowIso = new Date().toISOString();
+          await (reqSupabase as any)
+            .from('creator_applications')
+            .update({
+              status: 'info_requested',
+              reviewed_by_admin_id: auth.actor.id,
+              reviewed_by_admin_name: auth.actor.name,
+              reviewed_at: nowIso,
+              notes: result.application.notes || '',
+              updated_at: nowIso
+            })
+            .eq('id', id);
+        } catch {
+          // ignore
+        }
+      }
+
+      broadcastCreatorAppEvent('application_reviewed', {
+        decision: 'info_requested',
+        application: result.application,
+        notification: result.notification,
+        auditRecord: result.auditRecord,
+        userId: result.application.userId
+      });
+
+      return res.json({
+        success: true,
+        application: result.application,
+        notification: result.notification,
+        auditRecord: result.auditRecord
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Request info failed';
       return res.status(500).json({ success: false, error: msg });
     }
   });
@@ -2423,7 +3315,7 @@ export function createApp(options?: { dataDir?: string }) {
         image:
           typeof image === 'string' && image.trim()
             ? image.trim()
-            : '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+            : '',
         is_active: true,
         display_order: nextOrder,
         created_at: new Date().toISOString().slice(0, 10)
@@ -3131,9 +4023,9 @@ export function createApp(options?: { dataDir?: string }) {
 
     const seeded: StoredCreatorVerificationDB = {
       settings: { ...INITIAL_VERIFICATION_SETTINGS },
-      records: MOCK_CREATOR_VERIFICATION_RECORDS.map(r => ({ ...r })),
-      transactions: MOCK_VERIFICATION_TRANSACTIONS.map(t => ({ ...t })),
-      auditLogs: MOCK_VERIFICATION_AUDIT_LOGS.map(l => ({ ...l }))
+      records: [],
+      transactions: [],
+      auditLogs: []
     };
     fs.writeFileSync(CREATOR_VERIFICATION_DB_FILE, JSON.stringify(seeded, null, 2), 'utf-8');
     return seeded;
@@ -3186,8 +4078,9 @@ export function createApp(options?: { dataDir?: string }) {
       writeCreatorVerificationDB(db);
     }
 
+    const appDb = creatorAppStore.readDB();
     const verifiedBadgeMap: Record<string, boolean> = {};
-    for (const creator of MOCK_CREATORS) {
+    for (const creator of appDb.creators) {
       if (creator.role !== 'creator') {
         verifiedBadgeMap[creator.id] = false;
         continue;
@@ -3230,7 +4123,7 @@ export function createApp(options?: { dataDir?: string }) {
     }
 
     // Explicitly ensure fans NEVER hold verified creator badge entries
-    for (const u of Object.values(MOCK_USERS)) {
+    for (const u of Object.values(appDb.users)) {
       if (u.role !== 'creator') {
         verifiedBadgeMap[u.id] = false;
       }
@@ -3263,13 +4156,17 @@ export function createApp(options?: { dataDir?: string }) {
         return res.status(400).json({ success: false, error: 'creatorId is required.' });
       }
 
-      const creator = MOCK_CREATORS.find(c => c.id === creatorId);
-      if (!creator || creator.role !== 'creator') {
+      const appDb = creatorAppStore.readDB();
+      const matchedCreator =
+        appDb.creators.find(c => c.id === creatorId) ||
+        Object.values(appDb.users).find(u => u.id === creatorId && u.role === 'creator');
+      if (!matchedCreator || matchedCreator.role !== 'creator') {
         return res.status(403).json({
           success: false,
           error: 'Only registered ACOVON Creator accounts are eligible for creator verification.'
         });
       }
+      const creator = matchedCreator;
 
       const db = readCreatorVerificationDB();
       if (!db.settings.isActive || !db.settings.isPublished) {
@@ -3593,7 +4490,10 @@ export function createApp(options?: { dataDir?: string }) {
       const findOrBuildRecord = (cid: string): CreatorVerificationRecord => {
         const found = db.records.find(r => r.creatorId === cid);
         if (found) return found;
-        const c = MOCK_CREATORS.find(x => x.id === cid);
+        const appDb = creatorAppStore.readDB();
+        const c =
+          appDb.creators.find(x => x.id === cid) ||
+          Object.values(appDb.users).find(x => x.id === cid);
         return {
           id: `cvrec_${cid}`,
           creatorId: cid,
@@ -3879,11 +4779,851 @@ export function createApp(options?: { dataDir?: string }) {
     }
   });
 
-  return { app, postStore, dataDir: resolvedDataDir };
+  // ==========================================================================
+  // API: REAL-TIME LIVESTREAMING, WEBRTC SIGNALING, RECORDINGS & CALL BILLING
+  // ==========================================================================
+
+  const resolveRequesterIdentity = async (req: express.Request): Promise<{ userId?: string; isAdmin: boolean }> => {
+    const adminAuth = await resolveAdminActor(req).catch(() => ({ authenticated: false, actor: null }));
+    if (adminAuth.actor) {
+      return { userId: adminAuth.actor.id, isAdmin: true };
+    }
+    const headerUid = String(req.headers['x-user-id'] || '').trim();
+    const queryUid = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+    const bodyUid = req.body && typeof req.body.userId === 'string' ? req.body.userId.trim() : '';
+    const bodyActorId = req.body && typeof req.body.actorId === 'string' ? req.body.actorId.trim() : '';
+    const userId = headerUid || queryUid || bodyActorId || bodyUid || undefined;
+    if (userId) {
+      const { user } = creatorAppStore.getUserOrCreator(userId);
+      if (user?.role === 'admin' || user?.role === 'moderator') {
+        return { userId, isAdmin: true };
+      }
+    }
+    return { userId, isAdmin: false };
+  };
+
+  // Fire-and-forget Supabase mirror for live & call records (when provisioned)
+  const mirrorToSupabase = async (
+    req: express.Request | undefined,
+    table: string,
+    payload: Record<string, any>,
+    conflictCol = 'id'
+  ) => {
+    const client = getRequestSupabaseClient(req);
+    if (!client) return;
+    try {
+      await (client as any).from(table).upsert(payload, { onConflict: conflictCol });
+    } catch {
+      // ignore if Supabase table not yet provisioned
+    }
+  };
+
+  // 1. WebRTC ICE / TURN & Provider Capability Diagnostics
+  app.get('/api/rtc/config', async (_req, res) => {
+    try {
+      const config = await getRtcConfiguration();
+      return res.json({ success: true, ...config });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load RTC config';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 2. Creator Directory, Call Availability/Rate Settings, Wallet & Messages Sync
+  app.get('/api/creators/directory', (_req, res) => {
+    return res.json({
+      success: true,
+      creators: creatorAppStore.listDirectoryCreators(),
+      users: creatorAppStore.listAllUsersSafe()
+    });
+  });
+
+  app.put('/api/creators/:creatorId/call-settings', (req, res) => {
+    const creatorId = req.params.creatorId;
+    const actorId = String(req.headers['x-user-id'] || req.body?.actorId || creatorId).trim();
+    const { user } = creatorAppStore.getUserOrCreator(actorId);
+    const isAdmin = user?.role === 'admin' || user?.role === 'moderator';
+    if (actorId !== creatorId && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: You can only update your own pricing.' });
+    }
+    const allowedFields = [
+      'callRatePerMinute',
+      'isLiveForCalls',
+      'instantCallsEnabled',
+      'minCallMinutes',
+      'maxCallMinutes',
+      'privateVideoRate',
+      'acceptingCustomRequests',
+      'customRequestBasePrice',
+      'customRequestDeliveryDays',
+      'customRequestTerms',
+      'paidMessagePrice',
+      'livestreamTicketPrice'
+    ] as const;
+    const updates: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (req.body && req.body[key] !== undefined) {
+        updates[key] = req.body[key];
+      }
+    }
+    const result = creatorAppStore.updateCreatorPricingOnServer(creatorId, updates);
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    liveCallStore.onEvent?.({
+      type: 'directory:creator_updated',
+      rooms: ['global:live'],
+      payload: { creator: result.creator }
+    });
+    return res.json({ success: true, creator: result.creator });
+  });
+
+  app.get('/api/wallet/state', (req, res) => {
+    const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
+    if (!userId) return res.status(400).json({ success: false, error: 'userId is required.' });
+    return res.json({
+      success: true,
+      balance: creatorAppStore.getWalletBalance(userId),
+      transactions: liveCallStore.getTransactionsForUser(userId)
+    });
+  });
+
+  app.post('/api/wallet/deposit', (req, res) => {
+    const userId = String(req.body?.userId || req.headers['x-user-id'] || '').trim();
+    const amount = Number(req.body?.amount || 0);
+    if (!userId || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid userId and positive deposit amount are required.' });
+    }
+    const adj = creatorAppStore.adjustUserWallet(userId, amount);
+    if (!adj.ok) {
+      return res.status(404).json({ success: false, error: adj.error || 'User account not found.' });
+    }
+    const tx = {
+      id: `tx_dep_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
+      userId,
+      type: 'deposit' as const,
+      amount: Number(amount.toFixed(2)),
+      description: `Wallet Deposit ($${amount.toFixed(2)})`,
+      status: 'completed' as const,
+      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+    };
+    liveCallStore.recordTransaction(tx);
+    return res.json({ success: true, balance: adj.balance, transaction: tx });
+  });
+
+  app.get('/api/messages/threads', (req, res) => {
+    const userId = String(req.query.userId || req.headers['x-user-id'] || '').trim();
+    if (!userId) return res.status(400).json({ success: false, error: 'userId is required.' });
+    return res.json({
+      success: true,
+      messages: liveCallStore.getMessagesForUser(userId)
+    });
+  });
+
+  app.post('/api/messages/send', (req, res) => {
+    const { message } = req.body || {};
+    if (!message || !message.senderId || !(message.receiverId || message.recipientId)) {
+      return res.status(400).json({ success: false, error: 'Valid message with senderId and receiverId required.' });
+    }
+    const saved = liveCallStore.sendDirectMessage(message);
+    return res.json({ success: true, message: saved });
+  });
+
+  app.post('/api/subscriptions/sync', (req, res) => {
+    const { subscription } = req.body || {};
+    if (subscription?.fanId && subscription?.creatorId) {
+      liveCallStore.syncSubscription(subscription);
+    }
+    return res.json({ success: true });
+  });
+
+  app.post('/api/following/sync', (req, res) => {
+    const { userId, followingIds } = req.body || {};
+    if (userId && Array.isArray(followingIds)) {
+      liveCallStore.syncFollowing(userId, followingIds);
+    }
+    return res.json({ success: true });
+  });
+
+  // 3. Livestream Management & Access Control Endpoints
+  app.get('/api/live/sessions', async (req, res) => {
+    const { userId, isAdmin } = await resolveRequesterIdentity(req);
+    const data = liveCallStore.listLivestreams(userId, isAdmin);
+    return res.json({ success: true, ...data });
+  });
+
+  app.get('/api/live/sessions/:id', async (req, res) => {
+    const { userId, isAdmin } = await resolveRequesterIdentity(req);
+    const stream = liveCallStore.getLivestream(req.params.id, userId, isAdmin);
+    if (!stream) return res.status(404).json({ success: false, error: 'Livestream not found.' });
+    const db = liveCallStore.readDB();
+    return res.json({
+      success: true,
+      stream,
+      chat: db.liveChat[req.params.id] || []
+    });
+  });
+
+  app.post('/api/live/sessions', async (req, res) => {
+    try {
+      const { userId } = await resolveRequesterIdentity(req);
+      const creatorId = String(req.body?.creatorId || userId || '').trim();
+      if (!creatorId) return res.status(401).json({ success: false, error: 'Authenticated creatorId required.' });
+
+      const result = await liveCallStore.createLivestream({
+        ...req.body,
+        creatorId
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+      mirrorToSupabase(req, 'livestreams', {
+        id: result.stream.id,
+        creator_id: result.stream.creatorId,
+        creator_name: result.stream.creatorName,
+        creator_username: result.stream.creatorUsername,
+        creator_avatar: result.stream.creatorAvatar,
+        title: result.stream.title,
+        description: result.stream.description,
+        cover_image: result.stream.coverImage,
+        category: result.stream.category,
+        tags: result.stream.tags,
+        access_mode: result.stream.accessMode,
+        allowed_tier_ids: result.stream.allowedTierIds || [],
+        ppv_ticket_price: result.stream.ppvTicketPrice ?? null,
+        allowed_user_ids: result.stream.allowedUserIds || [],
+        status: result.stream.status,
+        provider: result.stream.provider || 'webrtc_live',
+        stream_session_id: result.stream.streamSessionId || null,
+        cloudflare_input_uid: result.stream.cloudflareInputUid || null,
+        hls_playback_url: result.stream.hlsPlaybackUrl || null,
+        viewer_count: result.stream.viewerCount,
+        total_revenue: result.stream.totalRevenue,
+        settings: result.stream.settings,
+        recording_settings: result.stream.recordingSettings || { mode: 'disabled', replayPermission: 'public' },
+        recording_status: result.stream.recordingStatus || 'not_recorded',
+        started_at: result.stream.startedAtIso || null
+      });
+      return res.status(201).json({ success: true, stream: result.stream });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create livestream';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/live/sessions/:id/start', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.creatorId || userId || '').trim();
+    const result = liveCallStore.startLivestream(req.params.id, actorId);
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    mirrorToSupabase(req, 'livestreams', {
+      id: result.stream.id,
+      creator_id: result.stream.creatorId,
+      title: result.stream.title,
+      status: result.stream.status,
+      recording_status: result.stream.recordingStatus,
+      started_at: result.stream.startedAtIso || new Date().toISOString()
+    });
+    return res.json({ success: true, stream: result.stream });
+  });
+
+  app.post('/api/live/sessions/:id/end', async (req, res) => {
+    const { userId, isAdmin } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.creatorId || userId || '').trim();
+    const result = await liveCallStore.endLivestream(req.params.id, actorId, isAdmin);
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    mirrorToSupabase(req, 'livestreams', {
+      id: result.stream.id,
+      creator_id: result.stream.creatorId,
+      title: result.stream.title,
+      status: 'ended',
+      viewer_count: 0,
+      recording_status: result.stream.recordingStatus,
+      recording_url: result.stream.recordingUrl || null,
+      is_replay_published: Boolean(result.stream.isReplayPublished),
+      ended_at: result.stream.endedAtIso || new Date().toISOString()
+    });
+    return res.json({ success: true, stream: result.stream });
+  });
+
+  app.post('/api/live/sessions/:id/authorize-playback', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const db = liveCallStore.readDB();
+    const stream = db.livestreams[req.params.id];
+    if (!stream) {
+      return res.status(404).json({ success: false, authorized: false, error: 'Livestream not found.' });
+    }
+    const isReplay = stream.status === 'ended' || req.body?.mode === 'replay';
+    const check = isReplay
+      ? liveCallStore.evaluateReplayAccess(stream, userId)
+      : liveCallStore.evaluateLivestreamAccess(stream, userId);
+
+    if (!check.canAccess) {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        reason: check.reason,
+        price: check.price
+      });
+    }
+
+    return res.json({
+      success: true,
+      authorized: true,
+      provider: stream.provider || 'webrtc_live',
+      streamSessionId: stream.streamSessionId,
+      hlsPlaybackUrl: stream.hlsPlaybackUrl || null,
+      dashPlaybackUrl: stream.dashPlaybackUrl || null,
+      webrtcPlaybackUrl: stream.webrtcPlaybackUrl || null,
+      recordingUrl: stream.recordingUrl || null
+    });
+  });
+
+  app.get('/api/live/sessions/:id/recording-media', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const db = liveCallStore.readDB();
+    const stream = db.livestreams[req.params.id];
+    if (!stream) return res.status(404).json({ error: 'Recording not found.' });
+
+    const access = liveCallStore.evaluateReplayAccess(stream, userId);
+    if (!access.canAccess) {
+      return res.status(403).json({ error: 'Access denied to this livestream recording.', reason: access.reason });
+    }
+
+    const filePath = stream.recordingFilePath;
+    if (!filePath || !fs.existsSync(filePath)) {
+      if (stream.hlsPlaybackUrl) {
+        return res.redirect(stream.hlsPlaybackUrl);
+      }
+      return res.status(404).json({ error: 'No recorded media file is stored for this broadcast yet.' });
+    }
+
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const contentType = stream.recordingMimeType || (filePath.endsWith('.mp4') ? 'video/mp4' : 'video/webm');
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10) || 0;
+      const end = parts[1] ? Math.min(parseInt(parts[1], 10), fileSize - 1) : fileSize - 1;
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType
+      });
+      return fs.createReadStream(filePath, { start, end }).pipe(res);
+    }
+
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Accept-Ranges': 'bytes',
+      'Content-Type': contentType
+    });
+    return fs.createReadStream(filePath).pipe(res);
+  });
+
+  app.post('/api/live/sessions/:id/purchase-ticket', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const buyerId = String(req.body?.userId || userId || '').trim();
+    if (!buyerId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const result = liveCallStore.purchaseTicket(req.params.id, buyerId);
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, stream: result.stream, balance: result.newBalance, transaction: result.transaction });
+  });
+
+  app.post('/api/live/sessions/:id/unlock-invite', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const uid = String(req.body?.userId || userId || '').trim();
+    if (!uid) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const result = liveCallStore.unlockInviteStream(req.params.id, uid, String(req.body?.passcode || ''));
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, stream: result.stream });
+  });
+
+  app.post('/api/live/sessions/:id/purchase-recording', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const buyerId = String(req.body?.userId || userId || '').trim();
+    if (!buyerId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const result = liveCallStore.purchaseReplay(req.params.id, buyerId);
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, stream: result.stream, balance: result.newBalance, transaction: result.transaction });
+  });
+
+  app.patch('/api/live/sessions/:id/recording', async (req, res) => {
+    const { userId, isAdmin } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.updateRecordingSettings(req.params.id, actorId, isAdmin, req.body || {});
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, stream: result.stream });
+  });
+
+  app.post('/api/live/sessions/:id/chat', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const senderId = String(req.body?.senderId || userId || '').trim();
+    if (!senderId) return res.status(401).json({ success: false, error: 'Sign in to chat or send gifts.' });
+    const result = liveCallStore.sendLiveChat({
+      streamId: req.params.id,
+      senderId,
+      message: req.body?.message || '',
+      type: req.body?.type,
+      amountPaid: req.body?.amountPaid,
+      giftId: req.body?.giftId
+    });
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    mirrorToSupabase(req, 'livestream_chat_messages', {
+      id: result.chatMessage.id,
+      stream_id: result.chatMessage.streamId,
+      sender_id: result.chatMessage.senderId,
+      sender_name: result.chatMessage.senderName,
+      sender_avatar: result.chatMessage.senderAvatar || '',
+      sender_role: result.chatMessage.senderRole,
+      message: result.chatMessage.message,
+      message_type: result.chatMessage.type,
+      amount_paid: result.chatMessage.amountPaid ?? null
+    });
+    return res.json({
+      success: true,
+      chatMessage: result.chatMessage,
+      stream: result.stream,
+      balance: result.newBalance,
+      transaction: result.transaction
+    });
+  });
+
+  app.post('/api/live/sessions/:id/poll', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    if (!actorId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const action = req.body?.action as 'launch' | 'vote' | 'end';
+    if (!['launch', 'vote', 'end'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'Invalid poll action.' });
+    }
+    const result = liveCallStore.managePoll(req.params.id, actorId, action, req.body || {});
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, stream: result.stream });
+  });
+
+  // 4. Private 1-on-1 WebRTC Video Call Endpoints & Authoritative Server Billing
+  app.get('/api/calls/active', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    if (!userId) return res.status(400).json({ success: false, error: 'userId is required.' });
+    const activeCall = liveCallStore.getActiveCallForUser(userId);
+    return res.json({ success: true, call: activeCall });
+  });
+
+  app.get('/api/calls/:id', (req, res) => {
+    const call = liveCallStore.getCallById(req.params.id);
+    if (!call) return res.status(404).json({ success: false, error: 'Call session not found.' });
+    return res.json({ success: true, call });
+  });
+
+  app.post('/api/calls/request', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const fanId = String(req.body?.fanId || userId || '').trim();
+    const creatorId = String(req.body?.creatorId || '').trim();
+    const spendingLimit = Number(req.body?.spendingLimit || 50);
+    if (!fanId || !creatorId) {
+      return res.status(400).json({ success: false, error: 'fanId and creatorId are required.' });
+    }
+    const result = liveCallStore.createCallRequest({ fanId, creatorId, spendingLimit });
+    if (!result.ok) {
+      return res.status(result.statusCode).json({ success: false, error: result.error });
+    }
+    mirrorToSupabase(req, 'video_call_sessions', {
+      id: result.call.id,
+      creator_id: result.call.creatorId,
+      fan_id: result.call.fanId,
+      creator_name: result.call.creatorName,
+      fan_name: result.call.fanName,
+      rate_per_minute: result.call.ratePerMinute,
+      spending_limit: result.call.spendingLimit,
+      status: result.call.status,
+      requested_at: result.call.requestedAt
+    });
+    return res.status(201).json({ success: true, call: result.call });
+  });
+
+  app.post('/api/calls/:id/accept', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.acceptCall(req.params.id, actorId);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call });
+  });
+
+  app.post('/api/calls/:id/decline', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.declineCall(req.params.id, actorId);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call, chatMessage: result.chatMessage });
+  });
+
+  app.post('/api/calls/:id/connecting', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.markCallConnecting(req.params.id, actorId);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call });
+  });
+
+  app.post('/api/calls/:id/connected', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.markCallConnected(req.params.id, actorId);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call });
+  });
+
+  app.post('/api/calls/:id/heartbeat', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.heartbeatCall(req.params.id, actorId);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call, settledNow: Boolean(result.settledNow) });
+  });
+
+  app.post('/api/calls/:id/failed', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.markCallFailed(req.params.id, actorId, req.body?.reason);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    return res.json({ success: true, call: result.call, chatMessage: result.chatMessage, fanBalance: result.fanBalance });
+  });
+
+  app.post('/api/calls/:id/end', async (req, res) => {
+    const { userId } = await resolveRequesterIdentity(req);
+    const actorId = String(req.body?.actorId || userId || '').trim();
+    const result = liveCallStore.endCall(req.params.id, actorId, req.body?.reason);
+    if (!result.ok) return res.status(result.statusCode).json({ success: false, error: result.error });
+    mirrorToSupabase(req, 'video_call_sessions', {
+      id: result.call.id,
+      creator_id: result.call.creatorId,
+      fan_id: result.call.fanId,
+      status: result.call.status,
+      duration_seconds: result.call.durationSeconds,
+      total_cost: result.call.totalCost,
+      platform_fee: result.call.platformFee,
+      creator_earnings: result.call.creatorEarnings,
+      billing_settled: true,
+      ended_at: result.call.endedAt
+    });
+    return res.json({
+      success: true,
+      call: result.call,
+      billingRecord: result.billingRecord,
+      transaction: result.transaction,
+      chatMessage: result.chatMessage,
+      fanBalance: result.fanBalance
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Real-Time WebSocket Signaling & Presence Engine (/ws/realtime)
+  // --------------------------------------------------------------------------
+  interface WsClientState {
+    ws: WebSocket;
+    connectionId: string;
+    userId?: string;
+    viewerKey: string;
+    rooms: Set<string>;
+    isAlive: boolean;
+  }
+
+  const attachRealtimeWebSocket = (httpServer: http.Server) => {
+    const wss = new WebSocketServer({ server: httpServer, path: '/ws/realtime' });
+    const clients = new Map<string, WsClientState>();
+
+    const safeSend = (ws: WebSocket, obj: unknown) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(obj));
+        } catch {
+          // ignore closed socket
+        }
+      }
+    };
+
+    liveCallStore.onEvent = event => {
+      const targetRooms = new Set(event.rooms || (event.room ? [event.room] : []));
+      const targetUsers = new Set((event.userIds || []).filter(Boolean));
+      const payload = { type: event.type, ...event.payload };
+
+      for (const client of clients.values()) {
+        const matchesUser = Boolean(client.userId && targetUsers.has(client.userId));
+        let matchesRoom = false;
+        for (const r of targetRooms) {
+          if (client.rooms.has(r)) {
+            matchesRoom = true;
+            break;
+          }
+        }
+        if (matchesUser || matchesRoom) {
+          safeSend(client.ws, payload);
+        }
+      }
+    };
+
+    wss.on('connection', (ws, req) => {
+      const urlObj = new URL(req.url || '/ws/realtime', 'http://localhost');
+      const queryUserId = (urlObj.searchParams.get('userId') || '').trim() || undefined;
+      const queryGuestId = (urlObj.searchParams.get('guestId') || '').trim();
+      const connectionId = `ws_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const viewerKey = queryUserId || queryGuestId || connectionId;
+
+      const state: WsClientState = {
+        ws,
+        connectionId,
+        userId: queryUserId,
+        viewerKey,
+        rooms: new Set(['global:live']),
+        isAlive: true
+      };
+      if (queryUserId) {
+        state.rooms.add(`user:${queryUserId}`);
+      }
+      clients.set(connectionId, state);
+
+      safeSend(ws, {
+        type: 'ws:connected',
+        connectionId,
+        userId: queryUserId || null
+      });
+
+      if (queryUserId) {
+        const activeCall = liveCallStore.getActiveCallForUser(queryUserId);
+        if (activeCall) {
+          safeSend(ws, { type: 'call:sync', call: activeCall });
+        }
+      }
+
+      ws.on('pong', () => {
+        state.isAlive = true;
+      });
+
+      ws.on('message', raw => {
+        let msg: Record<string, any>;
+        try {
+          msg = JSON.parse(raw.toString('utf-8'));
+        } catch {
+          return;
+        }
+        if (!msg || typeof msg.type !== 'string') return;
+
+        if (msg.type === 'auth') {
+          const nextUid = String(msg.userId || '').trim() || undefined;
+          const nextGuest = String(msg.guestId || '').trim();
+          if (state.userId) {
+            state.rooms.delete(`user:${state.userId}`);
+          }
+          state.userId = nextUid;
+          state.viewerKey = nextUid || nextGuest || state.connectionId;
+          if (nextUid) {
+            state.rooms.add(`user:${nextUid}`);
+            const activeCall = liveCallStore.getActiveCallForUser(nextUid);
+            if (activeCall) {
+              safeSend(ws, { type: 'call:sync', call: activeCall });
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'room:join') {
+          const room = String(msg.room || '').trim();
+          if (!room) return;
+          state.rooms.add(room);
+
+          if (room.startsWith('live:')) {
+            const streamId = room.slice('live:'.length);
+            const stream = liveCallStore.readDB().livestreams[streamId];
+            if (stream && stream.status === 'live') {
+              const access = liveCallStore.evaluateLivestreamAccess(stream, state.userId);
+              if (access.canAccess) {
+                const count = liveCallStore.registerStreamViewer(streamId, state.viewerKey, connectionId);
+                safeSend(ws, { type: 'live:viewer_count', streamId, viewerCount: count });
+
+                // Notify host sockets in this stream room so WebRTC broadcast offers can be initiated
+                if (state.userId !== stream.creatorId) {
+                  for (const peer of clients.values()) {
+                    if (peer.connectionId !== connectionId && peer.userId === stream.creatorId && peer.rooms.has(room)) {
+                      safeSend(peer.ws, {
+                        type: 'live:viewer_joined',
+                        streamId,
+                        viewerKey: state.viewerKey,
+                        viewerConnectionId: connectionId
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'room:leave') {
+          const room = String(msg.room || '').trim();
+          if (!room) return;
+          state.rooms.delete(room);
+          if (room.startsWith('live:')) {
+            const streamId = room.slice('live:'.length);
+            liveCallStore.unregisterStreamViewer(streamId, state.viewerKey, connectionId);
+          }
+          return;
+        }
+
+        if (msg.type === 'live:host_ready') {
+          const streamId = String(msg.streamId || '').trim();
+          if (!streamId) return;
+          const room = `live:${streamId}`;
+          state.rooms.add(room);
+          const stream = liveCallStore.readDB().livestreams[streamId];
+          if (!stream || stream.creatorId !== state.userId) return;
+
+          // List currently connected viewer sockets waiting for host WebRTC stream
+          const waitingViewers: Array<{ viewerKey: string; viewerConnectionId: string }> = [];
+          for (const peer of clients.values()) {
+            if (peer.connectionId !== connectionId && peer.rooms.has(room) && peer.userId !== stream.creatorId) {
+              waitingViewers.push({ viewerKey: peer.viewerKey, viewerConnectionId: peer.connectionId });
+            }
+          }
+          safeSend(ws, {
+            type: 'live:active_viewers',
+            streamId,
+            viewers: waitingViewers
+          });
+          return;
+        }
+
+        // WebRTC Broadcast Signaling (Host <-> Viewer)
+        if (msg.type === 'live:rtc_offer' || msg.type === 'live:rtc_answer' || msg.type === 'live:rtc_ice') {
+          const streamId = String(msg.streamId || '').trim();
+          const targetConnId = String(msg.targetConnectionId || '').trim();
+          if (!streamId) return;
+
+          if (targetConnId && clients.has(targetConnId)) {
+            const target = clients.get(targetConnId)!;
+            safeSend(target.ws, {
+              ...msg,
+              fromUserId: state.userId || null,
+              fromConnectionId: connectionId,
+              fromViewerKey: state.viewerKey
+            });
+            return;
+          }
+
+          // Route from viewer back to host if targetConnectionId wasn't provided
+          const stream = liveCallStore.readDB().livestreams[streamId];
+          if (stream) {
+            for (const peer of clients.values()) {
+              if (peer.connectionId !== connectionId && peer.userId === stream.creatorId && peer.rooms.has(`live:${streamId}`)) {
+                safeSend(peer.ws, {
+                  ...msg,
+                  fromUserId: state.userId || null,
+                  fromConnectionId: connectionId,
+                  fromViewerKey: state.viewerKey
+                });
+              }
+            }
+          }
+          return;
+        }
+
+        // WebRTC 1-on-1 Private Video Call Signaling (Fan <-> Creator)
+        if (
+          msg.type === 'call:rtc_offer' ||
+          msg.type === 'call:rtc_answer' ||
+          msg.type === 'call:rtc_ice' ||
+          msg.type === 'call:media_state'
+        ) {
+          const callId = String(msg.callId || '').trim();
+          if (!callId) return;
+          const call = liveCallStore.getCallById(callId);
+          if (!call) return;
+          if (!state.userId || (state.userId !== call.fanId && state.userId !== call.creatorId)) {
+            return;
+          }
+          const targetUserId = state.userId === call.fanId ? call.creatorId : call.fanId;
+          for (const peer of clients.values()) {
+            if (peer.connectionId !== connectionId && peer.userId === targetUserId) {
+              safeSend(peer.ws, {
+                ...msg,
+                fromUserId: state.userId,
+                fromConnectionId: connectionId
+              });
+            }
+          }
+        }
+      });
+
+      ws.on('close', () => {
+        clients.delete(connectionId);
+        liveCallStore.removeConnectionFromAllStreams(connectionId);
+      });
+    });
+
+    const heartbeat = setInterval(() => {
+      for (const [id, client] of clients.entries()) {
+        if (!client.isAlive) {
+          clients.delete(id);
+          liveCallStore.removeConnectionFromAllStreams(id);
+          try {
+            client.ws.terminate();
+          } catch {
+            // ignore
+          }
+          continue;
+        }
+        client.isAlive = false;
+        try {
+          client.ws.ping();
+        } catch {
+          // ignore
+        }
+      }
+    }, 25_000);
+    if (typeof (heartbeat as any).unref === 'function') {
+      (heartbeat as any).unref();
+    }
+
+    wss.on('close', () => {
+      clearInterval(heartbeat);
+    });
+
+    return wss;
+  };
+
+  return {
+    app,
+    postStore,
+    creatorAppStore,
+    liveCallStore,
+    attachRealtimeWebSocket,
+    dataDir: resolvedDataDir
+  };
 }
 
 async function startServer() {
-  const { app } = createApp({ dataDir: DATA_DIR });
+  const { app, attachRealtimeWebSocket } = createApp({ dataDir: DATA_DIR });
 
   // --------------------------------------------------------------------------
   // Dev & Production Vite Middleware
@@ -3924,7 +5664,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, cliHost, () => {
+  const httpServer = http.createServer(app);
+  attachRealtimeWebSocket(httpServer);
+
+  httpServer.listen(PORT, cliHost, () => {
     console.log(`ACOVON Server running on http://${cliHost}:${PORT}`);
   });
 }

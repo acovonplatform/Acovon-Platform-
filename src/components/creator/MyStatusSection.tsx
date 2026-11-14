@@ -26,26 +26,6 @@ const TEXT_GRADIENTS = [
   { id: 'ocean', label: 'Deep Abyss', value: 'linear-gradient(135deg, #081d33 0%, #0284c7 100%)' }
 ];
 
-const DEMO_PRESET_PHOTOS = [
-  { label: 'Backstage Fitting', url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=900' },
-  { label: 'Studio Audio Deck', url: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=900' },
-  { label: 'High Altitude Trail', url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=900' },
-  { label: 'Met Gala Afterparty', url: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=900' }
-];
-
-const DEMO_PRESET_VIDEOS = [
-  { 
-    label: 'Runway Teaser (0:15)', 
-    url: '/videos/sample1.mp4', 
-    thumb: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=900' 
-  },
-  { 
-    label: 'Studio Rehearsal (0:12)', 
-    url: '/videos/sample2.mp4', 
-    thumb: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=900' 
-  }
-];
-
 export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
   onOpenViewer,
   initialTab,
@@ -72,7 +52,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
   const [caption, setCaption] = useState<string>('');
   const [textOverlay, setTextOverlay] = useState<string>('');
   const [backgroundColor, setBackgroundColor] = useState<string>(TEXT_GRADIENTS[0].value);
-  const [mediaUrl, setMediaUrl] = useState<string>(DEMO_PRESET_PHOTOS[0].url);
+  const [mediaUrl, setMediaUrl] = useState<string>('');
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   const [audience, setAudience] = useState<StatusAudience>('public');
   const [selectedTierId, setSelectedTierId] = useState<string>('');
@@ -144,7 +124,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
             setThumbnailUrl(canvas.toDataURL('image/jpeg', 0.8));
           }
         } catch {
-          setThumbnailUrl('https://images.unsplash.com/photo-1509631179647-0177331693ae?w=900');
+          setThumbnailUrl('');
         }
       };
 
@@ -587,7 +567,7 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                  Upload Media or Choose Preset
+                  Upload Media
                 </label>
 
                 {/* Upload Button */}
@@ -605,45 +585,6 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
                     onChange={handleFileUpload} 
                     className="hidden" 
                   />
-                </div>
-
-                {/* Presets Row */}
-                <div className="mt-3">
-                  <div className="text-[11px] font-medium text-neutral-400 mb-2">Or select a licensed demonstration asset:</div>
-                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2">
-                    {contentType === 'photo' ? (
-                      DEMO_PRESET_PHOTOS.map(p => (
-                        <button
-                          key={p.label}
-                          type="button"
-                          onClick={() => setMediaUrl(p.url)}
-                          className={`p-1.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                            mediaUrl === p.url ? 'bg-amber-400/20 border-amber-400' : 'bg-neutral-800/40 border-neutral-700'
-                          }`}
-                        >
-                          <img src={p.url} alt={p.label} className="w-9 h-9 rounded-lg object-cover" />
-                          <span className="text-[11px] font-medium text-white truncate">{p.label}</span>
-                        </button>
-                      ))
-                    ) : (
-                      DEMO_PRESET_VIDEOS.map(v => (
-                        <button
-                          key={v.label}
-                          type="button"
-                          onClick={() => {
-                            setMediaUrl(v.url);
-                            setThumbnailUrl(v.thumb);
-                          }}
-                          className={`p-1.5 rounded-xl border text-left flex items-center gap-2 transition ${
-                            mediaUrl === v.url ? 'bg-amber-400/20 border-amber-400' : 'bg-neutral-800/40 border-neutral-700'
-                          }`}
-                        >
-                          <img src={v.thumb} alt={v.label} className="w-9 h-9 rounded-lg object-cover" />
-                          <span className="text-[11px] font-medium text-white truncate">{v.label}</span>
-                        </button>
-                      ))
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -668,15 +609,8 @@ export const MyStatusSection: React.FC<MyStatusSectionProps> = ({
                     <img src={mediaUrl} alt="Preview" className="w-full h-full object-contain" />
                   ) : (
                     <video
-                      src={mediaUrl || '/videos/sample1.mp4'}
+                      src={mediaUrl}
                       controls
-                      onError={(e) => {
-                        const el = e.currentTarget;
-                        if (!el.src.includes('/videos/sample1.mp4')) {
-                          el.src = '/videos/sample1.mp4';
-                          el.load();
-                        }
-                      }}
                       className="w-full h-full object-contain"
                     />
                   )}

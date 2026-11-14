@@ -42,7 +42,8 @@ import {
   Trash2,
   RefreshCw,
   Smile,
-  ArrowDown
+  ArrowDown,
+  MessageCircle
 } from 'lucide-react';
 
 interface ChatViewProps {
@@ -74,38 +75,7 @@ interface StagedAttachment {
   supabaseFileId?: string;
 }
 
-const DEMO_QUICK_MEDIA = [
-  {
-    fileName: 'Paris_Atelier_Fitting_Lookbook.jpg',
-    fileType: 'image' as const,
-    fileSizeFormatted: '2.8 MB',
-    url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=400&q=50'
-  },
-  {
-    fileName: 'Backstage_Runway_Rehearsal_4K.mp4',
-    fileType: 'video' as const,
-    fileSizeFormatted: '16.4 MB',
-    url: '/videos/sample1.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=500&q=60'
-  },
-  {
-    fileName: 'VIP_Styling_Lookbook_Notes.jpg',
-    fileType: 'image' as const,
-    fileSizeFormatted: '3.1 MB',
-    url: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=400&q=50'
-  },
-  {
-    fileName: 'Studio_Soundcheck_Session_Clip.mp4',
-    fileType: 'video' as const,
-    fileSizeFormatted: '14.9 MB',
-    url: '/videos/sample2.mp4',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=60'
-  }
-];
-
-export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creator_elena' }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = '' }) => {
   const {
     currentUser,
     activeRole,
@@ -279,30 +249,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
     };
   }, [mobileShowChat]);
 
-  // Message requests mock (preserved & connected to Pending Requests filter)
-  const [messageRequests, setMessageRequests] = useState([
-    {
-      id: 'req_dm_1',
-      senderName: 'Derrick West',
-      handle: '@dwest_fan',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-      preview: 'Hello Elena, would love to commission a special private video styling consultation for our anniversary.',
-      offeredFee: 50.00,
-      time: '2h ago'
-    },
-    {
-      id: 'req_dm_2',
-      senderName: 'Sienna Miller',
-      handle: '@sienna_m',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-      preview: 'Hi! Can I ask about your VIP membership perks before joining your circle?',
-      offeredFee: 15.00,
-      time: '5h ago'
-    }
-  ]);
+  const [messageRequests, setMessageRequests] = useState<Array<{
+    id: string;
+    senderName: string;
+    handle: string;
+    avatar: string;
+    preview: string;
+    offeredFee: number;
+    time: string;
+  }>>([]);
 
   const recipientCreator = creators.find(c => c.id === selectedRecipientId) || creators[0];
-  const conversation = messages[selectedRecipientId] || [];
+  const conversation = recipientCreator ? (messages[recipientCreator.id] || []) : [];
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const el = messagesScrollRef.current;
@@ -566,23 +524,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
     }
   };
 
-  const handleAddDemoAsset = (demo: typeof DEMO_QUICK_MEDIA[0]) => {
-    const newItem: StagedAttachment = {
-      id: `att_demo_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      fileName: demo.fileName,
-      fileType: demo.fileType,
-      fileSizeFormatted: demo.fileSizeFormatted,
-      url: demo.url,
-      thumbnailUrl: demo.thumbnailUrl,
-      description: '',
-      isPaid: isCreatorRole,
-      price: demo.fileType === 'video' ? '25.00' : '15.00',
-      uploadProgress: 100
-    };
-    setStagedAttachments(prev => [...prev, newItem]);
-    setShowMediaPanel(true);
-  };
-
   // Send message (text or multi-attachment or paid text)
   const submitCurrentMessage = () => {
     // Case 1: Sending staged media attachments
@@ -701,6 +642,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   // Submit new Custom Video Request from inside Inbox
   const handleSubmitCustomRequest = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!recipientCreator) return;
     setReqError(null);
     const parsedPrice = parseFloat(reqBudget);
     if (!reqTitle.trim() || !reqInstructions.trim()) {
@@ -836,8 +778,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
   };
 
   const handleTipSubmit = () => {
+    if (!recipientCreator) return;
     const parsedTip = Math.max(1, parseFloat(tipAmount) || 20);
-    const res = tipCreator(selectedRecipientId, parsedTip);
+    const res = tipCreator(recipientCreator.id, parsedTip);
     if (res.success) {
       setShowTipModal(false);
       triggerToast(`Sent $${parsedTip.toFixed(2)} tip to ${recipientCreator.name}!`);
@@ -1041,11 +984,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                   }`}
                 >
                   <div className="relative shrink-0">
-                    <img
-                      src={c.avatar}
-                      alt={c.name}
-                      className="w-11 h-11 rounded-full object-cover border border-[#27272a]"
-                    />
+                    {c.avatar ? (
+                      <img
+                        src={c.avatar}
+                        alt={c.name}
+                        className="w-11 h-11 rounded-full object-cover border border-[#27272a]"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-[#1d1d24] border border-[#27272a] flex items-center justify-center text-xs font-bold text-[#fce7b0]">
+                        {(c.name || 'C').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     {c.isLiveForCalls && (
                       <span
                         className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#121215]"
@@ -1144,6 +1093,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           !mobileShowChat ? 'hidden md:flex' : 'flex'
         }`}
       >
+        {!recipientCreator ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-2">
+            <MessageCircle className="w-10 h-10 text-neutral-600" />
+            <h3 className="text-sm font-bold text-white">No conversations yet</h3>
+            <p className="text-xs text-neutral-400 max-w-xs">
+              Select a creator conversation or discover creators to start messaging.
+            </p>
+          </div>
+        ) : (
+        <>
         {/* 1. CONVERSATION HEADER WITH VIDEO CALL BUTTON & STATUS (Pinned/Sticky at top) */}
         <div className="sticky top-0 z-20 shrink-0 p-2 sm:p-3.5 border-b border-[#26262b] flex items-center justify-between bg-[#141418] gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -1157,11 +1116,17 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             </button>
 
             <div className="relative shrink-0">
-              <img
-                src={recipientCreator.avatar}
-                alt={recipientCreator.name}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border border-[#d4af37]/50"
-              />
+              {recipientCreator.avatar ? (
+                <img
+                  src={recipientCreator.avatar}
+                  alt={recipientCreator.name}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border border-[#d4af37]/50"
+                />
+              ) : (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#1d1d24] border border-[#d4af37]/50 flex items-center justify-center text-xs font-bold text-[#fce7b0]">
+                  {(recipientCreator.name || 'C').slice(0, 2).toUpperCase()}
+                </div>
+              )}
               <span
                 className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#141418] ${
                   recipientCreator.isLiveForCalls ? 'bg-emerald-500' : 'bg-neutral-500'
@@ -1413,15 +1378,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                             <p className="text-xs text-neutral-300 italic">"{linkedRequest.deliveredNotes}"</p>
                           )}
                           <video
-                            src={linkedRequest.deliveredVideoUrl || '/videos/sample1.mp4'}
+                            src={linkedRequest.deliveredVideoUrl}
                             controls
-                            onError={(e) => {
-                              const el = e.currentTarget;
-                              if (!el.src.includes('/videos/sample1.mp4')) {
-                                el.src = '/videos/sample1.mp4';
-                                el.load();
-                              }
-                            }}
                             className="w-full max-h-56 rounded-lg bg-black"
                           />
                           {!isCreatorRole && linkedRequest.status === 'delivered' && (
@@ -1607,21 +1565,20 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                               /* AUTHORIZED UNLOCKED MEDIA VIEW */
                               <div className="space-y-2 p-2">
                                 {att.fileType === 'video' ? (
-                                  <div className="relative rounded-lg overflow-hidden bg-black">
-                                    <video
-                                      src={att.url || '/videos/sample1.mp4'}
-                                      poster={att.thumbnailUrl}
-                                      controls
-                                      onError={(e) => {
-                                        const el = e.currentTarget;
-                                        if (!el.src.includes('/videos/sample1.mp4')) {
-                                          el.src = '/videos/sample1.mp4';
-                                          el.load();
-                                        }
-                                      }}
-                                      className="w-full max-h-64 object-contain"
-                                    />
-                                  </div>
+                                  att.url ? (
+                                    <div className="relative rounded-lg overflow-hidden bg-black">
+                                      <video
+                                        src={att.url}
+                                        poster={att.thumbnailUrl}
+                                        controls
+                                        className="w-full max-h-64 object-contain"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 rounded-lg bg-black text-xs text-neutral-400 text-center">
+                                      Video unavailable
+                                    </div>
+                                  )
                                 ) : att.fileType === 'image' ? (
                                   <div
                                     onClick={() =>
@@ -1929,30 +1886,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
               </div>
             )}
 
-            {/* Quick Licensed Demo Media Selector for Instant Testing */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              <span className="text-[10px] text-neutral-400 shrink-0">Quick attach studio asset:</span>
-              {DEMO_QUICK_MEDIA.map(demo => (
-                <button
-                  key={demo.fileName}
-                  type="button"
-                  onClick={() => handleAddDemoAsset(demo)}
-                  className="px-2.5 py-1 rounded-lg bg-[#1e1e26] hover:bg-[#272732] border border-[#2e2e38] text-[10px] text-neutral-200 flex items-center gap-1.5 shrink-0"
-                >
-                  {demo.fileType === 'video' ? (
-                    <VideoIcon className="w-3 h-3 text-amber-400" />
-                  ) : (
-                    <ImageIcon className="w-3 h-3 text-emerald-400" />
-                  )}
-                  <span className="truncate max-w-[140px]">{demo.fileName}</span>
-                </button>
-              ))}
-            </div>
-
             {/* Staged Attachment Items List */}
             {stagedAttachments.length === 0 ? (
               <div className="p-4 rounded-xl border border-dashed border-[#27272a] text-center text-xs text-neutral-400">
-                Select photos or videos from your device or choose a studio asset above.
+                Select photos or videos from your device to attach.
               </div>
             ) : (
               <div className="space-y-2">
@@ -2265,12 +2202,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
             </button>
           </div>
         </form>
+        </>
+        )}
       </div>
 
       {/* ================================================================= */}
       {/* MODAL 1: VIDEO CALL RATE & CONFIRMATION MODAL                     */}
       {/* ================================================================= */}
-      {showCallConfirmModal && (
+      {showCallConfirmModal && recipientCreator && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl acovon-modal-panel">
             <div className="flex items-center justify-between border-b border-[#27272a] pb-3">
@@ -2355,7 +2294,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* ================================================================= */}
       {/* MODAL 2: FAN CREATE CUSTOM VIDEO REQUEST INSIDE INBOX             */}
       {/* ================================================================= */}
-      {showNewRequestModal && (
+      {showNewRequestModal && recipientCreator && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <form
             onSubmit={handleSubmitCustomRequest}
@@ -2631,13 +2570,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
                         controls
                         playsInline
                         preload="metadata"
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          if (!el.src.includes('/videos/sample1.mp4')) {
-                            el.src = '/videos/sample1.mp4';
-                            el.load();
-                          }
-                        }}
                         className="w-full h-full object-contain"
                       />
                     </div>
@@ -2715,7 +2647,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
       {/* ================================================================= */}
       {/* MODAL 6: TIP MODAL                                                */}
       {/* ================================================================= */}
-      {showTipModal && (
+      {showTipModal && recipientCreator && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
           <div className="bg-[#121215] border border-[#27272a] rounded-2xl max-w-sm w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-5 space-y-4 acovon-modal-panel">
             <h4 className="font-semibold text-sm text-white">Send Direct Tip to {recipientCreator.name}</h4>
@@ -2775,19 +2707,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = 'creato
           </button>
           <div onClick={e => e.stopPropagation()} className="max-w-4xl w-full max-h-[85dvh] flex flex-col items-center">
             {lightboxMedia.type === 'video' ? (
-              <video
-                src={lightboxMedia.url || '/videos/sample1.mp4'}
-                controls
-                autoPlay
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (!el.src.includes('/videos/sample1.mp4')) {
-                    el.src = '/videos/sample1.mp4';
-                    el.load();
-                  }
-                }}
-                className="max-h-[78dvh] max-w-full rounded-xl"
-              />
+              lightboxMedia.url ? (
+                <video
+                  src={lightboxMedia.url}
+                  controls
+                  autoPlay
+                  className="max-h-[78dvh] max-w-full rounded-xl"
+                />
+              ) : (
+                <div className="text-xs text-neutral-400 p-8">Video unavailable</div>
+              )
             ) : (
               <img src={lightboxMedia.url} alt="" className="max-h-[78dvh] max-w-full object-contain rounded-xl" />
             )}

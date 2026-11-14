@@ -222,7 +222,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Elena Vance"
+                placeholder="Your creator display name"
                 className="w-full bg-[#18181c] border border-[#27272a] focus:border-[#d4af37] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors"
                 required
               />
@@ -241,7 +241,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  placeholder="elenavance"
+                  placeholder="your_handle"
                   className="w-full bg-[#18181c] border border-[#27272a] focus:border-[#d4af37] rounded-xl pl-8 pr-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors font-mono"
                   required
                 />

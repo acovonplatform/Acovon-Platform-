@@ -5,7 +5,7 @@
       "name": "Cumshot",
       "slug": "fashion-luxury",
       "description": "Couture atelier lookbooks, runway archives, styling diaries, and high-fashion editorial releases.",
-      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "image": "",
       "is_active": false,
       "display_order": 1,
       "created_at": "2025-01-01",
@@ -16,7 +16,7 @@
       "name": "Music & Audio Production",
       "slug": "music-audio-production",
       "description": "Studio sessions, uncompressed stem vaults, modular synthesizer patches, and film scoring masterclasses.",
-      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 2,
       "created_at": "2025-01-01"
@@ -26,7 +26,7 @@
       "name": "Fitness & Bodybuilding",
       "slug": "fitness-bodybuilding",
       "description": "Athletic conditioning, biomechanics drills, hypertrophy periodization, and performance nutrition.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 3,
       "created_at": "2025-01-01"
@@ -36,7 +36,7 @@
       "name": "Photography & Cinematography",
       "slug": "photography-cinematography",
       "description": "Anamorphic lens tests, DaVinci Resolve color grading suites, lighting diagrams, and visual storytelling.",
-      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 4,
       "created_at": "2025-01-01"
@@ -46,7 +46,7 @@
       "name": "Digital Art & 3D Design",
       "slug": "digital-art-3d-design",
       "description": "Procedural Houdini setups, Unreal Engine environments, PBR shader libraries, and concept art.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 5,
       "created_at": "2025-01-01"
@@ -56,7 +56,7 @@
       "name": "Gaming & Esports",
       "slug": "gaming-esports",
       "description": "Pro tournament VOD reviews, tactical mechanics breakdowns, competitive coaching, and live gameplay.",
-      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 6,
       "created_at": "2025-01-01"
@@ -66,7 +66,7 @@
       "name": "Culinary Arts & Gourmet",
       "slug": "culinary-arts-gourmet",
       "description": "Fine dining plating techniques, Michelin-inspired recipes, artisanal pastry, and sommelier pairings.",
-      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 7,
       "created_at": "2025-01-01"
@@ -76,7 +76,7 @@
       "name": "Tech & Software Development",
       "slug": "tech-software-development",
       "description": "Distributed systems architecture, full-stack engineering deep dives, AI engineering, and code reviews.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 8,
       "created_at": "2025-01-01"
@@ -86,7 +86,7 @@
       "name": "Education & Tutorials",
       "slug": "education-tutorials",
       "description": "Structured video curricula, hands-on workshops, language mastery, and academic breakdowns.",
-      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 9,
       "created_at": "2025-01-01"
@@ -96,7 +96,7 @@
       "name": "Coaching & Business",
       "slug": "coaching-business",
       "description": "Executive leadership, venture strategy, creator monetization blueprints, and personal advisory.",
-      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 10,
       "created_at": "2025-01-01"
@@ -106,7 +106,7 @@
       "name": "Dance & Choreography",
       "slug": "dance-choreography",
       "description": "Contemporary movement, stage choreography rehearsals, rhythm workshops, and performance reels.",
-      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 11,
       "created_at": "2025-01-01"
@@ -116,7 +116,7 @@
       "name": "Animation & Motion Design",
       "slug": "animation-motion-design",
       "description": "Keyframe storytelling, 2D/3D motion graphics, title sequence design, and visual effects.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 12,
       "created_at": "2025-01-01"
@@ -126,7 +126,7 @@
       "name": "Wellness & Meditation",
       "slug": "wellness-meditation",
       "description": "Breathwork protocols, mindfulness sessions, somatic recovery, and holistic longevity practices.",
-      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 13,
       "created_at": "2025-01-01"
@@ -136,7 +136,7 @@
       "name": "Amateur",
       "slug": "amateur",
       "description": "Authentic independent creator stories, unscripted daily captures, behind-the-scenes vlogs, and raw moments.",
-      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 14,
       "created_at": "2025-01-01"
@@ -146,7 +146,7 @@
       "name": "Lifestyle & Vlog",
       "slug": "lifestyle-vlog",
       "description": "Day-in-the-life diaries, international living, personal collections, and creator chronicles.",
-      "image": "/src/assets/images/creator_cover_luxury_1793476684350.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 15,
       "created_at": "2025-01-01"
@@ -156,7 +156,7 @@
       "name": "Beauty & Glamour",
       "slug": "beauty-glamour",
       "description": "Editorial makeup artistry, skincare rituals, fragrance curation, and red-carpet preparation.",
-      "image": "/src/assets/images/creator_avatar_elena_1793476684335.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 16,
       "created_at": "2025-01-01"
@@ -166,7 +166,7 @@
       "name": "Travel & Destinations",
       "slug": "travel-destinations",
       "description": "Global destination cinematography, hidden architectural gems, luxury hospitality, and cultural expeditions.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 17,
       "created_at": "2025-01-01"
@@ -176,7 +176,7 @@
       "name": "Comedy & Entertainment",
       "slug": "comedy-entertainment",
       "description": "Original sketches, live crowd-work clips, commentary, and high-energy entertainment.",
-      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 18,
       "created_at": "2025-01-01"
@@ -186,7 +186,7 @@
       "name": "ASMR & Relaxation",
       "slug": "asmr-relaxation",
       "description": "Binaural microphone recordings, spatial soundscapes, and calming sensory experiences.",
-      "image": "/src/assets/images/creator_avatar_marcus_1793476684480.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 19,
       "created_at": "2025-01-01"
@@ -196,7 +196,7 @@
       "name": "Cosplay & Performance",
       "slug": "cosplay-performance",
       "description": "Hand-crafted costume fabrication, prop engineering, character performances, and convention showcases.",
-      "image": "/src/assets/images/hero_acovon_creator_1793476683041.jpg",
+      "image": "",
       "is_active": true,
       "display_order": 20,
       "created_at": "2025-01-01"
@@ -1851,18 +1851,6 @@
     }
   ],
   "creatorCountries": {},
-  "postCountries": {
-    "131e2655-6a60-490e-ab9b-d660772b39af": {
-      "post_id": "131e2655-6a60-490e-ab9b-d660772b39af",
-      "creator_id": "creator_elena",
-      "video_country_id": "country_ke",
-      "country_name": "Kenya",
-      "iso_code": "KE"
-    }
-  },
-  "postCategories": {
-    "131e2655-6a60-490e-ab9b-d660772b39af": [
-      "cat_fashion_luxury"
-    ]
-  }
+  "postCountries": {},
+  "postCategories": {}
 }

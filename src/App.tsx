@@ -63,7 +63,7 @@ function AppContent() {
     }
     return 'feed';
   });
-  const [selectedCreatorId, setSelectedCreatorId] = useState<string>('creator_elena');
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string>('');
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   
   // Modals state
@@ -158,7 +158,7 @@ function AppContent() {
       if (!active) return;
 
       const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isAdminRoute = pathname.startsWith('/admin') || ['admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
+      const isAdminRoute = pathname.startsWith('/admin') || ['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
 
       if (data.session) {
         if (!isAdminRoute && pathname === '/login') {
@@ -228,7 +228,7 @@ function AppContent() {
     }
 
     if (tab === 'admin-panel' || tab === 'admin') {
-      const isAdminUser = currentUser?.role === 'admin' || !!(currentUser as any)?.adminPermissionLevel;
+      const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'moderator' || !!(currentUser as any)?.adminPermissionLevel;
       if (!isAdminUser) {
         window.history.pushState({}, '', '/admin');
         setCurrentTab('admin-access-denied');
@@ -646,7 +646,7 @@ function AppContent() {
         )}
 
         {currentTab === 'admin-panel' && (
-          currentUser?.role === 'admin' || (currentUser as any)?.adminPermissionLevel ? (
+          currentUser?.role === 'admin' || currentUser?.role === 'moderator' || (currentUser as any)?.adminPermissionLevel ? (
             <AdminDashboard onExit={() => handleNavigate('feed')} />
           ) : (
             <AdminAccessDenied

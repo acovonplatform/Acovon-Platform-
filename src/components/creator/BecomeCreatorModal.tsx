@@ -46,17 +46,57 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
   const [dateOfBirth, setDateOfBirth] = useState('2000-01-15');
   const [documentType, setDocumentType] = useState<'passport' | 'drivers_license' | 'national_id'>('drivers_license');
   const [documentNumber, setDocumentNumber] = useState('');
-  const [docFileUrl] = useState('https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=600&q=80');
-  const [selfieUrl] = useState(currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80');
+  const [docFileUrl, setDocFileUrl] = useState('');
+  const [selfieUrl, setSelfieUrl] = useState(currentUser.avatar || '');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingSelfie, setUploadingSelfie] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submittedConfirmation, setSubmittedConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const handleUploadVerificationImage = async (
+    file: File,
+    target: 'doc' | 'selfie'
+  ) => {
+    if (!file) return;
+    if (target === 'doc') setUploadingDoc(true);
+    else setUploadingSelfie(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/media/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-file-name': file.name,
+          'x-mime-type': file.type || 'image/jpeg',
+          'x-owner-id': currentUser.id
+        },
+        body: file
+      });
+      const data = await res.json();
+      if (res.ok && data?.success && data.url) {
+        if (target === 'doc') setDocFileUrl(data.url);
+        else setSelfieUrl(data.url);
+      } else {
+        setErrorMessage(data?.error || 'Failed to upload verification image.');
+      }
+    } catch {
+      setErrorMessage('Network error uploading verification image.');
+    } finally {
+      if (target === 'doc') setUploadingDoc(false);
+      else setUploadingSelfie(false);
+    }
+  };
+
   // If already pending or rejected
-  const isPending = !!userPendingVerification;
+  const isPending = !!userPendingVerification || submittedConfirmation;
+  const cleanUserEmail = String(currentUser.email || '').trim().toLowerCase();
   const latestRejectedVerification = verifications.find(
-    v => v.userId === currentUser.id && v.status === 'rejected'
+    v =>
+      v.status === 'rejected' &&
+      (v.userId === currentUser.id || (cleanUserEmail && String(v.email || '').toLowerCase() === cleanUserEmail))
   );
 
   const handleNextStep = (e: React.FormEvent) => {
@@ -69,7 +109,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     setStep(2);
   };
 
-  const handleSubmitApplication = (e: React.FormEvent) => {
+  const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -87,8 +127,8 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const res = applyToBecomeCreator({
+    try {
+      const res = await applyToBecomeCreator({
         displayName: displayName.trim(),
         category,
         bio: bio.trim() || 'Independent content creator on Acovon.',
@@ -103,13 +143,18 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
         termsAccepted: true
       });
 
-      setIsSubmitting(false);
       if (!res.success) {
         setErrorMessage(res.error || 'Failed to submit application.');
       } else {
+        setSubmittedConfirmation(true);
         if (onSuccess) onSuccess();
       }
-    }, 400);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to submit application. Please retry.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -155,23 +200,31 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
           </span>
         </div>
 
-        {/* Existing Pending Application Banner */}
+        {/* Existing Pending Application / Submission Confirmed Banner */}
         {isPending ? (
           <div className="space-y-5">
+            {submittedConfirmation && (
+              <div className="p-3.5 bg-emerald-950/50 border border-emerald-500/40 rounded-xl flex items-center gap-2.5 text-xs text-emerald-200">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  Application submitted and delivered to the ACOVON Admin Control Center queue for review.
+                </span>
+              </div>
+            )}
             <div className="p-4 bg-[#18181c] border border-amber-500/30 rounded-xl space-y-3">
               <div className="flex items-center gap-2 text-amber-400">
                 <Clock className="w-5 h-5 animate-pulse" />
                 <h4 className="font-bold text-sm text-white">Creator Application Pending Admin Review</h4>
               </div>
               <p className="text-xs text-neutral-300 leading-relaxed">
-                Your application for <strong>{userPendingVerification.name}</strong> was submitted on <strong>{userPendingVerification.submittedAt}</strong> and is linked to your existing ACOVON account (<strong>{currentUser.email}</strong>).
+                Your application for <strong>{userPendingVerification?.name || displayName || currentUser.name}</strong> was submitted on <strong>{userPendingVerification?.submittedAt || 'just now'}</strong> and is linked to your existing ACOVON account (<strong>{currentUser.email}</strong>).
               </p>
               <p className="text-xs text-neutral-400 leading-relaxed">
                 While your application is pending review by an authorized ACOVON Administrator, your account remains a <strong>Fan</strong> account. Once approved by an Admin, Creator Studio, Go Live, and Create Post will activate automatically on this account without requiring a second registration or new email.
               </p>
               <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 text-[11px] pt-1 text-neutral-400">
-                <div>Document: <span className="text-white capitalize">{userPendingVerification.documentType.replace('_', ' ')}</span></div>
-                <div>ID Ref: <span className="text-white font-mono">{userPendingVerification.documentNumber}</span></div>
+                <div>Document: <span className="text-white capitalize">{(userPendingVerification?.documentType || documentType).replace('_', ' ')}</span></div>
+                <div>ID Ref: <span className="text-white font-mono">{userPendingVerification?.documentNumber || documentNumber}</span></div>
               </div>
             </div>
 
@@ -238,7 +291,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Elena Vance, Marcus T, Luna Star"
+                    placeholder="Your public creator display name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]"
@@ -378,19 +431,41 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                   </div>
                 </div>
 
-                {/* Simulated ID & Biometric Uploads */}
+                {/* ID & Biometric Uploads */}
                 <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 pt-1">
                   <div className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2 text-center">
                     <div className="text-[11px] font-semibold text-neutral-300 flex items-center justify-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-[#d4af37]" />
                       <span>ID Document Image</span>
                     </div>
-                    <img
-                      src={docFileUrl}
-                      alt="ID Document"
-                      className="w-full h-20 rounded-lg object-cover border border-[#27272a]"
-                    />
-                    <span className="text-[10px] text-emerald-400 font-mono block">Scanned & Encrypted</span>
+                    {docFileUrl ? (
+                      <img
+                        src={docFileUrl}
+                        alt="ID Document"
+                        className="w-full h-20 rounded-lg object-cover border border-[#27272a]"
+                      />
+                    ) : (
+                      <div className="w-full h-20 rounded-lg bg-[#121216] border border-dashed border-[#2f2f38] flex flex-col items-center justify-center text-[10px] text-neutral-500 gap-1">
+                        <FileText className="w-5 h-5 text-neutral-600" />
+                        <span>No ID uploaded yet</span>
+                      </div>
+                    )}
+                    <label className="inline-flex items-center justify-center gap-1 text-[10px] text-[#fce7b0] hover:underline cursor-pointer">
+                      <Upload className="w-3 h-3" />
+                      <span>{uploadingDoc ? 'Uploading...' : docFileUrl ? 'Replace ID Photo' : 'Upload ID Photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadVerificationImage(file, 'doc');
+                        }}
+                      />
+                    </label>
+                    {docFileUrl && (
+                      <span className="text-[10px] text-emerald-400 font-mono block">Uploaded &amp; Encrypted</span>
+                    )}
                   </div>
 
                   <div className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2 text-center">
@@ -398,12 +473,34 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                       <Camera className="w-3.5 h-3.5 text-[#d4af37]" />
                       <span>Facial Biometric Selfie</span>
                     </div>
-                    <img
-                      src={selfieUrl}
-                      alt="Facial Selfie"
-                      className="w-full h-20 rounded-lg object-cover border border-[#27272a]"
-                    />
-                    <span className="text-[10px] text-emerald-400 font-mono block">Biometrics Verified</span>
+                    {selfieUrl ? (
+                      <img
+                        src={selfieUrl}
+                        alt="Facial Selfie"
+                        className="w-full h-20 rounded-lg object-cover border border-[#27272a]"
+                      />
+                    ) : (
+                      <div className="w-full h-20 rounded-lg bg-[#121216] border border-dashed border-[#2f2f38] flex flex-col items-center justify-center text-[10px] text-neutral-500 gap-1">
+                        <Camera className="w-5 h-5 text-neutral-600" />
+                        <span>No selfie uploaded yet</span>
+                      </div>
+                    )}
+                    <label className="inline-flex items-center justify-center gap-1 text-[10px] text-[#fce7b0] hover:underline cursor-pointer">
+                      <Upload className="w-3 h-3" />
+                      <span>{uploadingSelfie ? 'Uploading...' : selfieUrl ? 'Replace Selfie' : 'Upload Selfie'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadVerificationImage(file, 'selfie');
+                        }}
+                      />
+                    </label>
+                    {selfieUrl && (
+                      <span className="text-[10px] text-emerald-400 font-mono block">Biometric Ready</span>
+                    )}
                   </div>
                 </div>
 

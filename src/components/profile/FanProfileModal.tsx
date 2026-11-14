@@ -75,11 +75,17 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
         {/* Profile Header */}
         <div className="p-4 sm:p-6 bg-gradient-to-r from-[#18181f] via-[#141418] to-[#18181f] border-b border-[#26262b] flex items-start sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <img 
-              src={currentUser.avatar} 
-              alt={currentUser.name} 
-              className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-[#d4af37] shadow-xl shrink-0"
-            />
+            {currentUser.avatar ? (
+              <img 
+                src={currentUser.avatar} 
+                alt={currentUser.name} 
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl object-cover border-2 border-[#d4af37] shadow-xl shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-[#1f1f26] border-2 border-[#d4af37] shadow-xl shrink-0 flex items-center justify-center text-lg sm:text-xl font-bold text-[#fce7b0]">
+                {(currentUser.name || 'A').charAt(0).toUpperCase()}
+              </div>
+            )}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-brand font-bold text-base sm:text-lg text-white truncate">{currentUser.name}</h3>
@@ -154,11 +160,17 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                       }}
                       className="flex items-center gap-3 text-left group cursor-pointer"
                     >
-                      <img 
-                        src={creator.avatar} 
-                        alt={creator.name} 
-                        className="w-12 h-12 rounded-xl object-cover border border-[#d4af37]/40 group-hover:scale-105 transition-transform"
-                      />
+                      {creator.avatar ? (
+                        <img 
+                          src={creator.avatar} 
+                          alt={creator.name} 
+                          className="w-12 h-12 rounded-xl object-cover border border-[#d4af37]/40 group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-[#1f1f26] border border-[#d4af37]/40 flex items-center justify-center text-base font-bold text-[#fce7b0] shrink-0">
+                          {(creator.name || 'C').charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-bold text-white group-hover:text-[#fce7b0]">{creator.name}</span>
@@ -207,11 +219,17 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                   return (
                     <div key={sub.id} className="p-4 bg-[#18181c] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3 sm:gap-4">
                       <div className="flex items-center gap-3">
-                        <img 
-                          src={creator?.avatar} 
-                          alt={creator?.name} 
-                          className="w-12 h-12 rounded-xl object-cover border border-[#d4af37]"
-                        />
+                        {creator?.avatar ? (
+                          <img 
+                            src={creator.avatar} 
+                            alt={creator?.name} 
+                            className="w-12 h-12 rounded-xl object-cover border border-[#d4af37]"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-[#1f1f26] border border-[#d4af37] flex items-center justify-center text-base font-bold text-[#fce7b0] shrink-0">
+                            {(creator?.name || 'C').charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <div>
                           <div className="text-sm font-bold text-white">{creator?.name}</div>
                           <div className="text-xs text-[#d4af37] font-semibold">{sub.tierName} Tier · ${sub.monthlyPrice.toFixed(2)}/mo</div>
@@ -329,11 +347,17 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 likedPosts.map(post => (
                   <div key={post.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-2xl flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <img 
-                        src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
-                        alt="" 
-                        className="w-12 h-12 rounded-xl object-cover border border-[#27272a] shrink-0"
-                      />
+                      {post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar ? (
+                        <img 
+                          src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
+                          alt="" 
+                          className="w-12 h-12 rounded-xl object-cover border border-[#27272a] shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-[#1f1f26] border border-[#27272a] flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
+                          {(post.creatorName || 'C').charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-white truncate">{post.creatorName}</div>
                         <div className="text-[11px] text-neutral-300 line-clamp-1">{post.content}</div>
@@ -383,11 +407,17 @@ export const FanProfileModal: React.FC<FanProfileModalProps> = ({
                 purchasedPosts.map(post => (
                   <div key={post.id} className="p-3.5 bg-[#18181c] border border-amber-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <img 
-                        src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
-                        alt="" 
-                        className="w-12 h-12 rounded-xl object-cover border border-amber-500/40 shrink-0"
-                      />
+                      {post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar ? (
+                        <img 
+                          src={post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || post.creatorAvatar} 
+                          alt="" 
+                          className="w-12 h-12 rounded-xl object-cover border border-amber-500/40 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-[#1f1f26] border border-amber-500/40 flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
+                          {(post.creatorName || 'C').charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
                           <span>{post.creatorName}</span>

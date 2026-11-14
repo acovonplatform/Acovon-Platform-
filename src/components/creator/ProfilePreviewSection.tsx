@@ -110,12 +110,14 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
       }`}>
 
         {/* Cover Photo Banner */}
-        <div className="relative w-full h-48 sm:h-64 bg-neutral-900 overflow-hidden group">
-          <img
-            src={creator.coverImage}
-            alt={creator.name}
-            className="w-full h-full object-cover"
-          />
+        <div className="relative w-full h-48 sm:h-64 bg-gradient-to-br from-[#1b1810] via-[#131318] to-[#0c0c10] overflow-hidden group">
+          {creator.coverImage && (
+            <img
+              src={creator.coverImage}
+              alt={creator.name}
+              className="w-full h-full object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/30 to-transparent" />
 
           {onNavigateToBranding && (
@@ -137,11 +139,17 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#222228]">
             <div className="flex flex-col sm:flex-row sm:items-end gap-4">
               <div className="relative shrink-0 group">
-                <img
-                  src={creator.avatar}
-                  alt={creator.name}
-                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-4 border-[#09090b] shadow-2xl"
-                />
+                {creator.avatar ? (
+                  <img
+                    src={creator.avatar}
+                    alt={creator.name}
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-4 border-[#09090b] shadow-2xl"
+                  />
+                ) : (
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#1f1f26] border-4 border-[#09090b] shadow-2xl flex items-center justify-center text-3xl font-bold text-[#fce7b0]">
+                    {(creator.name || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 {creator.isLiveForCalls && (
                   <div className="absolute -top-1 -right-1 bg-emerald-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
@@ -316,11 +324,17 @@ export const ProfilePreviewSection: React.FC<ProfilePreviewSectionProps> = ({
                   const media = post.media[0];
                   return (
                     <div key={post.id} className="relative aspect-square rounded-xl bg-black overflow-hidden group">
-                      <img
-                        src={media?.thumbnailUrl || media?.url || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80'}
-                        alt=""
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
+                      {media?.thumbnailUrl || media?.url ? (
+                        <img
+                          src={media.thumbnailUrl || media.url}
+                          alt=""
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#141418] flex items-center justify-center text-neutral-600">
+                          <Film className="w-6 h-6" />
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
                         <div className="text-[10px] text-white flex items-center gap-2">
                           <span className="flex items-center gap-0.5"><Heart className="w-3 h-3 text-rose-400 fill-rose-400" /> {post.likesCount}</span>

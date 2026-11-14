@@ -88,7 +88,8 @@ import {
   BrandingHistoryRecord,
   CategoryRecord,
   CountryRecord,
-  UserTranslationPreferences
+  UserTranslationPreferences,
+  CreatorApplicationAuditRecord
 } from '../types';
 import {
   OFFICIAL_CATEGORIES,
@@ -102,60 +103,207 @@ import {
   applyThemeToDocument
 } from '../data/brandingThemes';
 import { getLocalSampleThumbnails } from '../utils/videoFrameExtractor';
-import {
-  SupportedLanguageCode,
-  LanguagePreferenceMode,
-  LanguageMetadata,
-  TranslationKeyRecord,
-  INITIAL_SUPPORTED_LANGUAGES,
-  INITIAL_TRANSLATION_RECORDS,
-  EXTENDED_UI_PHRASE_DICTIONARY,
-  detectSupportedBrowserLanguage,
-  detectTextLanguage,
-  translateAndCacheUGC
-} from '../data/i18nData';
+import { INITIAL_SUPPORTED_LANGUAGES, INITIAL_TRANSLATION_RECORDS, EXTENDED_UI_PHRASE_DICTIONARY, detectSupportedBrowserLanguage, detectTextLanguage, translateAndCacheUGC, SupportedLanguageCode, LanguagePreferenceMode, LanguageMetadata, TranslationKeyRecord } from '../data/i18nData';
 import { PLATFORM_WIDE_PHRASE_TRANSLATIONS } from '../data/i18nExtendedPhrases';
 import {
   logoutFromSupabase,
-  syncUserPreferencesToSupabase
+  syncUserPreferencesToSupabase,
+  subscribeToCreatorApplicationsRealtime,
+  approveCreatorApplicationViaSupabaseRpc,
+  rejectCreatorApplicationViaSupabaseRpc,
+  fetchAllSupabaseCreatorApplicationsWithStatus,
+  mapSupabaseRowToVerification,
+  submitCreatorApplicationToSupabase
 } from '../services/supabase';
 import { supabase } from '../supabaseClient.js';
-import { INITIAL_STATUSES } from '../data/mockStatuses';
 import {
-  MOCK_USERS,
-  MOCK_CREATORS,
-  MOCK_POSTS,
-  MOCK_SUBSCRIPTIONS,
-  MOCK_PURCHASES,
-  MOCK_CUSTOM_REQUESTS,
-  MOCK_MESSAGES,
-  MOCK_TRANSACTIONS,
-  MOCK_PROMOTIONS,
-  MOCK_VERIFICATIONS,
-  MOCK_REPORTS,
-  MOCK_NOTIFICATIONS,
+  PLATFORM_ADMIN_ACCOUNTS,
   MOCK_GIFTS,
-  MOCK_LIVESTREAMS,
-  MOCK_LIVE_CHAT,
   INITIAL_COMMISSION_SETTINGS,
-  MOCK_PAYOUT_REQUESTS,
-  MOCK_SUPPORT_TICKETS,
-  MOCK_AUDIT_LOGS,
   INITIAL_PLATFORM_CONFIG,
   INITIAL_VIDEO_PROCESSING_CONFIG,
-  MOCK_VIDEO_MEDIA_RECORDS,
-  MOCK_VIDEO_PROCESSING_JOBS,
   INITIAL_VERIFICATION_SETTINGS,
-  MOCK_CREATOR_VERIFICATION_RECORDS,
-  MOCK_VERIFICATION_TRANSACTIONS,
-  MOCK_VERIFICATION_AUDIT_LOGS,
-  INITIAL_RECOMMENDATION_CONFIG,
-  INITIAL_FAN_INTEREST_PROFILES,
-  INITIAL_ENGAGEMENT_EVENTS,
-  INITIAL_RECOMMENDATION_FEEDBACK,
-  INITIAL_PLATFORM_ANNOUNCEMENTS,
-  INITIAL_ANNOUNCEMENT_RECIPIENTS
+  INITIAL_RECOMMENDATION_CONFIG
 } from '../data/mockData';
+
+const GUEST_USER: User = {
+  id: 'guest_visitor',
+  name: 'Guest',
+  username: 'guest',
+  email: '',
+  avatar: '',
+  role: 'fan',
+  accountStatus: 'active',
+  walletBalance: 0,
+  isVerified: false,
+  is18PlusConfirmed: false,
+  dateJoined: new Date().toISOString().split('T')[0],
+  country: 'United States'
+};
+
+const DEMO_USER_IDS = new Set([
+  'user_fan_1',
+  'fan_sofia',
+  'fan_alex',
+  'fan_lucas',
+  'fan_banned_1',
+  'creator_newbie',
+  'creator_applicant_2'
+]);
+
+const DEMO_CREATOR_IDS = new Set([
+  'creator_elena',
+  'creator_marcus',
+  'creator_sarah',
+  'creator_kai',
+  'creator_maya',
+  'creator_leo',
+  'creator_chloe',
+  'creator_alex',
+  'creator_zara',
+  'creator_david'
+]);
+
+const DEMO_VERIF_IDS = new Set(['verif_1', 'verif_2', 'verif_3']);
+
+const isDemoAssetUrl = (url?: unknown): boolean => {
+  if (typeof url !== 'string' || !url.trim()) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('/videos/sample') || lower.includes('images.unsplash.com');
+};
+
+function runOneTimeDemoCachePurge(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    if (localStorage.getItem('acovon_prod_demo_purge_v1') === 'done') return;
+
+    // 1. Clean acovon_users_v2
+    const usersRaw = localStorage.getItem('acovon_users_v2');
+    if (usersRaw) {
+      const parsed = JSON.parse(usersRaw);
+      if (parsed && typeof parsed === 'object') {
+        const cleanedUsers: Record<string, any> = {};
+        for (const [k, u] of Object.entries<any>(parsed)) {
+          if (!u || typeof u !== 'object') continue;
+          if (DEMO_USER_IDS.has(k) || DEMO_USER_IDS.has(u.id)) continue;
+          const cleanAvatar = isDemoAssetUrl(u.avatar) ? '' : (u.avatar || '');
+          const isAdmin = u.role === 'admin' || u.role === 'moderator';
+          cleanedUsers[k] = {
+            ...u,
+            avatar: cleanAvatar,
+            walletBalance: isAdmin ? 0 : (typeof u.walletBalance === 'number' ? u.walletBalance : 0)
+          };
+        }
+        localStorage.setItem('acovon_users_v2', JSON.stringify(cleanedUsers));
+      }
+    }
+
+    // 2. Clean current user if it was the demo fan Jordan Cross
+    const currRaw = localStorage.getItem('acovon_current_user');
+    if (currRaw) {
+      const curr = JSON.parse(currRaw);
+      if (curr && (DEMO_USER_IDS.has(curr.id) || DEMO_CREATOR_IDS.has(curr.id))) {
+        localStorage.setItem('acovon_current_user', JSON.stringify(GUEST_USER));
+        localStorage.setItem('acovon_is_authenticated', 'false');
+      } else if (curr && typeof curr === 'object') {
+        localStorage.setItem(
+          'acovon_current_user',
+          JSON.stringify({
+            ...curr,
+            avatar: isDemoAssetUrl(curr.avatar) ? '' : (curr.avatar || '')
+          })
+        );
+      }
+    }
+
+    // 3. Clean creators cache
+    const creatorsRaw = localStorage.getItem('acovon_creators');
+    if (creatorsRaw) {
+      const parsed = JSON.parse(creatorsRaw);
+      if (Array.isArray(parsed)) {
+        const kept = parsed
+          .filter((c: any) => c && !DEMO_CREATOR_IDS.has(c.id))
+          .map((c: any) => ({
+            ...c,
+            avatar: isDemoAssetUrl(c.avatar) ? '' : (c.avatar || ''),
+            coverImage: isDemoAssetUrl(c.coverImage) ? '' : (c.coverImage || '')
+          }));
+        localStorage.setItem('acovon_creators', JSON.stringify(kept));
+      }
+    }
+
+    // 4. Clean posts cache (preserve real user-uploaded posts such as postitem_*)
+    const postsRaw = localStorage.getItem('acovon_posts');
+    if (postsRaw) {
+      const parsed = JSON.parse(postsRaw);
+      if (Array.isArray(parsed)) {
+        const kept = parsed.filter((p: any) => {
+          if (!p || !p.id) return false;
+          if (p.isDemo === true || String(p.id).startsWith('demo_') || DEMO_CREATOR_IDS.has(p.creatorId)) {
+            return false;
+          }
+          if (Array.isArray(p.media) && p.media.some((m: any) => isDemoAssetUrl(m?.url))) {
+            return false;
+          }
+          return true;
+        });
+        localStorage.setItem('acovon_posts', JSON.stringify(kept));
+      }
+    }
+
+    // 5. Clean statuses cache
+    const statusesRaw = localStorage.getItem('acovon_statuses');
+    if (statusesRaw) {
+      const parsed = JSON.parse(statusesRaw);
+      if (Array.isArray(parsed)) {
+        const kept = parsed.filter(
+          (s: any) => s && !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId) && !isDemoAssetUrl(s.mediaUrl)
+        );
+        localStorage.setItem('acovon_statuses', JSON.stringify(kept));
+      }
+    }
+
+    // 6. Clean verifications cache (keep real applications such as wiztans & wuluxe)
+    const verifRaw = localStorage.getItem('acovon_verifications_v2');
+    if (verifRaw) {
+      const parsed = JSON.parse(verifRaw);
+      if (Array.isArray(parsed)) {
+        const kept = parsed
+          .filter((v: any) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId))
+          .map((v: any) => ({
+            ...v,
+            avatar: isDemoAssetUrl(v.avatar) ? '' : (v.avatar || ''),
+            documentFileUrl: isDemoAssetUrl(v.documentFileUrl) ? '' : (v.documentFileUrl || ''),
+            selfieUrl: isDemoAssetUrl(v.selfieUrl) ? '' : (v.selfieUrl || '')
+          }));
+        localStorage.setItem('acovon_verifications_v2', JSON.stringify(kept));
+      }
+    }
+
+    // 7. Reset sample-only local caches
+    for (const key of [
+      'acovon_video_media_records',
+      'acovon_video_processing_jobs',
+      'acovon_creator_verification_records',
+      'acovon_verification_transactions',
+      'acovon_verification_audit_logs',
+      'acovon_fan_interest_profiles',
+      'acovon_engagement_events',
+      'acovon_recommendation_feedback',
+      'acovon_platform_announcements_v1',
+      'acovon_announcement_recipients_v1',
+      'acovon_audit_logs'
+    ]) {
+      localStorage.removeItem(key);
+    }
+
+    localStorage.setItem('acovon_prod_demo_purge_v1', 'done');
+  } catch {
+    // ignore storage errors
+  }
+}
+
+runOneTimeDemoCachePurge();
 
 interface AdSettings {
   adsEnabled: boolean;
@@ -413,7 +561,23 @@ interface AppContextType {
   updatePlatformConfig: (updates: Partial<PlatformConfig>) => { success: boolean; error?: string };
   updateCommissionSettings: (newSettings: Partial<CommissionSettings>) => void;
   updateAdSettings: (newSettings: Partial<AdSettings>) => void;
-  reviewVerification: (verificationId: string, status: 'approved' | 'rejected' | 'info_requested', notes?: string) => void;
+  reviewVerification: (
+    verificationId: string,
+    status: 'approved' | 'rejected' | 'info_requested',
+    notes?: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  creatorApplicationAuditLogs: CreatorApplicationAuditRecord[];
+  creatorApplicationCounts: { all: number; pending: number; approved: number; rejected: number };
+  creatorApplicationSyncStatus: {
+    isSyncing: boolean;
+    lastSyncedAt?: string;
+    error?: string;
+    recoveredCount?: number;
+    supabaseAvailable?: boolean;
+    supabaseError?: string;
+    supabaseCode?: string;
+  };
+  refreshCreatorApplications: (opts?: { reconcile?: boolean; token?: string }) => Promise<{ success: boolean; error?: string; total?: number }>;
   resolveReport: (reportId: string, actionTaken: string) => void;
   createPromotionCampaign: (data: Omit<PromotionCampaign, 'id' | 'impressions' | 'clicks' | 'profileVisits' | 'status' | 'startDate' | 'endDate'>) => { success: boolean; error?: string };
   updateCreatorProfile: (creatorId: string, updates: Partial<CreatorProfile>) => { success: boolean; error?: string };
@@ -459,7 +623,7 @@ interface AppContextType {
   forwardPostInMessage: (postId: string, recipientId: string, customNote?: string) => { success: boolean; error?: string };
 
   // Creator Application & Verification Flow
-  applyToBecomeCreator: (data: CreatorApplicationData) => { success: boolean; error?: string };
+  applyToBecomeCreator: (data: CreatorApplicationData) => Promise<{ success: boolean; error?: string; application?: CreatorVerification }>;
   userPendingVerification: CreatorVerification | undefined;
 
   // Stories & Status System
@@ -736,7 +900,8 @@ interface AppContextType {
   }) => { success: boolean; user?: User; error?: string };
   authenticateAccount: (
     emailOrUsername: string,
-    password: string
+    password: string,
+    supabaseUserId?: string
   ) => {
     success: boolean;
     detectedRole?: UserRole;
@@ -1044,7 +1209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const updatedUsers = JSON.parse(e.newValue);
           if (updatedUsers && typeof updatedUsers === 'object') {
-            setUsers(prev => ({ ...updatedUsers, ...prev, ...updatedUsers }));
+            setUsers(prev => normalizeUsersMap({ ...prev, ...updatedUsers }));
           }
         } catch {
           // ignore
@@ -1074,7 +1239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppearanceMode(resolvedColorMode === 'light' ? 'dark' : 'light');
   };
 
-  // Current user state (defaults to fan Jordan Cross for first-time inspection)
+  // Current user state (defaults to unauthenticated Guest visitor until signed in)
   const [currentUser, setCurrentUser] = useState<User | CreatorProfile>(() => {
     try {
       const saved = localStorage.getItem('acovon_current_user');
@@ -1083,6 +1248,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (parsed && typeof parsed === 'object' && parsed.id) {
           return {
             ...parsed,
+            avatar: isDemoAssetUrl(parsed.avatar) ? '' : (parsed.avatar || ''),
             walletBalance: typeof parsed.walletBalance === 'number' ? parsed.walletBalance : 0
           };
         }
@@ -1090,7 +1256,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // fallback
     }
-    return MOCK_USERS.fan_jordan;
+    return GUEST_USER;
   });
 
   const [activeRole, setActiveRole] = useState<UserRole>(currentUser.role);
@@ -1126,19 +1292,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     openGuestAuthPrompt(actionLabel);
     return false;
   };
+  const normalizeUserRecord = (raw: Partial<User> | null | undefined, fallback?: User): User | null => {
+    if (!raw || typeof raw !== 'object') return fallback || null;
+    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id : fallback?.id || '';
+    if (!id) return null;
+    const parsedBalance = Number(raw.walletBalance);
+    const walletBalance = Number.isFinite(parsedBalance)
+      ? parsedBalance
+      : typeof fallback?.walletBalance === 'number'
+      ? fallback.walletBalance
+      : 0;
+    const rawAvatar = typeof raw.avatar === 'string' && raw.avatar.trim() && !isDemoAssetUrl(raw.avatar) ? raw.avatar : '';
+    return {
+      ...(fallback || {}),
+      ...raw,
+      id,
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name : fallback?.name || 'Member',
+      username: typeof raw.username === 'string' && raw.username.trim() ? raw.username : fallback?.username || `user_${id.slice(0, 6)}`,
+      email: typeof raw.email === 'string' ? raw.email : fallback?.email || '',
+      avatar: rawAvatar || fallback?.avatar || '',
+      role: (raw.role || fallback?.role || 'fan') as UserRole,
+      accountStatus: (raw.accountStatus || fallback?.accountStatus || 'active') as AccountStatus,
+      walletBalance,
+      isVerified: typeof raw.isVerified === 'boolean' ? raw.isVerified : Boolean(fallback?.isVerified),
+      dateJoined: typeof raw.dateJoined === 'string' && raw.dateJoined.trim() ? raw.dateJoined : fallback?.dateJoined || '2026-01-01'
+    };
+  };
+
+  const normalizeUsersMap = (rawMap: Record<string, any>): Record<string, User> => {
+    const adminById = new Map(Object.values(PLATFORM_ADMIN_ACCOUNTS).map(u => [u.id, u]));
+    const result: Record<string, User> = { ...PLATFORM_ADMIN_ACCOUNTS };
+    Object.entries(rawMap || {}).forEach(([key, val]) => {
+      if (!val || typeof val !== 'object') return;
+      if (DEMO_USER_IDS.has(key) || DEMO_USER_IDS.has(String(val.id || ''))) return;
+      const fallback = PLATFORM_ADMIN_ACCOUNTS[key] || (val.id ? adminById.get(String(val.id)) : undefined);
+      const normalized = normalizeUserRecord(val, fallback);
+      if (normalized) {
+        result[key] = normalized;
+      }
+    });
+    return result;
+  };
+
   const [users, setUsers] = useState<Record<string, User>>(() => {
     try {
       const saved = localStorage.getItem('acovon_users_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          return { ...parsed, ...MOCK_USERS, ...parsed };
+          return normalizeUsersMap(parsed);
         }
       }
     } catch {
       // fallback
     }
-    return MOCK_USERS;
+    return { ...PLATFORM_ADMIN_ACCOUNTS };
   });
 
   useEffect(() => {
@@ -1181,14 +1389,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   .replace(/[^a-z0-9_.-]/g, '_'),
                 email: email || `${uid.slice(0, 8)}@acovon.com`,
                 avatar:
-                  row.profile_picture_url && String(row.profile_picture_url).startsWith('http')
+                  row.profile_picture_url && String(row.profile_picture_url).startsWith('http') && !isDemoAssetUrl(row.profile_picture_url)
                     ? String(row.profile_picture_url)
-                    : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+                    : '',
                 role: (row.role as UserRole) || 'fan',
                 accountStatus: (row.account_status as AccountStatus) || 'active',
                 creatorApplicationStatus: 'not_applied',
                 creatorApprovalStatus: 'not_applied',
-                walletBalance: 50.0,
+                walletBalance: 0,
                 isVerified: Boolean(row.email_verified),
                 is18PlusConfirmed: true,
                 dateJoined: joinedDate,
@@ -1239,11 +1447,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : new Date().toISOString().split('T')[0];
       const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
+      // Do not clobber an active Admin Portal session with a lingering Supabase user session
+      const isOnAdminRoute =
+        typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+      let storedRole: string | undefined;
+      let hasAdminToken = false;
+      try {
+        const storedRaw = localStorage.getItem('acovon_current_user');
+        if (storedRaw) {
+          storedRole = JSON.parse(storedRaw)?.role;
+        }
+        hasAdminToken = Boolean(localStorage.getItem('acovon_admin_token'));
+      } catch {
+        // ignore
+      }
+      const preserveAdminSession =
+        isOnAdminRoute || (hasAdminToken && (storedRole === 'admin' || storedRole === 'moderator'));
+
+      let resolvedLocalUser: User | null = null;
       setUsers(prev => {
         const existingEntry = Object.entries(prev).find(
           ([k, u]) => k === uid || u.id === uid || u.email.toLowerCase() === email
         );
         if (existingEntry) {
+          resolvedLocalUser = existingEntry[1];
           return prev;
         }
         const newUser: User = {
@@ -1251,12 +1478,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: String(metaName),
           username: cleanUsername,
           email,
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          avatar: '',
           role: 'fan',
           accountStatus: 'active',
           creatorApplicationStatus: 'not_applied',
           creatorApprovalStatus: 'not_applied',
-          walletBalance: 50.0,
+          walletBalance: 0,
           isVerified: false,
           is18PlusConfirmed: true,
           dateJoined: nowDate,
@@ -1264,6 +1491,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: nowTimestamp,
           country: 'United States'
         };
+        resolvedLocalUser = newUser;
         const next = { [uid]: newUser, ...prev };
         try {
           localStorage.setItem('acovon_users_v2', JSON.stringify(next));
@@ -1272,6 +1500,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return next;
       });
+
+      if (!preserveAdminSession && resolvedLocalUser) {
+        setIsAuthenticated(true);
+        setCurrentUser(prev => {
+          const prevEmail = String(prev?.email || '').trim().toLowerCase();
+          if (
+            prev?.id === 'user_fan_1' ||
+            (prevEmail && prevEmail !== email) ||
+            (prev?.id !== uid && resolvedLocalUser)
+          ) {
+            return resolvedLocalUser!;
+          }
+          return prev;
+        });
+        setActiveRole(prev => {
+          const targetRole = resolvedLocalUser?.role || 'fan';
+          return prev === 'admin' || prev === 'moderator' ? prev : targetRole;
+        });
+      }
+
+      // Sync with centralized backend so Admin sees user & user gets authoritative role/creator status
+      fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: uid,
+          name: String(metaName),
+          username: cleanUsername,
+          email,
+          dateJoined: nowDate
+        })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (!mounted || !data?.success || !data.user) return;
+          const authUser = data.user as User;
+          setUsers(prev => ({
+            ...prev,
+            [authUser.id]: { ...(prev[authUser.id] || {}), ...authUser }
+          }));
+          if (data.creatorProfile) {
+            setCreators(prev => {
+              const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = data.creatorProfile;
+                return next;
+              }
+              return [data.creatorProfile, ...prev];
+            });
+          }
+          if (data.latestApplication) {
+            setVerifications(prev => {
+              const filtered = prev.filter(v => v.id !== data.latestApplication.id);
+              return [data.latestApplication, ...filtered];
+            });
+          }
+          if (Array.isArray(data.notifications) && data.notifications.length > 0) {
+            setNotifications(prev => {
+              const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
+              data.notifications.forEach((n: AppNotification) => {
+                map.set(n.eventKey || n.id, n);
+              });
+              return Array.from(map.values());
+            });
+          }
+          if (!preserveAdminSession) {
+            setIsAuthenticated(true);
+            if (authUser.role === 'creator' && data.creatorProfile) {
+              setCurrentUser(data.creatorProfile);
+              setActiveRole('creator');
+            } else {
+              setCurrentUser(prev => {
+                const prevEmail = String(prev?.email || '').trim().toLowerCase();
+                if (!prevEmail || prevEmail === email || prev?.id === 'user_fan_1' || prev?.id === authUser.id) {
+                  return authUser;
+                }
+                return prev;
+              });
+              setActiveRole(authUser.role || 'fan');
+            }
+          }
+        })
+        .catch(() => {});
     };
 
     syncSupabaseUsersTable();
@@ -1765,13 +2077,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed
+            .filter((item): item is CreatorProfile => Boolean(item && typeof item === 'object' && item.id && !DEMO_CREATOR_IDS.has(item.id)))
+            .map(item => {
+              const parsedBalance = Number(item.walletBalance);
+              return {
+                ...item,
+                name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Creator',
+                username: typeof item.username === 'string' && item.username.trim() ? item.username : item.id,
+                email: typeof item.email === 'string' ? item.email : '',
+                avatar: typeof item.avatar === 'string' && item.avatar.trim() && !isDemoAssetUrl(item.avatar) ? item.avatar : '',
+                coverImage: typeof item.coverImage === 'string' && item.coverImage.trim() && !isDemoAssetUrl(item.coverImage) ? item.coverImage : '',
+                role: (item.role || 'creator') as UserRole,
+                walletBalance: Number.isFinite(parsedBalance) ? parsedBalance : 0,
+                dateJoined: typeof item.dateJoined === 'string' && item.dateJoined.trim() ? item.dateJoined : '2026-01-01'
+              };
+            });
         }
       }
     } catch {
       // fallback
     }
-    return MOCK_CREATORS;
+    return [];
   });
 
   useEffect(() => {
@@ -1781,37 +2108,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
   }, [creators]);
-  const [showDemoBadges, setShowDemoBadges] = useState<boolean>(true);
+  const [showDemoBadges, setShowDemoBadges] = useState<boolean>(false);
   const sanitizeLoadedPosts = (rawPosts: Post[]): Post[] => {
-    const mockById = new Map(MOCK_POSTS.map(mp => [mp.id, mp]));
     const isDeadUrl = (u?: string) =>
       !u ||
       typeof u !== 'string' ||
       u.trim().toLowerCase().startsWith('blob:') ||
-      u.trim().toLowerCase().startsWith('s3://');
+      u.trim().toLowerCase().startsWith('s3:') ||
+      isDemoAssetUrl(u);
 
-    return rawPosts.map(p => {
-      if (!p || !Array.isArray(p.media)) return p;
-      const baseline = mockById.get(p.id);
-      const cleanedMedia = p.media.map((m, idx) => {
-        if (!m || m.type !== 'video') return m;
-        const baseAsset = baseline?.media?.[idx];
-        const cleanUrl = isDeadUrl(m.url) ? (baseAsset?.url || '') : m.url;
-        const cleanPreview = isDeadUrl(m.previewUrl)
-          ? baseAsset?.previewUrl
-          : m.previewUrl;
-        const cleanThumb = isDeadUrl(m.thumbnailUrl)
-          ? (baseAsset?.thumbnailUrl || '')
-          : m.thumbnailUrl;
-        return {
-          ...m,
-          url: cleanUrl,
-          previewUrl: cleanPreview,
-          thumbnailUrl: cleanThumb
-        };
+    return rawPosts
+      .filter(p => p && !p.isDemo && !String(p.id).startsWith('demo_') && !DEMO_CREATOR_IDS.has(p.creatorId))
+      .map(p => {
+        if (!Array.isArray(p.media)) return p;
+        const cleanedMedia = p.media.map(m => {
+          if (!m || m.type !== 'video') return m;
+          const cleanUrl = isDeadUrl(m.url) ? '' : m.url;
+          const cleanPreview = isDeadUrl(m.previewUrl) ? undefined : m.previewUrl;
+          const cleanThumb = isDeadUrl(m.thumbnailUrl) ? '' : m.thumbnailUrl;
+          return {
+            ...m,
+            url: cleanUrl,
+            previewUrl: cleanPreview,
+            thumbnailUrl: cleanThumb
+          };
+        });
+        return { ...p, media: cleanedMedia };
       });
-      return { ...p, media: cleanedMedia };
-    });
   };
 
   const [posts, setPosts] = useState<Post[]>(() => {
@@ -1826,7 +2149,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // fallback
     }
-    return MOCK_POSTS;
+    return [];
   });
   const [postAuditLogs, setPostAuditLogs] = useState<PostEditAuditRecord[]>([]);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
@@ -1872,9 +2195,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orderedIds.push(cp.id);
       }
 
-      // 2. Merge existing posts (local + baseline) preserving order and deduplicating by ID
+      // 2. Merge existing non-demo local posts preserving order and deduplicating by ID
       for (const p of prev) {
         if (!p || !p.id || byId.has(p.id)) continue;
+        if (p.isDemo || String(p.id).startsWith('demo_') || DEMO_CREATOR_IDS.has(p.creatorId)) continue;
         const override = updatedMap[p.id];
         const isDel = deletedIds.includes(p.id) || Boolean(override?.isDeletedByCreator);
         if (override) {
@@ -1899,23 +2223,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orderedIds.push(p.id);
       }
 
-      // 3. Ensure any baseline MOCK_POSTS missing from prev (e.g. partial localStorage) are included once
-      for (const base of MOCK_POSTS) {
-        if (byId.has(base.id)) continue;
-        const override = updatedMap[base.id];
-        const isDel = deletedIds.includes(base.id) || Boolean(override?.isDeletedByCreator);
-        byId.set(base.id, {
-          ...base,
-          ...(override || {}),
-          id: base.id,
-          isDeletedByCreator: isDel,
-          moderationStatus: isDel
-            ? ('removed' as ContentModerationStatus)
-            : ((override?.moderationStatus || base.moderationStatus) as ContentModerationStatus)
-        });
-        orderedIds.push(base.id);
-      }
-
       return sanitizeLoadedPosts(orderedIds.map(id => byId.get(id)!).filter(Boolean));
     });
   };
@@ -1938,17 +2245,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const resetDemoContent = () => {
-    try {
-      localStorage.removeItem('acovon_posts');
-      localStorage.removeItem('acovon_statuses');
-      localStorage.removeItem('acovon_viewed_status_ids');
-    } catch {
-      // ignore
-    }
-    setPosts(MOCK_POSTS);
-    setCreators(MOCK_CREATORS);
-    setLivestreams(MOCK_LIVESTREAMS);
-    setStatuses(INITIAL_STATUSES);
+    setPosts(prev => sanitizeLoadedPosts(prev));
+    setCreators(prev => prev.filter(c => !DEMO_CREATOR_IDS.has(c.id)));
+    setLivestreams([]);
+    setStatuses(prev => prev.filter(s => !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId)));
     setViewedStatusIds([]);
     fetch('/api/posts/state', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
@@ -1973,24 +2273,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const nowMs = Date.now();
-          const activeUserStatuses = parsed.filter(
-            (s: CreatorStatus) => s && !s.isDemo && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
+          return parsed.filter(
+            (s: CreatorStatus) => s && !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId) && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
           );
-          const activeDemoStatuses = parsed.filter(
-            (s: CreatorStatus) => s && s.isDemo && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
-          );
-          if (activeDemoStatuses.length > 0) {
-            const existingDemoIds = new Set(activeDemoStatuses.map((s: CreatorStatus) => s.id));
-            const missingFreshDemos = INITIAL_STATUSES.filter(d => !existingDemoIds.has(d.id));
-            return [...activeUserStatuses, ...activeDemoStatuses, ...missingFreshDemos];
-          }
-          return [...activeUserStatuses, ...INITIAL_STATUSES];
         }
       }
     } catch {
       // fallback
     }
-    return INITIAL_STATUSES;
+    return [];
   });
 
   useEffect(() => {
@@ -2022,33 +2313,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [viewedStatusIds]);
 
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(MOCK_SUBSCRIPTIONS);
-  const [purchases, setPurchases] = useState<ContentPurchase[]>(MOCK_PURCHASES);
-  const [customRequests, setCustomRequests] = useState<CustomVideoRequest[]>(MOCK_CUSTOM_REQUESTS);
-  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(MOCK_MESSAGES);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>(MOCK_TRANSACTIONS);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [purchases, setPurchases] = useState<ContentPurchase[]>([]);
+  const [customRequests, setCustomRequests] = useState<CustomVideoRequest[]>([]);
+  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [commissionSettings, setCommissionSettings] = useState<CommissionSettings>(INITIAL_COMMISSION_SETTINGS);
-  const [promotions, setPromotions] = useState<PromotionCampaign[]>(MOCK_PROMOTIONS);
+  const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
   const [verifications, setVerifications] = useState<CreatorVerification[]>(() => {
     try {
       const saved = localStorage.getItem('acovon_verifications_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingIds = new Set(parsed.map((v: CreatorVerification) => v.id));
-          const merged = [...parsed];
-          MOCK_VERIFICATIONS.forEach(mv => {
-            if (!existingIds.has(mv.id) && !merged.some(v => v.userId === mv.userId)) {
-              merged.push(mv);
-            }
-          });
-          return merged;
+          return parsed.filter((v: CreatorVerification) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId));
         }
       }
     } catch {
       // fallback
     }
-    return MOCK_VERIFICATIONS;
+    return [];
   });
 
   useEffect(() => {
@@ -2080,8 +2364,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             username: u.username,
             documentType: 'passport',
             documentNumber: `ID-${u.id.slice(-6).toUpperCase()}`,
-            documentFileUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=400&q=80',
-            selfieUrl: u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+            documentFileUrl: '',
+            selfieUrl: u.avatar || '',
             status: 'pending',
             submittedAt: u.updatedAt || u.dateJoined || new Date().toISOString().slice(0, 10),
             notes: `Creator application associated with account ${u.email} (@${u.username}).`,
@@ -2101,21 +2385,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return changed ? next : prev;
     });
   }, [users]);
-  const [reports, setReports] = useState<ModerationReport[]>(MOCK_REPORTS);
-  const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(MOCK_PAYOUT_REQUESTS);
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(MOCK_SUPPORT_TICKETS);
+  const [reports, setReports] = useState<ModerationReport[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>(() => {
     try {
       const saved = localStorage.getItem('acovon_audit_logs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_AUDIT_LOGS;
+    return [];
   });
   const [platformConfig, setPlatformConfig] = useState<PlatformConfig>(() => {
     try {
@@ -2140,8 +2424,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...INITIAL_PLATFORM_CONFIG,
             ...parsed,
-            featuredCreatorIds: Array.isArray(parsed.featuredCreatorIds) ? parsed.featuredCreatorIds : INITIAL_PLATFORM_CONFIG.featuredCreatorIds,
-            featuredPostIds: Array.isArray(parsed.featuredPostIds) ? parsed.featuredPostIds : INITIAL_PLATFORM_CONFIG.featuredPostIds,
+            featuredCreatorIds: Array.isArray(parsed.featuredCreatorIds)
+              ? parsed.featuredCreatorIds.filter((id: string) => !DEMO_CREATOR_IDS.has(id))
+              : INITIAL_PLATFORM_CONFIG.featuredCreatorIds,
+            featuredPostIds: Array.isArray(parsed.featuredPostIds)
+              ? parsed.featuredPostIds.filter((id: string) => !String(id).startsWith('demo_'))
+              : INITIAL_PLATFORM_CONFIG.featuredPostIds,
             contentCategories: dedupeStrs(parsed.contentCategories, INITIAL_PLATFORM_CONFIG.contentCategories),
             videoCategories: dedupeStrs(parsed.videoCategories, INITIAL_PLATFORM_CONFIG.videoCategories),
             livestreamCategories: dedupeStrs(parsed.livestreamCategories, INITIAL_PLATFORM_CONFIG.livestreamCategories),
@@ -2177,8 +2465,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [adSettings, setAdSettings] = useState<AdSettings>({
     adsEnabled: true,
     adSensePublisherId: 'pub-8924018591039482',
-    adImpressionCount: 28410,
-    adRevenueEstimated: 142.50,
+    adImpressionCount: 0,
+    adRevenueEstimated: 0,
     frequencyFeedEveryNPosts: 4
   });
 
@@ -2217,12 +2505,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_video_media_records');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_VIDEO_MEDIA_RECORDS;
+    return [];
   });
 
   const [videoProcessingJobs, setVideoProcessingJobs] = useState<VideoProcessingJob[]>(() => {
@@ -2230,12 +2518,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_video_processing_jobs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_VIDEO_PROCESSING_JOBS;
+    return [];
   });
 
   const [videoPlaybackPositions, setVideoPlaybackPositions] = useState<Record<string, number>>(() => {
@@ -2299,12 +2587,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_creator_verification_records');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_CREATOR_VERIFICATION_RECORDS;
+    return [];
   });
 
   const [verificationTransactions, setVerificationTransactions] = useState<VerificationTransaction[]>(() => {
@@ -2312,12 +2600,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_verification_transactions');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_VERIFICATION_TRANSACTIONS;
+    return [];
   });
 
   const [verificationAuditLogs, setVerificationAuditLogs] = useState<VerificationAuditLog[]>(() => {
@@ -2325,12 +2613,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_verification_audit_logs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return MOCK_VERIFICATION_AUDIT_LOGS;
+    return [];
   });
 
   const [serverVerifiedBadgeMap, setServerVerifiedBadgeMap] = useState<Record<string, boolean>>({});
@@ -2492,54 +2780,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_fan_interest_profiles');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && parsed.user_fan_1 && parsed.fan_a) {
-          const normalizedMap: Record<string, FanInterestProfile> = { ...INITIAL_FAN_INTEREST_PROFILES };
-          Object.entries(parsed).forEach(([key, val]) => {
-            const rawProf = (val || {}) as Partial<FanInterestProfile>;
-            const fallbackProf = INITIAL_FAN_INTEREST_PROFILES[key] || INITIAL_FAN_INTEREST_PROFILES.user_fan_1;
-            const avgComp = typeof rawProf.avgCompletionRate === 'number' ? rawProf.avgCompletionRate : 80;
-            normalizedMap[key] = {
-              ...fallbackProf,
-              ...rawProf,
-              categoryScores: rawProf.categoryScores || fallbackProf.categoryScores || {},
-              recentCategoryScores: rawProf.recentCategoryScores || fallbackProf.recentCategoryScores || {},
-              longTermCategoryScores: rawProf.longTermCategoryScores || fallbackProf.longTermCategoryScores || {},
-              hashtagScores: rawProf.hashtagScores || fallbackProf.hashtagScores || {},
-              creatorAffinityScores: rawProf.creatorAffinityScores || fallbackProf.creatorAffinityScores || {},
-              skippedCategories: rawProf.skippedCategories || fallbackProf.skippedCategories || {},
-              reducedCategories: Array.isArray(rawProf.reducedCategories) ? rawProf.reducedCategories : [],
-              boostedCategories: Array.isArray(rawProf.boostedCategories) ? rawProf.boostedCategories : [],
-              hiddenCreatorIds: Array.isArray(rawProf.hiddenCreatorIds) ? rawProf.hiddenCreatorIds : [],
-              notInterestedPostIds: Array.isArray(rawProf.notInterestedPostIds) ? rawProf.notInterestedPostIds : [],
-              reportedPostIds: Array.isArray(rawProf.reportedPostIds) ? rawProf.reportedPostIds : [],
-              showMorePostIds: Array.isArray(rawProf.showMorePostIds) ? rawProf.showMorePostIds : [],
-              onboardingCategories: Array.isArray(rawProf.onboardingCategories) ? rawProf.onboardingCategories : [],
-              avgCompletionRate: avgComp,
-              avgWatchCompletionPercent: rawProf.avgWatchCompletionPercent ?? avgComp
-            };
-          });
-          return normalizedMap;
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
         }
       }
     } catch {
       // fallback
     }
-    return INITIAL_FAN_INTEREST_PROFILES;
+    return {};
   });
 
-  const [activeRecommendationFanId, setActiveRecommendationFanId] = useState<string>('user_fan_1');
+  const [activeRecommendationFanId, setActiveRecommendationFanId] = useState<string>(currentUser.id || 'guest_visitor');
 
   const [engagementEvents, setEngagementEvents] = useState<FanEngagementEvent[]>(() => {
     try {
       const saved = localStorage.getItem('acovon_engagement_events');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return INITIAL_ENGAGEMENT_EVENTS;
+    return [];
   });
 
   const [recommendationFeedbackRecords, setRecommendationFeedbackRecords] = useState<RecommendationFeedbackRecord[]>(() => {
@@ -2552,7 +2815,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // fallback
     }
-    return INITIAL_RECOMMENDATION_FEEDBACK;
+    return [];
   });
 
   useEffect(() => {
@@ -2591,8 +2854,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [videoCallSession, setVideoCallSession] = useState<VideoCallSession | null>(null);
 
   // Acovon Live state
-  const [livestreams, setLivestreams] = useState<Livestream[]>(MOCK_LIVESTREAMS);
-  const [liveChat, setLiveChat] = useState<Record<string, LiveChatMessage[]>>(MOCK_LIVE_CHAT);
+  const [livestreams, setLivestreams] = useState<Livestream[]>([]);
+  const [liveChat, setLiveChat] = useState<Record<string, LiveChatMessage[]>>({});
   const [activeLivestreamId, setActiveLivestreamId] = useState<string | null>(null);
   const [isCreateLiveModalOpen, setIsCreateLiveModalOpen] = useState<boolean>(false);
   const [unlockedInviteStreams, setUnlockedInviteStreams] = useState<string[]>([]);
@@ -2607,8 +2870,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (activeRole === 'moderator' ? 'moderator' : 'super_admin');
 
   const hasAdminPermission = (allowedLevels: AdminPermissionLevel[]): boolean => {
-    if (activeRole !== 'admin' && activeRole !== 'moderator') return false;
-    if (activeAdminPermissionLevel === 'super_admin') return true;
+    const hasEffectiveAdminRole =
+      activeRole === 'admin' ||
+      activeRole === 'moderator' ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'moderator' ||
+      Boolean(currentUser.adminPermissionLevel);
+    if (!hasEffectiveAdminRole) return false;
+    if (activeAdminPermissionLevel === 'super_admin' || activeAdminPermissionLevel === 'admin') return true;
     return allowedLevels.includes(activeAdminPermissionLevel);
   };
 
@@ -2731,7 +3000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         is18PlusConfirmed: true,
         accountStatus: 'active',
         dateJoined: nowIso.split('T')[0],
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        avatar: '',
         walletBalance: 0
       };
 
@@ -2761,6 +3030,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // ignore
       }
 
+      // Persist signed adminToken for authenticated Admin API calls
+      if (data.adminToken) {
+        try {
+          localStorage.setItem('acovon_admin_token', String(data.adminToken));
+        } catch {
+          // ignore
+        }
+      }
+
       // Log in as Super Administrator
       setCurrentUser(adminUser);
       setActiveRole('admin');
@@ -2782,6 +3060,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         severity: 'critical'
       });
 
+      if (data.adminToken) {
+        refreshCreatorApplications({ reconcile: true, token: String(data.adminToken) }).catch(() => {});
+      }
+
       return { success: true, user: adminUser };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Initial setup request failed';
@@ -2802,6 +3084,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const data = await res.json();
       if (!res.ok || !data.success) {
         return { success: false, error: data.error || 'Invalid administrator credentials.' };
+      }
+
+      if (data.adminToken) {
+        try {
+          localStorage.setItem('acovon_admin_token', String(data.adminToken));
+        } catch {
+          // ignore
+        }
       }
 
       const adminUser: User = {
@@ -2828,6 +3118,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         severity: 'info'
       });
 
+      if (data.adminToken) {
+        refreshCreatorApplications({ reconcile: true, token: String(data.adminToken) }).catch(() => {});
+      }
+
       return { success: true, user: adminUser };
     } catch {
       // Local fallback in case backend is loading
@@ -2844,7 +3138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const targetAdmin = allAccounts.find(
         u => u.email.toLowerCase() === cleanEmail && (u.role === 'admin' || u.role === 'moderator')
-      ) || (cleanEmail === 'admin@acovon.com' ? (users.admin_root || MOCK_USERS.admin_root) : null);
+      ) || (cleanEmail === 'admin@acovon.com' ? (users.admin_root || PLATFORM_ADMIN_ACCOUNTS.admin_root) : null);
 
       if (targetAdmin) {
         setCurrentUser(targetAdmin);
@@ -2870,12 +3164,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
     setActiveRole('fan');
-    const defaultUser = users.fan_jordan || MOCK_USERS.fan_jordan;
-    setCurrentUser(defaultUser);
+    setCurrentUser(GUEST_USER);
     setIsAuthenticated(false);
     try {
-      localStorage.removeItem('acovon_is_authenticated');
-      localStorage.setItem('acovon_current_user', JSON.stringify(defaultUser));
+      localStorage.removeItem('acovon_admin_token');
+      localStorage.setItem('acovon_is_authenticated', 'false');
+      localStorage.setItem('acovon_current_user', JSON.stringify(GUEST_USER));
     } catch {
       // ignore
     }
@@ -3184,12 +3478,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const foundUser =
       users[userKeyOrId] ||
       Object.values(users).find(u => u.id === userKeyOrId) ||
-      MOCK_USERS[userKeyOrId];
+      PLATFORM_ADMIN_ACCOUNTS[userKeyOrId];
     if (!foundUser) return;
     const nextRole: UserRole = foundUser.role === 'moderator' ? 'moderator' : 'admin';
     setActiveRole(nextRole);
     setCurrentUser(foundUser);
     setIsAuthenticated(true);
+
+    const existingToken = (() => {
+      try {
+        return localStorage.getItem('acovon_admin_token') || '';
+      } catch {
+        return '';
+      }
+    })();
+    if (existingToken) {
+      fetch('/api/admin/switch-operator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${existingToken}`
+        },
+        body: JSON.stringify({ userKeyOrId })
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d?.success && d.adminToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', String(d.adminToken));
+            } catch {
+              // ignore
+            }
+            refreshCreatorApplications({ reconcile: true, token: String(d.adminToken) }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+
     const loginAudit: AdminAuditLog = {
       id: `audit_login_${Date.now()}`,
       adminId: foundUser.id,
@@ -3293,25 +3618,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (role === 'fan') {
       const fanTarget =
         (specificCreatorId && (findUserEntryByKeyOrId(specificCreatorId)?.user)) ||
-        users.fan_jordan ||
-        MOCK_USERS.fan_jordan;
+        Object.values(users).find(u => u.role === 'fan') ||
+        GUEST_USER;
       setActiveRole('fan');
       setCurrentUser({ ...fanTarget, role: 'fan' });
     } else if (role === 'creator') {
-      const target = creators.find(c => c.id === (specificCreatorId || 'creator_elena')) || creators[0];
+      const target = (specificCreatorId ? creators.find(c => c.id === specificCreatorId) : creators[0]) || creators[0];
+      if (!target) return;
       setActiveRole('creator');
       setCurrentUser(target);
     } else if (role === 'admin') {
       const targetAdmin =
         (specificCreatorId && (findUserEntryByKeyOrId(specificCreatorId)?.user)) ||
         users.admin_root ||
-        MOCK_USERS.admin_root;
+        PLATFORM_ADMIN_ACCOUNTS.admin_root;
       setActiveRole('admin');
       setCurrentUser(targetAdmin);
+      const existingToken = getStoredAdminToken();
+      if (existingToken && targetAdmin?.id) {
+        fetch('/api/admin/switch-operator', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${existingToken}`
+          },
+          body: JSON.stringify({ userKeyOrId: targetAdmin.id })
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (d?.success && d.adminToken) {
+              try {
+                localStorage.setItem('acovon_admin_token', String(d.adminToken));
+              } catch {
+                // ignore
+              }
+              refreshCreatorApplications({ reconcile: true, token: String(d.adminToken) }).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     } else if (role === 'moderator') {
-      const targetMod = users.moderator_clara || MOCK_USERS.moderator_clara;
+      const targetMod = users.moderator_clara || PLATFORM_ADMIN_ACCOUNTS.moderator_clara;
       setActiveRole('moderator');
       setCurrentUser(targetMod);
+      const existingToken = getStoredAdminToken();
+      if (existingToken && targetMod?.id) {
+        fetch('/api/admin/switch-operator', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${existingToken}`
+          },
+          body: JSON.stringify({ userKeyOrId: targetMod.id })
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (d?.success && d.adminToken) {
+              try {
+                localStorage.setItem('acovon_admin_token', String(d.adminToken));
+              } catch {
+                // ignore
+              }
+              refreshCreatorApplications({ reconcile: true, token: String(d.adminToken) }).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     }
   };
 
@@ -3372,6 +3744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const [existingKey, existingUser] = existingUserEntry;
       const updatedExisting: User = {
         ...existingUser,
+        id: input.id || existingUser.id,
         name: fullName || existingUser.name,
         username: existingUser.username || rawUsername,
         passwordHash: password || existingUser.passwordHash
@@ -3385,6 +3758,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return next;
       });
+      fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: updatedExisting.id,
+          name: updatedExisting.name,
+          username: updatedExisting.username,
+          email: updatedExisting.email,
+          avatar: updatedExisting.avatar,
+          dateJoined: updatedExisting.dateJoined,
+          country: updatedExisting.country,
+          is18PlusConfirmed: true
+        })
+      }).catch(() => {});
       if (input.autoLogin !== false) {
         setCurrentUser(updatedExisting);
         setActiveRole(updatedExisting.role);
@@ -3413,12 +3800,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       username: finalUsername,
       email,
       passwordHash: password,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      avatar: '',
       role: 'fan',
       accountStatus: 'active',
       creatorApplicationStatus: 'not_applied',
       creatorApprovalStatus: 'not_applied',
-      walletBalance: 50.0,
+      walletBalance: 0,
       isVerified: false,
       is18PlusConfirmed: true,
       dateJoined: nowDate,
@@ -3471,6 +3858,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
 
+    // Persist user centrally on Express server so Admin & cross-browser sessions see every sign-up immediately
+    fetch('/api/users/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newUserId,
+        name: fullName,
+        username: finalUsername,
+        email,
+        avatar: newUser.avatar,
+        dateJoined: nowDate,
+        country: newUser.country,
+        is18PlusConfirmed: true
+      })
+    }).catch(() => {});
+
     // Also persist to Supabase users table if available
     supabase
       .from('users')
@@ -3522,7 +3925,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Unified Standard Login with Automatic Backend Role Detection
   const authenticateAccount = (
     emailOrUsernameInput: string,
-    passwordInput: string
+    passwordInput: string,
+    supabaseUserId?: string
   ): {
     success: boolean;
     detectedRole?: UserRole;
@@ -3657,6 +4061,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveRole(detectedRole);
     setIsAuthenticated(true);
 
+    if (detectedRole === 'admin' || detectedRole === 'moderator') {
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sessionAccount.email, password: passwordInput })
+      })
+        .then(async r => {
+          const d = await r.json().catch(() => ({}));
+          if (r.ok && d?.success && d.adminToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', String(d.adminToken));
+            } catch {
+              // ignore
+            }
+            refreshCreatorApplications({ reconcile: true, token: String(d.adminToken) }).catch(() => {});
+          } else {
+            setCreatorApplicationSyncStatus(prev => ({
+              ...prev,
+              error: d?.error || 'Could not obtain administrator API session token. Please sign in at /admin/login.'
+            }));
+          }
+        })
+        .catch(() => {
+          setCreatorApplicationSyncStatus(prev => ({
+            ...prev,
+            error: 'Network error obtaining administrator session token.'
+          }));
+        });
+    } else {
+      const effectiveUid = supabaseUserId || sessionAccount.id;
+      fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: effectiveUid,
+          name: sessionAccount.name,
+          username: sessionAccount.username,
+          email: sessionAccount.email,
+          avatar: sessionAccount.avatar,
+          dateJoined: sessionAccount.dateJoined
+        })
+      })
+        .then(r => r.json())
+        .then(state => {
+          if (!state?.success || !state.user) return;
+          const serverUser = state.user as User;
+          setUsers(prev => ({
+            ...prev,
+            [serverUser.id]: { ...(prev[serverUser.id] || {}), ...serverUser }
+          }));
+          if (state.creatorProfile) {
+            setCreators(prev => {
+              const idx = prev.findIndex(c => c.id === state.creatorProfile.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = state.creatorProfile;
+                return next;
+              }
+              return [state.creatorProfile, ...prev];
+            });
+          }
+          if (state.latestApplication) {
+            setVerifications(prev => {
+              const filtered = prev.filter(v => v.id !== state.latestApplication.id);
+              return [state.latestApplication, ...filtered];
+            });
+          }
+          if (serverUser.role === 'creator' && state.creatorProfile) {
+            setCurrentUser(state.creatorProfile);
+            setActiveRole('creator');
+          } else {
+            setCurrentUser(serverUser);
+            setActiveRole(serverUser.role || 'fan');
+          }
+        })
+        .catch(() => {});
+    }
+
     return {
       success: true,
       detectedRole,
@@ -3666,14 +4148,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logoutUser = () => {
     logoutFromSupabase().catch(() => {});
+    try {
+      localStorage.removeItem('acovon_admin_token');
+      localStorage.setItem('acovon_is_authenticated', 'false');
+    } catch {
+      // ignore
+    }
     setIsAuthenticated(false);
     setActiveRole('fan');
-    setCurrentUser(MOCK_USERS.fan_jordan);
+    setCurrentUser(GUEST_USER);
   };
 
   // Sync appearance and language preferences to Supabase when authenticated
   useEffect(() => {
-    if (isAuthenticated && currentUser?.id) {
+    if (isAuthenticated && currentUser?.id && currentUser.id !== 'guest_visitor') {
       syncUserPreferencesToSupabase({
         uid: currentUser.id,
         appearancePreference: appearanceMode,
@@ -3689,12 +4177,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(`acovon_following_${currentUser.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id: string) => !DEMO_CREATOR_IDS.has(id));
+        }
       }
     } catch {
       // fallback
     }
-    return ['creator_elena', 'creator_marcus', 'creator_sarah'];
+    return [];
   });
 
   useEffect(() => {
@@ -3711,12 +4201,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(`acovon_saved_posts_${currentUser.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id: string) => !String(id).startsWith('demo_'));
+        }
       }
     } catch {
       // fallback
     }
-    return ['demo_post_1', 'demo_post_5'];
+    return [];
   });
 
   useEffect(() => {
@@ -5166,10 +5658,494 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const reviewVerification = (id: string, status: 'approved' | 'rejected' | 'info_requested', notes?: string) => {
-    if (!hasAdminPermission(['super_admin', 'admin', 'moderator'])) return;
-    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  // Centralized Creator Application Audit History, Counts & Sync Status
+  const [creatorApplicationAuditLogs, setCreatorApplicationAuditLogs] = useState<CreatorApplicationAuditRecord[]>([]);
+  const [creatorApplicationSyncStatus, setCreatorApplicationSyncStatus] = useState<{
+    isSyncing: boolean;
+    lastSyncedAt?: string;
+    error?: string;
+    recoveredCount?: number;
+    supabaseAvailable?: boolean;
+    supabaseError?: string;
+    supabaseCode?: string;
+  }>({ isSyncing: false });
 
+  const creatorApplicationCounts = {
+    all: verifications.length,
+    pending: verifications.filter(v => v.status === 'pending' || v.status === 'info_requested').length,
+    approved: verifications.filter(v => v.status === 'approved').length,
+    rejected: verifications.filter(v => v.status === 'rejected').length
+  };
+
+  const getStoredAdminToken = (): string => {
+    try {
+      return localStorage.getItem('acovon_admin_token') || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const mergeServerApplicationsSnapshot = (payload: {
+    applications?: CreatorVerification[];
+    users?: Record<string, User>;
+    creators?: CreatorProfile[];
+    auditLogs?: CreatorApplicationAuditRecord[];
+    adminNotifications?: AppNotification[];
+    recoveredCount?: number;
+  }) => {
+    if (Array.isArray(payload.applications)) {
+      setVerifications(payload.applications);
+      try {
+        localStorage.setItem('acovon_verifications_v2', JSON.stringify(payload.applications));
+      } catch {
+        // ignore
+      }
+    }
+    if (payload.users && typeof payload.users === 'object') {
+      setUsers(prev => {
+        const merged = { ...prev };
+        Object.entries(payload.users || {}).forEach(([k, serverU]) => {
+          if (!serverU || !serverU.id) return;
+          const existing = merged[k] || Object.values(merged).find(u => u.id === serverU.id);
+          merged[k] = {
+            ...(existing || {}),
+            ...serverU,
+            passwordHash: existing?.passwordHash || serverU.passwordHash
+          };
+        });
+        return merged;
+      });
+    }
+    if (Array.isArray(payload.creators) && payload.creators.length > 0) {
+      setCreators(prev => {
+        const next = [...prev];
+        payload.creators!.forEach(sc => {
+          const idx = next.findIndex(c => c.id === sc.id);
+          if (idx >= 0) next[idx] = { ...next[idx], ...sc };
+          else next.unshift(sc);
+        });
+        return next;
+      });
+    }
+    if (Array.isArray(payload.auditLogs)) {
+      setCreatorApplicationAuditLogs(payload.auditLogs);
+    }
+    if (Array.isArray(payload.adminNotifications) && payload.adminNotifications.length > 0) {
+      setNotifications(prev => {
+        const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
+        payload.adminNotifications!.forEach(n => {
+          map.set(n.eventKey || n.id, n);
+        });
+        return Array.from(map.values());
+      });
+    }
+  };
+
+  const refreshCreatorApplications = async (opts?: {
+    reconcile?: boolean;
+    token?: string;
+  }): Promise<{ success: boolean; error?: string; total?: number }> => {
+    const token = opts?.token || getStoredAdminToken();
+    if (!token) {
+      const errMsg = 'Administrator session token unavailable. Please sign in at /admin/login to load the centralized creator applications queue.';
+      setCreatorApplicationSyncStatus(prev => ({ ...prev, isSyncing: false, error: errMsg }));
+      return { success: false, error: errMsg };
+    }
+    setCreatorApplicationSyncStatus(prev => ({ ...prev, isSyncing: true, error: undefined }));
+    try {
+      let supaAccessToken = '';
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        supaAccessToken = sessionData?.session?.access_token || '';
+      } catch {
+        supaAccessToken = '';
+      }
+
+      let combinedApplications = [...verifications];
+      let clientSupaStatus: { available?: boolean; error?: string; code?: string } = {};
+      if (opts?.reconcile) {
+        const clientSupa = await fetchAllSupabaseCreatorApplicationsWithStatus();
+        clientSupaStatus = {
+          available: clientSupa.available,
+          error: clientSupa.error,
+          code: clientSupa.code
+        };
+        if (clientSupa.rows.length > 0) {
+          const existingIds = new Set(combinedApplications.map(v => v.id));
+          clientSupa.rows.forEach(row => {
+            const mapped = mapSupabaseRowToVerification(row);
+            if (!existingIds.has(mapped.id)) {
+              existingIds.add(mapped.id);
+              combinedApplications.push(mapped);
+            }
+          });
+        }
+      }
+
+      const endpoint = opts?.reconcile
+        ? '/api/creator-applications/reconcile'
+        : '/api/creator-applications';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      };
+      if (supaAccessToken) {
+        headers['x-supabase-access-token'] = supaAccessToken;
+      }
+
+      const res = await fetch(endpoint, {
+        method: opts?.reconcile ? 'POST' : 'GET',
+        headers,
+        body: opts?.reconcile ? JSON.stringify({ applications: combinedApplications, users }) : undefined
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || 'Failed to sync creator applications.';
+        if (res.status === 401 || res.status === 403) {
+          try {
+            localStorage.removeItem('acovon_admin_token');
+          } catch {
+            // ignore
+          }
+        }
+        setCreatorApplicationSyncStatus(prev => ({ ...prev, isSyncing: false, error: errMsg }));
+        return { success: false, error: errMsg };
+      }
+
+      mergeServerApplicationsSnapshot(data);
+      const srvSupa = data.supabaseStatus || {};
+      const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      setCreatorApplicationSyncStatus({
+        isSyncing: false,
+        lastSyncedAt: nowStr,
+        recoveredCount: typeof data.recoveredCount === 'number' ? data.recoveredCount : 0,
+        supabaseAvailable: Boolean(srvSupa.available || clientSupaStatus.available),
+        supabaseError: srvSupa.error || clientSupaStatus.error,
+        supabaseCode: srvSupa.code || clientSupaStatus.code
+      });
+      return { success: true, total: Array.isArray(data.applications) ? data.applications.length : 0 };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error syncing creator applications';
+      setCreatorApplicationSyncStatus(prev => ({ ...prev, isSyncing: false, error: msg }));
+      return { success: false, error: msg };
+    }
+  };
+
+  // Authoritative session hydration + Real-Time SSE + Supabase Realtime delivery
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?.id) return;
+    let cancelled = false;
+    const isAdminSession =
+      (activeRole === 'admin' || activeRole === 'moderator' || currentUser.role === 'admin' || currentUser.role === 'moderator');
+    const adminToken = getStoredAdminToken();
+
+    // 1) If non-admin user has an un-synced local pending application from before, recover it to server
+    if (!isAdminSession && currentUser.role === 'fan') {
+      const localPending = verifications.find(
+        v =>
+          (v.userId === currentUser.id ||
+            (v.email && currentUser.email && v.email.toLowerCase() === currentUser.email.toLowerCase())) &&
+          (v.status === 'pending' || v.status === 'info_requested')
+      );
+      if (localPending) {
+        fetch('/api/creator-applications/recover-own', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: currentUser, application: localPending })
+        }).catch(() => {});
+      }
+
+      // 2) Hydrate authoritative user role & approval state from backend
+      fetch(
+        `/api/users/session-state?userId=${encodeURIComponent(currentUser.id)}&email=${encodeURIComponent(currentUser.email || '')}`
+      )
+        .then(r => r.json())
+        .then(state => {
+          if (cancelled || !state?.success || !state.found || !state.user) return;
+          const serverUser = state.user as User;
+          setUsers(prev => ({
+            ...prev,
+            [serverUser.id]: { ...(prev[serverUser.id] || {}), ...serverUser }
+          }));
+          if (state.creatorProfile) {
+            setCreators(prev => {
+              const idx = prev.findIndex(c => c.id === state.creatorProfile.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = state.creatorProfile;
+                return next;
+              }
+              return [state.creatorProfile, ...prev];
+            });
+          }
+          if (state.latestApplication) {
+            setVerifications(prev => {
+              const others = prev.filter(v => v.id !== state.latestApplication.id);
+              return [state.latestApplication, ...others];
+            });
+          }
+          if (Array.isArray(state.notifications) && state.notifications.length > 0) {
+            setNotifications(prev => {
+              const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
+              state.notifications.forEach((n: AppNotification) => {
+                map.set(n.eventKey || n.id, n);
+              });
+              return Array.from(map.values());
+            });
+          }
+          if (serverUser.role === 'creator' && state.creatorProfile && activeRole !== 'creator') {
+            setCurrentUser(state.creatorProfile);
+            setActiveRole('creator');
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 3) Admin centralized sync + reconciliation
+    if (isAdminSession && adminToken) {
+      refreshCreatorApplications({ reconcile: true, token: adminToken }).catch(() => {});
+    }
+
+    // 4) Real-time SSE stream + Supabase Realtime subscription
+    const streamUrl =
+      isAdminSession && adminToken
+        ? `/api/creator-applications/stream?adminToken=${encodeURIComponent(adminToken)}`
+        : `/api/creator-applications/stream?userId=${encodeURIComponent(currentUser.id)}`;
+
+    let evtSource: EventSource | null = null;
+    if (typeof EventSource !== 'undefined') {
+      try {
+        evtSource = new EventSource(streamUrl);
+        evtSource.addEventListener('application_submitted', evt => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse((evt as MessageEvent).data);
+            if (payload?.application) {
+              setVerifications(prev => [
+                payload.application,
+                ...prev.filter(v => v.id !== payload.application.id)
+              ]);
+            }
+            if (payload?.adminNotification && isAdminSession) {
+              setNotifications(prev => {
+                const key = payload.adminNotification.eventKey || payload.adminNotification.id;
+                if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+                return [payload.adminNotification, ...prev];
+              });
+            }
+            if (isAdminSession && getStoredAdminToken()) {
+              refreshCreatorApplications().catch(() => {});
+            }
+          } catch {
+            // ignore malformed event
+          }
+        });
+
+        evtSource.addEventListener('application_reviewed', evt => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse((evt as MessageEvent).data);
+            if (payload?.application) {
+              setVerifications(prev =>
+                prev.some(v => v.id === payload.application.id)
+                  ? prev.map(v => (v.id === payload.application.id ? payload.application : v))
+                  : [payload.application, ...prev]
+              );
+            }
+            if (payload?.user) {
+              const srvUser = payload.user as User;
+              setUsers(prev => ({
+                ...prev,
+                [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+              }));
+              if (payload.creatorProfile) {
+                setCreators(prev => {
+                  const idx = prev.findIndex(c => c.id === payload.creatorProfile.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = payload.creatorProfile;
+                    return next;
+                  }
+                  return [payload.creatorProfile, ...prev];
+                });
+              }
+              if (currentUser.id === srvUser.id) {
+                if (srvUser.role === 'creator' && payload.creatorProfile) {
+                  setCurrentUser(payload.creatorProfile);
+                  setActiveRole('creator');
+                } else {
+                  setCurrentUser(srvUser);
+                  setActiveRole(srvUser.role);
+                }
+              }
+            }
+            if (payload?.notification) {
+              setNotifications(prev => {
+                const key = payload.notification.eventKey || payload.notification.id;
+                if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+                return [payload.notification, ...prev];
+              });
+            }
+            if (payload?.auditRecord) {
+              setCreatorApplicationAuditLogs(prev => [
+                payload.auditRecord,
+                ...prev.filter(a => a.id !== payload.auditRecord.id)
+              ]);
+            }
+          } catch {
+            // ignore
+          }
+        });
+      } catch {
+        // ignore if EventSource fails
+      }
+    }
+
+    const unsubscribeSupaRealtime = subscribeToCreatorApplicationsRealtime(() => {
+      if (cancelled) return;
+      if (isAdminSession && getStoredAdminToken()) {
+        refreshCreatorApplications().catch(() => {});
+      }
+    });
+
+    const fallbackInterval = isAdminSession
+      ? setInterval(() => {
+          if (!cancelled && getStoredAdminToken()) {
+            refreshCreatorApplications().catch(() => {});
+          }
+        }, 25000)
+      : null;
+
+    return () => {
+      cancelled = true;
+      if (evtSource) evtSource.close();
+      unsubscribeSupaRealtime();
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
+  }, [isAuthenticated, currentUser?.id, activeRole]);
+
+  const reviewVerification = async (
+    id: string,
+    status: 'approved' | 'rejected' | 'info_requested',
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!hasAdminPermission(['super_admin', 'admin', 'moderator'])) {
+      return { success: false, error: 'Unauthorized: Only administrators can review creator applications.' };
+    }
+
+    const adminToken = getStoredAdminToken();
+    const actionSegment =
+      status === 'approved' ? 'approve' : status === 'rejected' ? 'reject' : 'request-info';
+
+    if (adminToken) {
+      try {
+        const res = await fetch(
+          `/api/creator-applications/${encodeURIComponent(id)}/${actionSegment}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${adminToken}`
+            },
+            body: JSON.stringify({ notes })
+          }
+        );
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          return { success: false, error: data?.error || 'Application review failed on server.' };
+        }
+
+        // Best-effort mirror to Supabase RPC if user is authenticated via Supabase Admin
+        if (status === 'approved') {
+          approveCreatorApplicationViaSupabaseRpc(id, notes).catch(() => {});
+        } else if (status === 'rejected') {
+          rejectCreatorApplicationViaSupabaseRpc(id, notes).catch(() => {});
+        }
+
+        if (data.application) {
+          setVerifications(prev =>
+            prev.some(v => v.id === data.application.id)
+              ? prev.map(v => (v.id === data.application.id ? data.application : v))
+              : [data.application, ...prev]
+          );
+        }
+        if (data.user) {
+          const srvUser = data.user as User;
+          setUsers(prev => ({
+            ...prev,
+            [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+          }));
+          if (currentUser.id === srvUser.id) {
+            if (srvUser.role === 'creator' && data.creatorProfile) {
+              setCurrentUser(data.creatorProfile);
+              setActiveRole('creator');
+            } else {
+              setCurrentUser(srvUser);
+              setActiveRole(srvUser.role);
+            }
+          }
+        }
+        if (data.creatorProfile) {
+          setCreators(prev => {
+            const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = data.creatorProfile;
+              return next;
+            }
+            return [data.creatorProfile, ...prev];
+          });
+        }
+        if (data.notification) {
+          setNotifications(prev => {
+            const key = data.notification.eventKey || data.notification.id;
+            if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+            return [data.notification, ...prev];
+          });
+        }
+        if (data.auditRecord) {
+          setCreatorApplicationAuditLogs(prev => [
+            data.auditRecord,
+            ...prev.filter(a => a.id !== data.auditRecord.id)
+          ]);
+        }
+
+        const verif = data.application || verifications.find(v => v.id === id);
+        if (verif) {
+          logAdminAction({
+            category: 'creator_approval',
+            action:
+              status === 'approved'
+                ? 'Approved Creator Application & 18+ Identity Verification'
+                : status === 'info_requested'
+                ? 'Requested Additional Verification Documents from Applicant'
+                : 'Rejected Creator Application',
+            targetType: 'CreatorVerification',
+            targetId: id,
+            targetLabel: `${verif.name} (@${verif.username})`,
+            details: notes || `Verification status set to ${status.toUpperCase()}`,
+            severity: status === 'rejected' ? 'warning' : 'info'
+          });
+        }
+
+        return { success: true };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to communicate with server';
+        return { success: false, error: msg };
+      }
+    }
+
+    // Fallback when running without backend token
+    const verif = verifications.find(v => v.id === id);
+    if (!verif) return { success: false, error: 'Creator application not found.' };
+    if (verif.userId === currentUser.id) {
+      return { success: false, error: 'Security Policy: Administrators cannot approve their own application.' };
+    }
+    if (verif.status !== 'pending' && verif.status !== 'info_requested') {
+      return { success: false, error: `Application is already finalized as ${verif.status}.` };
+    }
+
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
     setVerifications(prev =>
       prev.map(v =>
         v.id === id
@@ -5184,65 +6160,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : v
       )
     );
-    
-    const verif = verifications.find(v => v.id === id);
-    if (!verif) return;
-
-    logAdminAction({
-      category: 'creator_approval',
-      action:
-        status === 'approved'
-          ? `Approved Creator Application & 18+ Identity Verification`
-          : status === 'info_requested'
-          ? `Requested Additional Verification Documents from Applicant`
-          : `Rejected Creator Application`,
-      targetType: 'CreatorVerification',
-      targetId: id,
-      targetLabel: `${verif.name} (@${verif.username})`,
-      details: notes || `Verification status set to ${status.toUpperCase()}`,
-      severity: status === 'rejected' ? 'warning' : 'info'
-    });
 
     if (status === 'approved') {
       const targetUserId = verif.userId;
       const targetEntry = findUserEntryByKeyOrId(targetUserId);
-      const targetUser = targetEntry?.user || (currentUser.id === targetUserId ? currentUser : null);
-      
+      const existingUserObj = targetEntry?.user;
       const appData = verif.applicationData;
-      const displayName = appData?.displayName || verif.name || targetUser?.name || 'New Creator';
-      const username = verif.username || targetUser?.username || `creator_${Date.now().toString(36)}`;
-      const bio = appData?.bio || 'Official Acovon verified creator.';
-      const category = appData?.category || 'Fashion & Luxury';
-      const tierPrice = appData?.monthlyTierPrice || 14.99;
-
-      const existingUserObj = targetEntry?.user || (currentUser.id === targetUserId ? currentUser : null);
-      const userAvatar = existingUserObj?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-      const userEmail = existingUserObj?.email || `${username}@acovon.creator`;
-      const userDateJoined = existingUserObj?.dateJoined || new Date().toISOString().split('T')[0];
-      const userCountry = existingUserObj?.country || 'United States';
-
+      const displayName = appData?.displayName || verif.name || existingUserObj?.name || 'New Creator';
+      const username = existingUserObj?.username || verif.username;
+      const userEmail = existingUserObj?.email || verif.email || `${username}@acovon.com`;
       const targetKey = targetEntry?.key || targetUserId;
 
-      // Update the existing user record in place (do NOT create a duplicate account)
       setUsers(prev => ({
         ...prev,
         [targetKey]: {
           ...(prev[targetKey] || existingUserObj || {
             id: targetUserId,
             name: displayName,
-            username: username,
+            username,
             email: userEmail,
-            avatar: userAvatar,
-            dateJoined: userDateJoined,
-            country: userCountry,
+            avatar: verif.avatar || verif.selfieUrl,
+            dateJoined: new Date().toISOString().split('T')[0],
+            country: 'United States',
             walletBalance: 0,
             isVerified: true,
             is18PlusConfirmed: true
           }),
           id: targetUserId,
-          name: displayName,
-          username: username,
-          email: userEmail,
           role: 'creator' as UserRole,
           accountStatus: 'active',
           isVerified: true,
@@ -5255,121 +6199,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: nowStr
         }
       }));
-
-      const existingCreator = creators.find(c => c.id === targetUserId);
-      const newCreatorProfile: CreatorProfile = existingCreator ? {
-        ...existingCreator,
-        name: displayName,
-        username: username,
-        email: userEmail,
-        bio: bio,
-        category: category,
-        role: 'creator',
-        isVerified: true,
-        accountStatus: 'active',
-        creatorApplicationStatus: 'approved',
-        creatorApprovalStatus: 'approved',
-        creatorApprovedByAdminId: currentUser.id,
-        creatorApprovedByAdminName: currentUser.name,
-        creatorApprovedAt: nowStr,
-        updatedAt: nowStr
-      } : {
-        id: targetUserId,
-        name: displayName,
-        username: username,
-        email: userEmail,
-        avatar: userAvatar,
-        coverImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80',
-        bio: bio,
-        category: category,
-        role: 'creator',
-        accountStatus: 'active',
-        creatorApplicationStatus: 'approved',
-        creatorApprovalStatus: 'approved',
-        creatorApprovedByAdminId: currentUser.id,
-        creatorApprovedByAdminName: currentUser.name,
-        creatorApprovedAt: nowStr,
-        updatedAt: nowStr,
-        walletBalance: existingUserObj?.walletBalance || 0,
-        pendingBalance: 0,
-        totalEarnings: 0,
-        withdrawnAmount: 0,
-        subscribersCount: 0,
-        followersCount: 0,
-        isVerified: true,
-        is18PlusConfirmed: true,
-        dateJoined: userDateJoined,
-        country: userCountry,
-        isLiveForCalls: true,
-        callRatePerMinute: 3.5,
-        instantCallsEnabled: true,
-        minCallMinutes: 5,
-        maxCallMinutes: 60,
-        acceptingCustomRequests: true,
-        customRequestBasePrice: 50.0,
-        customRequestDeliveryDays: 3,
-        customRequestTerms: 'Custom video commissions and personalized creator video recordings.',
-        tiers: [
-          {
-            id: `tier_bronze_${Date.now()}`,
-            name: 'Standard Access',
-            price: Number(tierPrice.toFixed(2)),
-            perks: ['Full feed access', 'Community posts', 'Exclusive photo previews']
-          },
-          {
-            id: `tier_vip_${Date.now()}`,
-            name: 'VIP Gold Access',
-            price: Number((tierPrice * 2.5).toFixed(2)),
-            perks: ['Full feed access', 'VIP Livestreams included', 'Direct 1-on-1 messaging', 'Priority custom requests']
-          }
-        ]
-      };
-
-      setCreators(prev => {
-        const idx = prev.findIndex(c => c.id === targetUserId);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = newCreatorProfile;
-          return updated;
-        }
-        return [newCreatorProfile, ...prev];
-      });
-
-      if (currentUser.id === targetUserId) {
-        setCurrentUser(newCreatorProfile);
-        setActiveRole('creator');
-      }
-
-      const notif: AppNotification = {
-        id: `notif_${Date.now()}`,
-        userId: targetUserId,
-        type: 'system',
-        title: 'Creator Privileges Approved!',
-        message: `Welcome to Acovon Creator Studio, ${displayName}! Your 18+ identity verification has been audited and approved. Your existing account now has full Creator privileges.`,
-        read: false,
-        createdAt: 'Just now'
-      };
-      setNotifications(prev => [notif, ...prev]);
-    } else if (status === 'info_requested') {
-      const notif: AppNotification = {
-        id: `notif_${Date.now()}`,
-        userId: verif.userId,
-        type: 'system',
-        title: 'Additional Verification Info Requested',
-        message: `Acovon Trust & Safety requested additional details for your creator application: ${notes || 'Please re-upload a clearer high-resolution government ID.'}`,
-        read: false,
-        createdAt: 'Just now'
-      };
-      setNotifications(prev => [notif, ...prev]);
-    } else {
-      // Rejected: account role remains Fan
-      const targetUserId = verif.userId;
-      const targetEntry = findUserEntryByKeyOrId(targetUserId);
-      const targetKey = targetEntry?.key || targetUserId;
+    } else if (status === 'rejected') {
+      const targetEntry = findUserEntryByKeyOrId(verif.userId);
       if (targetEntry?.user) {
         setUsers(prev => ({
           ...prev,
-          [targetKey]: {
+          [targetEntry.key]: {
             ...targetEntry.user,
             role: 'fan',
             creatorApplicationStatus: 'rejected',
@@ -5379,21 +6214,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }));
       }
-
-      const notif: AppNotification = {
-        id: `notif_${Date.now()}`,
-        userId: verif.userId,
-        type: 'system',
-        title: 'Creator Application Update',
-        message: `Your creator application could not be approved: ${notes || 'Document verification could not be completed.'}`,
-        read: false,
-        createdAt: 'Just now'
-      };
-      setNotifications(prev => [notif, ...prev]);
     }
+
+    return { success: true };
   };
 
-  const applyToBecomeCreator = (data: CreatorApplicationData) => {
+  const applyToBecomeCreator = async (
+    data: CreatorApplicationData
+  ): Promise<{ success: boolean; error?: string; application?: CreatorVerification }> => {
     if (!requireAuth('apply to become a creator')) {
       return { success: false, error: 'Please sign in or create an account first.' };
     }
@@ -5410,104 +6238,132 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Government identification document number is required.' };
     }
 
-    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
-
-    const newVerif: CreatorVerification = {
-      id: `verif_${Date.now()}`,
-      userId: currentUser.id,
-      name: data.displayName,
-      username: currentUser.username,
-      documentType: data.documentType,
-      documentNumber: data.documentNumber,
-      documentFileUrl: data.documentFileUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=400&q=80',
-      selfieUrl: data.selfieUrl || currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      status: 'pending',
-      submittedAt: nowStr,
-      notes: `Creator application for category: ${data.category}. Associated with existing account ${currentUser.email} (@${currentUser.username}).`,
-      applicationData: data
-    };
-
-    setVerifications(prev => {
-      const next = [newVerif, ...prev.filter(v => v.userId !== currentUser.id)];
+    try {
+      let supaAccessToken = '';
+      let supaUser: { id?: string; email?: string } | undefined;
       try {
-        localStorage.setItem('acovon_verifications_v2', JSON.stringify(next));
+        const { data: sessionData } = await supabase.auth.getSession();
+        supaAccessToken = sessionData?.session?.access_token || '';
+        supaUser = sessionData?.session?.user;
       } catch {
-        // ignore
+        supaAccessToken = '';
       }
-      return next;
-    });
 
-    // Update the existing user record's creatorApplicationStatus to 'pending' while keeping role as 'fan'
-    const userEntry = findUserEntryByKeyOrId(currentUser.id);
-    const userKey = userEntry?.key || currentUser.id;
-    setUsers(prev => {
-      const next: Record<string, User> = {
-        [userKey]: {
-          ...(prev[userKey] || (currentUser as User)),
-          role: 'fan',
-          creatorApplicationStatus: 'pending',
-          creatorApprovalStatus: 'pending',
-          creatorRejectionReason: undefined,
-          updatedAt: nowStr
-        },
-        ...prev
-      };
-      next[userKey] = {
-        ...(prev[userKey] || (currentUser as User)),
+      const knownEntry = findUserEntryByKeyOrId(currentUser.id);
+      const applicantEmail =
+        (currentUser.email && currentUser.email.includes('@') ? currentUser.email : '') ||
+        (supaUser?.email && supaUser.email.includes('@') ? supaUser.email : '') ||
+        knownEntry?.user?.email ||
+        '';
+      const applicantUserId = currentUser.id || supaUser?.id || '';
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (supaAccessToken) {
+        headers['x-supabase-access-token'] = supaAccessToken;
+      }
+
+      const res = await fetch('/api/creator-applications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          userId: applicantUserId,
+          email: applicantEmail,
+          name: currentUser.name || data.displayName.trim(),
+          username: currentUser.username || applicantEmail.split('@')[0] || 'member',
+          avatar: currentUser.avatar,
+          applicationData: data
+        })
+      });
+      const result = await res.json();
+      if (!res.ok || !result?.success) {
+        if (result?.existingApplication) {
+          setVerifications(prev => [
+            result.existingApplication,
+            ...prev.filter(v => v.id !== result.existingApplication.id)
+          ]);
+        }
+        return { success: false, error: result?.error || 'Failed to submit creator application.' };
+      }
+
+      const newVerif = result.application as CreatorVerification;
+      const updatedUser = result.user as User;
+
+      // Mirror directly from browser Supabase session (with real auth.uid()) if not already mirrored by server
+      if (supaAccessToken && !result?.supabaseMirror?.synced) {
+        submitCreatorApplicationToSupabase({
+          id: newVerif.id,
+          userId: updatedUser.id,
+          name: newVerif.name,
+          username: newVerif.username,
+          email: newVerif.email || applicantEmail,
+          avatar: newVerif.avatar,
+          documentType: newVerif.documentType,
+          documentNumber: newVerif.documentNumber,
+          documentFileUrl: newVerif.documentFileUrl,
+          selfieUrl: newVerif.selfieUrl,
+          notes: newVerif.notes,
+          applicationData: newVerif.applicationData as any,
+          adminNotification: result.adminNotification
+        }).catch(() => {});
+      }
+
+      setVerifications(prev => {
+        const next = [newVerif, ...prev.filter(v => v.id !== newVerif.id)];
+        try {
+          localStorage.setItem('acovon_verifications_v2', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+
+      const userEntry = findUserEntryByKeyOrId(updatedUser.id);
+      const userKey = userEntry?.key || updatedUser.id;
+      setUsers(prev => {
+        const next = {
+          ...prev,
+          [userKey]: { ...(prev[userKey] || {}), ...updatedUser }
+        };
+        try {
+          localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+
+      setCurrentUser(prev => ({
+        ...prev,
+        id: updatedUser.id || prev.id,
+        email: updatedUser.email || prev.email,
         role: 'fan',
         creatorApplicationStatus: 'pending',
         creatorApprovalStatus: 'pending',
-        creatorRejectionReason: undefined,
-        updatedAt: nowStr
-      };
-      try {
-        localStorage.setItem('acovon_users_v2', JSON.stringify(next));
-      } catch {
-        // ignore
+        updatedAt: updatedUser.updatedAt
+      }));
+
+      if (result.userNotification) {
+        setNotifications(prev => {
+          const key = result.userNotification.eventKey || result.userNotification.id;
+          if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+          return [result.userNotification, ...prev];
+        });
       }
-      return next;
-    });
 
-    setCurrentUser(prev => ({
-      ...prev,
-      role: 'fan',
-      creatorApplicationStatus: 'pending',
-      creatorApprovalStatus: 'pending',
-      updatedAt: nowStr
-    }));
-
-    const appAudit: AdminAuditLog = {
-      id: `audit_creator_app_${Date.now()}`,
-      adminId: currentUser.id,
-      adminName: data.displayName,
-      adminRole: 'super_admin',
-      category: 'creator_approval',
-      action: 'New Creator Application Submitted',
-      targetType: 'CreatorVerification',
-      targetId: newVerif.id,
-      targetLabel: `${data.displayName} (@${currentUser.username})`,
-      details: `Submitted 18+ creator verification application in category "${data.category}" (${data.documentType.replace('_', ' ')} #${data.documentNumber}).`,
-      timestamp: nowStr,
-      severity: 'info'
-    };
-    setAuditLogs(prev => [appAudit, ...prev]);
-
-    const notif: AppNotification = {
-      id: `notif_${Date.now()}`,
-      userId: currentUser.id,
-      type: 'system',
-      title: 'Creator Application Under Review',
-      message: 'Your 18+ identity verification & creator application have been linked to your existing ACOVON account and submitted for Admin approval.',
-      read: false,
-      createdAt: 'Just now'
-    };
-    setNotifications(prev => [notif, ...prev]);
-
-    return { success: true };
+      return { success: true, application: newVerif };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to submit application. Please retry.';
+      return { success: false, error: msg };
+    }
   };
 
   const userPendingVerification = verifications.find(
-    v => v.userId === currentUser.id && v.status === 'pending'
+    v =>
+      (v.userId === currentUser.id ||
+        (Boolean(currentUser.email) &&
+          Boolean(v.email) &&
+          v.email!.toLowerCase() === currentUser.email.toLowerCase())) &&
+      (v.status === 'pending' || v.status === 'info_requested')
   );
 
   const resolveReport = (reportId: string, actionTaken: string) => {
@@ -7140,7 +7996,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       creatorAvatar: creatorUser.avatar,
       title: streamData.title,
       description: streamData.description,
-      coverImage: streamData.coverImage || '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+      coverImage: streamData.coverImage || '',
       category: streamData.category,
       tags: streamData.tags,
       accessMode: streamData.accessMode,
@@ -7154,7 +8010,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startedAt: isScheduled ? undefined : 'Just now',
       scheduledFor: streamData.scheduledFor,
       expectedDurationMinutes: streamData.expectedDurationMinutes,
-      videoStreamUrl: streamData.videoStreamUrl || '/videos/sample1.mp4',
+      videoStreamUrl: streamData.videoStreamUrl || '',
       settings: streamData.settings,
       purchasedViewerIds: [],
       recordingSettings: recSettings,
@@ -7235,6 +8091,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? `Paid Replay ($${(targetStream.recordingSettings.price || 9.99).toFixed(2)})`
         : 'Free Official Replay';
 
+      const subscriberNotifs = subscriptions
+        .filter(sub => sub.creatorId === targetStream.creatorId && sub.status === 'active')
+        .map((sub, idx) => ({
+          id: `notif_rec_fan_${Date.now()}_${idx}`,
+          userId: sub.fanId,
+          type: 'livestream' as const,
+          title: `New Replay from ${targetStream.creatorName}`,
+          message: `${targetStream.creatorName}'s broadcast "${targetStream.title}" has ended. The official recording is now available (${modeLabel}).`,
+          read: false,
+          createdAt: 'Just now'
+        }));
+
       setNotifications(prev => [
         {
           id: `notif_rec_ready_${Date.now()}`,
@@ -7245,15 +8113,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           read: false,
           createdAt: 'Just now'
         },
-        {
-          id: `notif_rec_fan_${Date.now() + 1}`,
-          userId: 'user_fan_1',
-          type: 'livestream',
-          title: `New Replay from ${targetStream.creatorName}`,
-          message: `${targetStream.creatorName}'s broadcast "${targetStream.title}" has ended. The official recording is now available (${modeLabel}).`,
-          read: false,
-          createdAt: 'Just now'
-        },
+        ...subscriberNotifs,
         ...prev
       ]);
     }
@@ -8137,7 +8997,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         params.sourceUrl.startsWith('blob:') ||
         params.sourceUrl.startsWith('/'))
         ? params.sourceUrl
-        : `/videos/sample2.mp4`;
+        : '';
 
     const sampleMeta = getLocalSampleThumbnails(playableSourceUrl);
     const defaultThumb = params.thumbnailUrl || sampleMeta?.thumbnailUrl || '';
@@ -8467,7 +9327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const effectiveRawUrl = rawUrl || '/videos/sample1.mp4';
+    const effectiveRawUrl = rawUrl || '';
     const separator = effectiveRawUrl.includes('?') ? '&' : '?';
     const actorTokenId = isAuthenticated ? currentUser.id : anonymousSessionId;
     const tokenHash = btoa(`${actorTokenId}:${postOrMediaId}:${chosenRes}`).slice(0, 16);
@@ -9652,9 +10512,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // PERSONALIZED CONTENT RECOMMENDATION, DISCOVERY & SMART FEED ENGINE
   // ============================================================================
 
+  const createEmptyFanInterestProfile = (fanId: string, targetUser?: Partial<User>): FanInterestProfile => ({
+    id: `fprof_${fanId}`,
+    fanId,
+    fanName: targetUser?.name || 'Member',
+    fanUsername: targetUser?.username || 'member',
+    personaCode: 'custom',
+    personaLabel: targetUser?.name ? `${targetUser.name} (Personalized Fan Profile)` : 'Personalized Fan Profile',
+    personaDescription: 'Live recommendation affinity profile built from real activity.',
+    categoryScores: {},
+    recentCategoryScores: {},
+    longTermCategoryScores: {},
+    hashtagScores: {},
+    creatorAffinityScores: {},
+    formatPreferences: {
+      video: 0.25,
+      photo: 0.25,
+      gallery: 0.25,
+      livestream: 0.25
+    },
+    preferredVideoDuration: 'balanced',
+    avgCompletionRate: 0,
+    avgWatchCompletionPercent: 0,
+    avgWatchTimeSeconds: 0,
+    skippedCategories: {},
+    reducedCategories: [],
+    boostedCategories: [],
+    hiddenCreatorIds: [],
+    notInterestedPostIds: [],
+    reportedPostIds: [],
+    showMorePostIds: [],
+    onboardingCategories: [],
+    isColdStart: true,
+    totalEventsProcessed: 0,
+    lastUpdatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+  });
+
   const normalizeFanInterestProfile = (raw?: FanInterestProfile): FanInterestProfile => {
-    const base = raw || INITIAL_FAN_INTEREST_PROFILES.user_fan_1;
-    const avgComp = typeof base.avgCompletionRate === 'number' ? base.avgCompletionRate : 80;
+    const base = raw || createEmptyFanInterestProfile(currentUser.id || 'guest_visitor', currentUser);
+    const avgComp = typeof base.avgCompletionRate === 'number' ? base.avgCompletionRate : 0;
     return {
       ...base,
       categoryScores: base.categoryScores || {},
@@ -9676,27 +10572,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const activeFanInterestProfile: FanInterestProfile = normalizeFanInterestProfile(
-    fanInterestProfiles[activeRecommendationFanId] ||
-      fanInterestProfiles[currentUser.id] ||
-      fanInterestProfiles.user_fan_1 ||
-      INITIAL_FAN_INTEREST_PROFILES.user_fan_1
+    fanInterestProfiles[activeRecommendationFanId] || fanInterestProfiles[currentUser.id]
   );
 
   const switchRecommendationFanPersona = (fanId: string) => {
     if (fanInterestProfiles[fanId]) {
       setActiveRecommendationFanId(fanId);
     } else {
-      const targetUser = users[fanId] || MOCK_USERS.fan_jordan;
-      const newProfile: FanInterestProfile = {
-        ...INITIAL_FAN_INTEREST_PROFILES.fan_f,
-        id: `fprof_${fanId}`,
-        fanId,
-        fanName: targetUser.name,
-        fanUsername: targetUser.username,
-        personaCode: 'custom',
-        personaLabel: `${targetUser.name} (Personalized Fan Profile)`,
-        personaDescription: `Dynamic recommendation profile for @${targetUser.username}.`
-      };
+      const targetUser = users[fanId] || GUEST_USER;
+      const newProfile = createEmptyFanInterestProfile(fanId, targetUser);
       setFanInterestProfiles(prev => ({ ...prev, [fanId]: newProfile }));
       setActiveRecommendationFanId(fanId);
     }
@@ -10902,7 +11786,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // fallback
     }
-    return INITIAL_PLATFORM_ANNOUNCEMENTS;
+    return [];
   });
 
   const [announcementRecipients, setAnnouncementRecipients] = useState<AnnouncementRecipientRecord[]>(() => {
@@ -10910,12 +11794,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('acovon_announcement_recipients_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // fallback
     }
-    return INITIAL_ANNOUNCEMENT_RECIPIENTS;
+    return [];
   });
 
   useEffect(() => {
@@ -12315,9 +13199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         description:
           input.description?.trim() ||
           `Curated ${cleanName} videos, creators, and exclusive vault releases on ACOVON.`,
-        image:
-          input.image?.trim() ||
-          '/src/assets/images/creator_cover_luxury_1793476684350.jpg',
+        image: input.image?.trim() || '',
         is_active: true,
         display_order: input.display_order || categories.length + 1,
         created_at: new Date().toISOString().slice(0, 10)
@@ -12653,6 +13535,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCommissionSettings,
         updateAdSettings,
         reviewVerification,
+        creatorApplicationAuditLogs,
+        creatorApplicationCounts,
+        creatorApplicationSyncStatus,
+        refreshCreatorApplications,
         resolveReport,
         createPromotionCampaign,
         updateCreatorProfile,

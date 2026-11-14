@@ -319,11 +319,17 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className="w-full p-2 rounded-xl bg-[#18181c] hover:bg-[#1f1f26] border border-[#27272a] hover:border-[#d4af37]/40 flex items-center gap-2.5 text-left transition-all cursor-pointer"
                 >
-                  <img
-                    src={creator.avatar}
-                    alt={creator.name}
-                    className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#d4af37]/30"
-                  />
+                  {creator.avatar ? (
+                    <img
+                      src={creator.avatar}
+                      alt={creator.name}
+                      className="w-8 h-8 rounded-full object-cover shrink-0 border border-[#d4af37]/30"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#1f1f26] border border-[#d4af37]/30 flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                      {(creator.name || 'C').charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-bold text-[#f4f4f5] flex items-center gap-1 min-w-0">
                       <span className="truncate">{creator.name}</span>

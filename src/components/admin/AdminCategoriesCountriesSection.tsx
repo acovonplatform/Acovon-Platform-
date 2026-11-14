@@ -29,7 +29,7 @@ import {
 } from '../../data/globalTaxonomy';
 import { uploadUserFileToSupabase } from '../../services/supabase';
 
-const DEFAULT_CATEGORY_COVER = '/src/assets/images/creator_cover_luxury_1793476684350.jpg';
+const DEFAULT_CATEGORY_COVER = '';
 
 export const AdminCategoriesCountriesSection: React.FC = () => {
   const {
@@ -458,11 +458,17 @@ export const AdminCategoriesCountriesSection: React.FC = () => {
                         </td>
                         <td className="py-3 px-4 min-w-[200px] whitespace-normal">
                           <div className="flex items-center gap-3">
-                            <img
-                              src={cat.image || DEFAULT_CATEGORY_COVER}
-                              alt={cat.name}
-                              className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0"
-                            />
+                            {cat.image ? (
+                              <img
+                                src={cat.image}
+                                alt={cat.name}
+                                className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-[#1d1d26] border border-white/10 shrink-0 flex items-center justify-center text-[#d4af37]/60">
+                                <ImageIcon className="w-4 h-4" />
+                              </div>
+                            )}
                             <div>
                               <div className="font-bold text-white">{cat.name}</div>
                               {cat.description && (
@@ -762,12 +768,18 @@ export const AdminCategoriesCountriesSection: React.FC = () => {
                       : 'border-white/10 hover:border-[#d4af37]/50 bg-[#18181f]'
                   }`}
                 >
-                  <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-black/50">
-                    <img
-                      src={formImage || DEFAULT_CATEGORY_COVER}
-                      alt={formName || 'Category cover preview'}
-                      className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                    />
+                  <div className="relative h-36 sm:h-40 w-full overflow-hidden bg-gradient-to-br from-[#1b1811] via-[#131318] to-black/60">
+                    {formImage ? (
+                      <img
+                        src={formImage}
+                        alt={formName || 'Category cover preview'}
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#d4af37]/25">
+                        <ImageIcon className="w-12 h-12" />
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/20" />
 
                     {/* Uploading Overlay */}
@@ -927,11 +939,17 @@ export const AdminCategoriesCountriesSection: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#18181f] border border-white/10">
-              <img
-                src={deletingCategory.image || DEFAULT_CATEGORY_COVER}
-                alt={deletingCategory.name}
-                className="w-12 h-12 rounded-xl object-cover border border-white/10 shrink-0"
-              />
+              {deletingCategory.image ? (
+                <img
+                  src={deletingCategory.image}
+                  alt={deletingCategory.name}
+                  className="w-12 h-12 rounded-xl object-cover border border-white/10 shrink-0"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-[#1d1d26] border border-white/10 shrink-0 flex items-center justify-center text-[#d4af37]/60">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+              )}
               <div className="min-w-0">
                 <div className="text-sm font-bold text-white truncate">{deletingCategory.name}</div>
                 <div className="text-[11px] font-mono text-neutral-400 truncate">

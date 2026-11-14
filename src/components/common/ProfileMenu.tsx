@@ -93,13 +93,8 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
   const isAuthorizedAdmin = currentUser.role === 'admin' || currentUser.adminPermissionLevel !== undefined;
 
   const roleOptions: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = useMemo(() => {
-    const list: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = [
-      { label: 'Jordan Cross', role: 'fan', subtitle: 'Subscriber & Content Patron' },
-      { label: 'Elena Vance', role: 'creator', specificId: 'creator_elena', subtitle: 'Fashion Director · $38.4k' },
-      { label: 'Marcus Thorne', role: 'creator', specificId: 'creator_marcus', subtitle: 'Music Producer · Calls Enabled' }
-    ];
+    const list: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = [];
 
-    // Only authorized administrators can switch between administrative operators
     if (isAuthorizedAdmin) {
       list.push(
         { label: 'Julian Sterling', role: 'admin', specificId: 'user_admin_1', subtitle: 'Super Admin · Full Platform Control' },
@@ -135,11 +130,17 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
         title="Open Profile Menu"
       >
         <div className="relative shrink-0">
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
-          />
+          {currentUser.avatar ? (
+            <img
+              src={currentUser.avatar}
+              alt={currentUser.name}
+              className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-[#1f1f26] border border-[#d4af37]/60 flex items-center justify-center text-[11px] font-bold text-[#fce7b0]">
+              {(currentUser.name || 'A').charAt(0).toUpperCase()}
+            </div>
+          )}
           <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[#141418]" />
         </div>
         
@@ -163,11 +164,17 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
           {/* User Overview Card */}
           <div className="p-3 bg-[#18181c] rounded-xl mb-2 border border-[#27272a]">
             <div className="flex items-center gap-3">
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/50"
-              />
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/50"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-[#1f1f26] border border-[#d4af37]/50 flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
+                  {(currentUser.name || 'A').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-white flex items-center gap-1 min-w-0">
                   <span className="truncate">{currentUser.name}</span>
@@ -227,7 +234,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 } else if (onOpenFanProfile) {
                   onOpenFanProfile();
                 } else {
-                  onNavigate('creator-profile', 'creator_elena');
+                  onOpenEditProfile();
                 }
               }}
               className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:text-white hover:bg-[#1a1a20] rounded-lg transition-colors flex items-center justify-between cursor-pointer"
@@ -504,45 +511,48 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
             </>
           )}
 
-          {/* Divider */}
-          <div className="h-px bg-[#26262b] my-1.5" />
+          {isAuthorizedAdmin && roleOptions.length > 0 && (
+            <>
+              <div className="h-px bg-[#26262b] my-1.5" />
 
-          {/* Role Persona Switcher Submenu */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => setShowPersonaSubmenu(!showPersonaSubmenu)}
-              className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:text-white hover:bg-[#1a1a20] rounded-lg transition-colors flex items-center justify-between cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <UserCheck className="w-4 h-4 text-[#d4af37]" />
-                <span>Switch Platform Role</span>
-              </div>
-              <ChevronRight className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${showPersonaSubmenu ? 'rotate-90' : ''}`} />
-            </button>
+              {/* Role Switcher Submenu (Authorized Admins Only) */}
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => setShowPersonaSubmenu(!showPersonaSubmenu)}
+                  className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:text-white hover:bg-[#1a1a20] rounded-lg transition-colors flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <UserCheck className="w-4 h-4 text-[#d4af37]" />
+                    <span>Switch Operator Account</span>
+                  </div>
+                  <ChevronRight className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${showPersonaSubmenu ? 'rotate-90' : ''}`} />
+                </button>
 
-            {showPersonaSubmenu && (
-              <div className="pl-2 pr-1 py-1 space-y-1 bg-[#16161b] rounded-lg border border-[#27272a] my-1">
-                {roleOptions.map((opt) => {
-                  const isSelected = activeRole === opt.role && (!opt.specificId || currentUser.id === opt.specificId);
-                  return (
-                    <button
-                      key={opt.label}
-                      onClick={() => handleSelectRole(opt)}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[#d4af37]/15 text-[#fce7b0]' : 'hover:bg-[#1f1f26] text-neutral-400 hover:text-neutral-200'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium">{opt.label}</div>
-                        <div className="text-[10px] text-neutral-500">{opt.subtitle}</div>
-                      </div>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-[#d4af37]" />}
-                    </button>
-                  );
-                })}
+                {showPersonaSubmenu && (
+                  <div className="pl-2 pr-1 py-1 space-y-1 bg-[#16161b] rounded-lg border border-[#27272a] my-1">
+                    {roleOptions.map((opt) => {
+                      const isSelected = activeRole === opt.role && (!opt.specificId || currentUser.id === opt.specificId);
+                      return (
+                        <button
+                          key={opt.label}
+                          onClick={() => handleSelectRole(opt)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected ? 'bg-[#d4af37]/15 text-[#fce7b0]' : 'hover:bg-[#1f1f26] text-neutral-400 hover:text-neutral-200'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-medium">{opt.label}</div>
+                            <div className="text-[10px] text-neutral-500">{opt.subtitle}</div>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#d4af37]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Log Out */}
           <div className="mt-1 pt-1 border-t border-[#26262b]">

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile, Post } from '../../types';
-import { CATEGORIES, DEMO_STATS } from '../../data/mockData';
+import { CATEGORIES } from '../../data/mockData';
 import { matchesCategoryIdentifier, matchesCountryIdentifier } from '../../data/globalTaxonomy';
 import { DiscoveryFilterBar } from '../discovery/DiscoveryFilterBar';
 import { AdBanner } from '../ads/AdBanner';
@@ -295,13 +295,15 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                   >
                     <div>
                       {/* Cover */}
-                      <div className="relative h-32 bg-neutral-900 overflow-hidden">
-                        <img
-                          src={creator.coverImage}
-                          alt={creator.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
+                      <div className="relative h-32 bg-gradient-to-br from-[#1b1810] via-[#131318] to-[#0c0c10] overflow-hidden">
+                        {creator.coverImage && (
+                          <img
+                            src={creator.coverImage}
+                            alt={creator.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-[#121215] via-transparent to-transparent" />
 
                         {isBoosted && (
@@ -322,14 +324,20 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                       {/* Body Info */}
                       <div className="p-5 pt-0 relative">
                         <div className="flex items-end justify-between -mt-10 mb-3">
-                          <img
-                            src={creator.avatar}
-                            alt={creator.name}
-                            referrerPolicy="no-referrer"
-                            className="w-16 h-16 rounded-xl object-cover border-2 border-[#121215] shadow-lg"
-                          />
+                          {creator.avatar ? (
+                            <img
+                              src={creator.avatar}
+                              alt={creator.name}
+                              referrerPolicy="no-referrer"
+                              className="w-16 h-16 rounded-xl object-cover border-2 border-[#121215] shadow-lg"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-xl bg-[#1f1f26] border-2 border-[#121215] shadow-lg flex items-center justify-center text-xl font-bold text-[#fce7b0]">
+                              {(creator.name || 'C').charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <span className="text-xs font-mono font-bold text-[#fce7b0]">
-                            From ${creator.tiers[0]?.price}/mo
+                            From ${creator.tiers?.[0]?.price ?? 0}/mo
                           </span>
                         </div>
 
@@ -517,12 +525,18 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                           onClick={() => onSelectCreator(post.creatorId)}
                           className="flex items-center gap-2 cursor-pointer group/creator"
                         >
-                          <img
-                            src={post.creatorAvatar}
-                            alt={post.creatorName}
-                            referrerPolicy="no-referrer"
-                            className="w-7 h-7 rounded-full object-cover border border-[#27272a]"
-                          />
+                          {post.creatorAvatar ? (
+                            <img
+                              src={post.creatorAvatar}
+                              alt={post.creatorName}
+                              referrerPolicy="no-referrer"
+                              className="w-7 h-7 rounded-full object-cover border border-[#27272a]"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-[#1f1f26] border border-[#27272a] flex items-center justify-center text-[11px] font-bold text-[#fce7b0] shrink-0">
+                              {(post.creatorName || 'C').charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                             <span className="text-xs font-semibold text-white group-hover/creator:text-[#fce7b0] transition-colors inline-flex items-center gap-1">
                               <span>{post.creatorName}</span>
@@ -610,12 +624,18 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                 }}
                 className="flex items-center gap-3 cursor-pointer group min-w-0"
               >
-                <img
-                  src={activePreviewPost.creatorAvatar}
-                  alt={activePreviewPost.creatorName}
-                  referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
-                />
+                {activePreviewPost.creatorAvatar ? (
+                  <img
+                    src={activePreviewPost.creatorAvatar}
+                    alt={activePreviewPost.creatorName}
+                    referrerPolicy="no-referrer"
+                    className="w-9 h-9 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-[#1f1f26] border border-[#d4af37]/40 flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                    {(activePreviewPost.creatorName || 'C').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white group-hover:text-[#fce7b0] flex items-center gap-1.5">
                     <span className="truncate">{activePreviewPost.creatorName}</span>

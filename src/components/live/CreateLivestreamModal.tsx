@@ -36,9 +36,9 @@ export const CreateLivestreamModal: React.FC = () => {
   const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
   if (!isCreateLiveModalOpen || !isCreator) return null;
 
-  const currentCreator: CreatorProfile = (currentUser.role === 'creator'
+  const currentCreator: CreatorProfile | undefined = (currentUser.role === 'creator'
     ? (currentUser as CreatorProfile)
-    : (creators.find(c => c.id === 'creator_elena') || creators[0])) as CreatorProfile;
+    : (creators.find(c => c.id === currentUser.id) || creators[0])) as CreatorProfile | undefined;
 
   // Form State
   const [title, setTitle] = useState('');
@@ -68,9 +68,9 @@ export const CreateLivestreamModal: React.FC = () => {
   const [subscribersOnlyChat, setSubscribersOnlyChat] = useState(false);
   const [minimumTip, setMinimumTip] = useState(2.00);
 
-  // Cover image preset
+  // Cover image
   const [coverImage, setCoverImage] = useState<string>(
-    '/src/assets/images/creator_cover_luxury_1793476684350.jpg'
+    currentCreator?.coverImage || ''
   );
 
   // Recording & Replay Settings

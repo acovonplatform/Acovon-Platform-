@@ -1,24 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { LivestreamAccessMode } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import {
   Radio,
   Users,
-  DollarSign,
   Lock,
   Globe,
   Crown,
   Ticket,
   Key,
   Calendar,
-  Sparkles,
-  Plus,
-  Play,
   CheckCircle2,
-  Filter,
-  Flame,
   ArrowRight,
   BarChart2,
   Film,
@@ -45,14 +38,11 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
     activeRole,
     canUserAccessLivestream,
     canUserAccessReplay,
-    purchaseLivestreamRecording,
-    showDemoBadges
+    purchaseLivestreamRecording
   } = useApp();
 
   const isCreator = isAuthenticated && (currentUser.role === 'creator' || activeRole === 'creator');
 
-  const [selectedCategory, setSelectedCategory] = useState('All Categories');
-  const [selectedModeFilter, setSelectedModeFilter] = useState<string>('all');
   const [replayTabFilter, setReplayTabFilter] = useState<'all_replays' | 'my_purchased'>('all_replays');
   const [hubFeedback, setHubFeedback] = useState<string>('');
 
@@ -71,20 +61,7 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
     );
   };
 
-  const filteredStreams = livestreams.filter(stream => {
-    if (!matchesLiveSearch(stream)) return false;
-    if (selectedCategory !== 'All Categories' && stream.category !== selectedCategory) {
-      return false;
-    }
-    if (selectedModeFilter === 'live_now' && stream.status !== 'live') return false;
-    if (selectedModeFilter === 'upcoming' && stream.status !== 'scheduled') return false;
-    if (selectedModeFilter === 'replays' && stream.status !== 'ended') return false;
-    if (selectedModeFilter === 'featured' && stream.viewerCount < 400 && stream.status !== 'live') return false;
-    if (selectedModeFilter === 'public' && stream.accessMode !== 'public') return false;
-    if (selectedModeFilter === 'subscriber_only' && stream.accessMode !== 'all_subscribers' && stream.accessMode !== 'selected_plan') return false;
-    if (selectedModeFilter === 'paid_ppv' && stream.accessMode !== 'pay_per_view') return false;
-    return true;
-  });
+  const filteredStreams = livestreams.filter(matchesLiveSearch);
 
   const liveNowStreams = filteredStreams.filter(s => s.status === 'live');
   const scheduledStreams = filteredStreams.filter(s => s.status === 'scheduled');
@@ -154,99 +131,6 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
-      
-      {/* HERO BANNER: ACOVON LIVE */}
-      <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-zinc-800 bg-gradient-to-r from-zinc-950 via-[#141418] to-zinc-950 p-5 sm:p-10 shadow-2xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-80 h-80 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 max-w-2xl space-y-3 sm:space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/60 border border-red-500/40 text-red-300 text-[11px] sm:text-xs font-bold uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-            Acovon Live Broadcast Network
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
-            Real-Time Creator Experience &amp; Monetization
-          </h1>
-
-          <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
-            Tune into live masterclasses, studio sessions, and exclusive VIP roundtables. Support creators with virtual gifts, priority questions, and live tipping.
-          </p>
-
-          <div className="pt-2 flex flex-wrap items-center gap-3">
-            {isCreator && (
-              <button
-                onClick={() => setIsCreateLiveModalOpen(true)}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#aa8c2c] text-black font-bold text-sm hover:brightness-110 transition-all shadow-lg shadow-[#d4af37]/20 flex items-center gap-2 cursor-pointer"
-              >
-                <Radio className="w-4 h-4" />
-                Go Live as Creator
-              </button>
-            )}
-
-            {liveNowStreams.length > 0 && (
-              <button
-                onClick={() => setActiveLivestreamId(liveNowStreams[0].id)}
-                className="px-5 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white font-semibold text-sm transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <Play className="w-4 h-4 text-[#d4af37] fill-[#d4af37]" />
-                Watch Featured Stream
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* FILTER BAR */}
-      <div className="space-y-3">
-        {/* Category Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                selectedCategory === cat
-                  ? 'bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Discovery Filter Pills */}
-        <div className="flex items-center gap-2 text-xs overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-zinc-500 font-medium mr-1 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" />
-            Discover:
-          </span>
-          {[
-            { id: 'all', label: 'All Streams' },
-            { id: 'live_now', label: 'Live Now' },
-            { id: 'replays', label: 'Official Replays' },
-            { id: 'upcoming', label: 'Upcoming Livestreams' },
-            { id: 'featured', label: 'Featured Streams' },
-            { id: 'public', label: 'Public Streams' },
-            { id: 'subscriber_only', label: 'Subscriber-Only Streams' },
-            { id: 'paid_ppv', label: 'Paid PPV Live Events' }
-          ].map(f => (
-            <button
-              key={f.id}
-              onClick={() => setSelectedModeFilter(f.id)}
-              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                selectedModeFilter === f.id
-                  ? 'bg-[#d4af37] text-black font-semibold shadow-sm'
-                  : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {hubFeedback && (
         <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2">
@@ -317,11 +201,17 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
                 >
                   {/* Thumbnail / Cover */}
                   <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
-                    <img
-                      src={stream.coverImage}
-                      alt={stream.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+                    {stream.coverImage ? (
+                      <img
+                        src={stream.coverImage}
+                        alt={stream.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black text-zinc-700">
+                        <Radio className="w-10 h-10" />
+                      </div>
+                    )}
 
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111114] via-black/20 to-black/60" />
@@ -332,11 +222,6 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
                         <Radio className="w-3 h-3" />
                         Live
                       </span>
-                      {showDemoBadges && stream.isDemo && (
-                        <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-700 text-zinc-300 backdrop-blur-md">
-                          DEMO
-                        </span>
-                      )}
                       {getModeBadge(stream.accessMode, stream.ppvTicketPrice)}
                       {stream.recordingSettings && stream.recordingSettings.mode !== 'disabled' && (
                         <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-red-200 bg-red-950/80 border border-red-500/40 px-2 py-0.5 rounded-full shadow-md">
@@ -383,11 +268,17 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
                     <div>
                       {/* Creator Row */}
                       <div className="flex items-center gap-2.5 mb-2">
-                        <img
-                          src={stream.creatorAvatar}
-                          alt={stream.creatorName}
-                          className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
-                        />
+                        {stream.creatorAvatar ? (
+                          <img
+                            src={stream.creatorAvatar}
+                            alt={stream.creatorName}
+                            className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/60"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-zinc-800 border border-[#d4af37]/60 flex items-center justify-center text-[10px] font-bold text-[#fce7b0]">
+                            {(stream.creatorName || 'C').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <span className="text-xs font-semibold text-zinc-200 truncate flex items-center gap-1.5">
                           <span className="inline-flex items-center gap-1 truncate">
                             <span className="truncate">{stream.creatorName}</span>
@@ -456,11 +347,17 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
                 onClick={() => setActiveLivestreamId(stream.id)}
                 className="p-3.5 sm:p-4 rounded-2xl bg-[#111114] border border-zinc-800 hover:border-[#d4af37]/60 transition-all cursor-pointer flex flex-col xs:flex-row gap-3 sm:gap-4 xs:items-center group"
               >
-                <img
-                  src={stream.coverImage}
-                  alt={stream.title}
-                  className="w-full xs:w-28 h-32 xs:h-20 rounded-xl object-cover shrink-0"
-                />
+                {stream.coverImage ? (
+                  <img
+                    src={stream.coverImage}
+                    alt={stream.title}
+                    className="w-full xs:w-28 h-32 xs:h-20 rounded-xl object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-full xs:w-28 h-32 xs:h-20 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 shrink-0">
+                    <Radio className="w-6 h-6" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] font-bold text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded">
@@ -571,11 +468,17 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
                 >
                   {/* Thumbnail */}
                   <div className="relative aspect-video w-full overflow-hidden bg-zinc-900">
-                    <img
-                      src={stream.coverImage}
-                      alt={stream.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+                    {stream.coverImage ? (
+                      <img
+                        src={stream.coverImage}
+                        alt={stream.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black text-zinc-700">
+                        <Film className="w-10 h-10" />
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#111114] via-black/25 to-black/60" />
 
                     {/* Top Left Badges */}

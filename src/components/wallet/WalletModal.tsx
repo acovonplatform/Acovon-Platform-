@@ -37,6 +37,9 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
 
   const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator';
   const userTransactions = transactions.filter(t => t.userId === currentUser.id);
+  const totalSpent = userTransactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,9 +172,9 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
                 </div>
               ) : (
                 <div className="p-5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-1">
-                  <span className="text-xs text-neutral-400">Total Spent & Supported</span>
+                  <span className="text-xs text-neutral-400">Total Spent &amp; Supported</span>
                   <div className="text-3xl font-bold font-mono text-neutral-300 tabular-nums">
-                    $224.99
+                    ${totalSpent.toFixed(2)}
                   </div>
                   <span className="text-[11px] text-neutral-500">Across subscriptions, tips, and video calls</span>
                 </div>
@@ -205,17 +208,23 @@ export const WalletModal: React.FC<WalletModalProps> = ({ onClose }) => {
                 Recent Activity
               </div>
               <div className="space-y-2">
-                {userTransactions.slice(0, 3).map(tx => (
-                  <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 text-xs">
-                    <div>
-                      <div className="font-medium text-white">{tx.description}</div>
-                      <div className="text-[10px] text-neutral-500 font-mono">{tx.createdAt} · {tx.id}</div>
-                    </div>
-                    <div className={`font-mono font-bold ${tx.amount > 0 ? 'text-emerald-400' : 'text-neutral-200'}`}>
-                      {tx.amount > 0 ? `+$${tx.amount.toFixed(2)}` : `-$${Math.abs(tx.amount).toFixed(2)}`}
-                    </div>
+                {userTransactions.length === 0 ? (
+                  <div className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl text-center text-xs text-neutral-500">
+                    No wallet transactions recorded yet.
                   </div>
-                ))}
+                ) : (
+                  userTransactions.slice(0, 3).map(tx => (
+                    <div key={tx.id} className="p-3 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap xs:flex-nowrap items-center justify-between gap-2 text-xs">
+                      <div>
+                        <div className="font-medium text-white">{tx.description}</div>
+                        <div className="text-[10px] text-neutral-500 font-mono">{tx.createdAt} · {tx.id}</div>
+                      </div>
+                      <div className={`font-mono font-bold ${tx.amount > 0 ? 'text-emerald-400' : 'text-neutral-200'}`}>
+                        {tx.amount > 0 ? `+$${tx.amount.toFixed(2)}` : `-$${Math.abs(tx.amount).toFixed(2)}`}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

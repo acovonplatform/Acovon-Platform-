@@ -377,44 +377,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     }
   };
 
-  // Trigger a real local sample video preset and extract actual frames from that video
-  const handleAddStudioMasterPreset = async (preset: '4k_prores' | '1080p_cinema') => {
-    setErrorMessage(null);
-    const is4K = preset === '4k_prores';
-    const fileName = is4K
-      ? 'Atelier_Cinema_Highlight_4K60.mp4'
-      : 'Studio_Session_Showcase_1080p.mp4';
-    const fileSizeBytes = is4K ? 448 * 1024 * 1024 : 164 * 1024 * 1024;
-    const sourceUrl = is4K ? '/videos/sample3.mp4' : '/videos/sample2.mp4';
-    const itemId = `preset_${Date.now()}`;
-
-    const pendingItem: SelectedFileItem = {
-      id: itemId,
-      fileName,
-      fileSizeBytes,
-      type: 'video',
-      previewUrl: sourceUrl,
-      thumbnailUrl: '',
-      previewFrames: [],
-      extractedFrames: [],
-      autoSelectCover: true,
-      coverExtractionStatus: 'extracting',
-      sizeMb: (fileSizeBytes / (1024 * 1024)).toFixed(1),
-      frameRate: 60
-    };
-
-    setSelectedFiles(prev => [...prev, pendingItem]);
-    setUploadStatus('ready');
-
-    await runCoverExtractionForItem({
-      itemId,
-      sourceUrl,
-      fileName,
-      fileSizeBytes,
-      mimeType: 'video/mp4'
-    });
-  };
-
   const handleCustomThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeThumbTargetId) return;

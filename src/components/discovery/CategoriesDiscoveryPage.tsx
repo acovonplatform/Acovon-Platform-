@@ -1079,13 +1079,15 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                           className="group cursor-pointer rounded-3xl bg-[#121216] border border-[#26262b] hover:border-[#d4af37]/50 overflow-hidden transition-all flex flex-col justify-between shadow-xl"
                         >
                           <div>
-                            <div className="h-28 w-full relative overflow-hidden bg-neutral-900">
-                              <img
-                                src={creator.coverImage}
-                                alt={creator.name}
-                                referrerPolicy="no-referrer"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              />
+                            <div className="h-28 w-full relative overflow-hidden bg-gradient-to-br from-[#1b1810] via-[#131318] to-[#0c0c10]">
+                              {creator.coverImage && (
+                                <img
+                                  src={creator.coverImage}
+                                  alt={creator.name}
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                />
+                              )}
                               <div className="absolute inset-0 bg-gradient-to-t from-[#121216] via-[#121216]/30 to-transparent" />
                               {creatorCountryMeta && (
                                 <div className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 text-xs font-bold text-[#fce7b0] flex items-center gap-1.5">
@@ -1097,12 +1099,18 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
 
                             <div className="px-5 pb-5 -mt-8 relative z-10 space-y-3">
                               <div className="flex items-end justify-between gap-3">
-                                <img
-                                  src={creator.avatar}
-                                  alt={creator.name}
-                                  referrerPolicy="no-referrer"
-                                  className="w-16 h-16 rounded-2xl object-cover border-2 border-[#121216] shadow-lg"
-                                />
+                                {creator.avatar ? (
+                                  <img
+                                    src={creator.avatar}
+                                    alt={creator.name}
+                                    referrerPolicy="no-referrer"
+                                    className="w-16 h-16 rounded-2xl object-cover border-2 border-[#121216] shadow-lg"
+                                  />
+                                ) : (
+                                  <div className="w-16 h-16 rounded-2xl bg-[#1f1f26] border-2 border-[#121216] shadow-lg flex items-center justify-center text-xl font-bold text-[#fce7b0]">
+                                    {(creator.name || 'C').charAt(0).toUpperCase()}
+                                  </div>
+                                )}
                                 <span className="px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-neutral-300 tabular-nums">
                                   {creatorPosts.length} {creatorPosts.length === 1 ? 'post' : 'posts'}
                                 </span>
@@ -1326,16 +1334,21 @@ export const CategoriesDiscoveryPage: React.FC<CategoriesDiscoveryPageProps> = (
                       className="group cursor-pointer rounded-3xl bg-[#121216] border border-[#26262b] hover:border-[#d4af37]/60 overflow-hidden transition-all duration-300 flex flex-col justify-between shadow-lg"
                     >
                       <div>
-                        <div className="relative h-44 w-full overflow-hidden bg-neutral-900">
-                          <img
-                            src={cat.image}
-                            alt={cat.name}
-                            onError={e => {
-                              (e.currentTarget as HTMLImageElement).src =
-                                'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80';
-                            }}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
+                        <div className="relative h-44 w-full overflow-hidden bg-gradient-to-br from-[#1d1a12] via-[#14141a] to-[#0c0c10]">
+                          {cat.image ? (
+                            <img
+                              src={cat.image}
+                              alt={cat.name}
+                              onError={e => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[#d4af37]/20 group-hover:text-[#d4af37]/35 transition-colors">
+                              <Grid className="w-14 h-14" />
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-[#121216] via-[#121216]/40 to-transparent" />
 
                           {/* Top badges */}

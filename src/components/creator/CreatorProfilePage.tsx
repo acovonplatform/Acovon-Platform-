@@ -100,6 +100,19 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
   };
 
   const creator = creators.find(c => c.id === creatorId) || creators[0];
+  if (!creator) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+        <div className="bg-[#121215] border border-[#27272a] rounded-2xl p-8 space-y-2">
+          <Film className="w-10 h-10 text-[#d4af37]/70 mx-auto" />
+          <h2 className="text-base font-bold text-white">Creator Profile Unavailable</h2>
+          <p className="text-xs text-neutral-400">
+            No approved creator profile matches this view yet.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const isOwner = isAuthenticated && currentUser.id === creator.id;
   const isCreatorOwner =
     isAuthenticated &&
@@ -142,13 +155,15 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
     <div className="max-w-[1600px] mx-auto pb-16 overflow-x-clip">
       
       {/* Cover Banner */}
-      <div className="relative w-full h-44 sm:h-64 md:h-80 bg-neutral-900 overflow-hidden">
-        <img
-          src={creator.coverImage}
-          alt={creator.name}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-cover"
-        />
+      <div className="relative w-full h-44 sm:h-64 md:h-80 bg-gradient-to-br from-[#1b1810] via-[#131318] to-[#0c0c10] overflow-hidden">
+        {creator.coverImage && (
+          <img
+            src={creator.coverImage}
+            alt={creator.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#09090b] via-[#09090b]/30 to-transparent" />
       </div>
 
@@ -159,12 +174,18 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
           {/* Avatar and Identity */}
           <div className="flex flex-col sm:flex-row sm:items-end gap-3.5 sm:gap-5 min-w-0">
             <div className="relative shrink-0 self-start">
-              <img
-                src={creator.avatar}
-                alt={creator.name}
-                referrerPolicy="no-referrer"
-                className="w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 rounded-2xl object-cover border-4 border-[#09090b] shadow-2xl"
-              />
+              {creator.avatar ? (
+                <img
+                  src={creator.avatar}
+                  alt={creator.name}
+                  referrerPolicy="no-referrer"
+                  className="w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 rounded-2xl object-cover border-4 border-[#09090b] shadow-2xl"
+                />
+              ) : (
+                <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 rounded-2xl bg-[#1f1f26] border-4 border-[#09090b] shadow-2xl flex items-center justify-center text-3xl sm:text-4xl font-bold text-[#fce7b0]">
+                  {(creator.name || 'C').charAt(0).toUpperCase()}
+                </div>
+              )}
               {creator.isLiveForCalls && (
                 <div className="absolute -top-1 -right-1 bg-emerald-500 text-black text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md shadow-md flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
@@ -265,7 +286,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 className="px-4 sm:px-5 py-2 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 shrink-0" />
-                <span>Subscribe from ${creator.tiers[0]?.price}/mo</span>
+                <span>Subscribe from ${creator.tiers?.[0]?.price ?? 0}/mo</span>
               </button>
             ) : (
               <button
@@ -452,7 +473,7 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                           : undefined)
                       : photoAsset?.thumbnailUrl || photoAsset?.url || creator.coverImage || post.creatorAvatar;
                     const durationSec = videoAsset?.durationSeconds || (post.ppvPreviewDuration ? post.ppvPreviewDuration : 45);
-                    const viewCount = post.likesCount ? Math.round(post.likesCount * 14.3) : 1240;
+                    const viewCount = post.viewsCount ?? 0;
 
                     return (
                       <div

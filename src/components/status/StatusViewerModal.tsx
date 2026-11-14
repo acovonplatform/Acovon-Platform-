@@ -420,11 +420,17 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
               className="flex items-center gap-2 group text-left min-w-0 flex-1"
             >
               <div className="relative shrink-0">
-                <img 
-                  src={currentCreator.avatar} 
-                  alt={currentCreator.name}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-amber-400 ring-2 ring-black"
-                />
+                {currentCreator.avatar ? (
+                  <img 
+                    src={currentCreator.avatar} 
+                    alt={currentCreator.name}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-amber-400 ring-2 ring-black"
+                  />
+                ) : (
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#1d1d24] border-2 border-amber-400 ring-2 ring-black flex items-center justify-center text-xs font-bold text-amber-300">
+                    {(currentCreator.name || 'C').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1 font-semibold text-xs sm:text-sm drop-shadow min-w-0">
@@ -597,33 +603,34 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
               </div>
             ) : resolvedMediaType === 'video' ? (
               <div className="w-full h-full relative flex items-center justify-center bg-black">
-                <video
-                  key={currentStatus.id}
-                  ref={videoRef}
-                  src={currentStatus.mediaUrl || '/videos/sample1.mp4'}
-                  poster={currentStatus.thumbnailUrl}
-                  playsInline
-                  autoPlay
-                  muted={isMuted}
-                  loop={false}
-                  onEnded={goToNextStory}
-                  onError={(e) => {
-                    const el = e.currentTarget;
-                    if (!el.src.includes('/videos/sample1.mp4')) {
-                      el.src = '/videos/sample1.mp4';
-                      el.load();
-                    }
-                  }}
-                  className="w-full h-full object-cover"
-                />
+                {currentStatus.mediaUrl ? (
+                  <video
+                    key={currentStatus.id}
+                    ref={videoRef}
+                    src={currentStatus.mediaUrl}
+                    poster={currentStatus.thumbnailUrl}
+                    playsInline
+                    autoPlay
+                    muted={isMuted}
+                    loop={false}
+                    onEnded={goToNextStory}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-xs text-neutral-400">Video status unavailable</div>
+                )}
               </div>
             ) : (
               <div className="w-full h-full relative flex items-center justify-center bg-black">
-                <img
-                  src={currentStatus.mediaUrl || currentStatus.thumbnailUrl || currentCreator.avatar}
-                  alt={currentStatus.caption || 'Creator Story'}
-                  className="w-full h-full object-cover"
-                />
+                {(currentStatus.mediaUrl || currentStatus.thumbnailUrl || currentCreator.avatar) ? (
+                  <img
+                    src={currentStatus.mediaUrl || currentStatus.thumbnailUrl || currentCreator.avatar}
+                    alt={currentStatus.caption || 'Creator Story'}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-xs text-neutral-400">Story media unavailable</div>
+                )}
               </div>
             )
           )}
@@ -781,11 +788,17 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
                 currentStatus.uniqueViews.map((viewer) => (
                   <div key={viewer.userId} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-neutral-800/40">
                     <div className="flex items-center gap-2.5">
-                      <img 
-                        src={viewer.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'} 
-                        alt={viewer.userName}
-                        className="w-8 h-8 rounded-full object-cover border border-neutral-700"
-                      />
+                      {viewer.userAvatar ? (
+                        <img 
+                          src={viewer.userAvatar} 
+                          alt={viewer.userName}
+                          className="w-8 h-8 rounded-full object-cover border border-neutral-700"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] font-bold text-neutral-300">
+                          {(viewer.userName || 'U').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <div className="text-xs font-semibold">{viewer.userName}</div>
                         <div className="text-[10px] text-neutral-400">{formatTimeAgo(viewer.viewedAt)}</div>

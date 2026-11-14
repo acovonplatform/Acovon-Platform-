@@ -40,7 +40,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const [copied, setCopied] = useState(false);
   const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
-    creators.find(c => c.id !== post.creatorId && c.id !== currentUser.id)?.id || 'creator_marcus'
+    creators.find(c => c.id !== post.creatorId && c.id !== currentUser.id)?.id || ''
   );
   const [personalNote, setPersonalNote] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -260,6 +260,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-center text-xs text-emerald-300 font-medium animate-in fade-in">
                 ✓ Post forwarded into private chat!
               </div>
+            ) : candidateRecipients.length === 0 ? (
+              <div className="p-3 bg-[#121215] border border-[#27272a] rounded-xl text-xs text-neutral-400">
+                No verified creators available to receive forwarded posts yet.
+              </div>
             ) : (
               <form onSubmit={handleForwardInACOVON} className="space-y-2.5">
                 <select
@@ -284,7 +288,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   />
                   <button
                     type="submit"
-                    disabled={sendingMessage}
+                    disabled={sendingMessage || !selectedRecipientId}
                     className="absolute right-1 top-1 bottom-1 px-3 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
                   >
                     <Send className="w-3 h-3" />

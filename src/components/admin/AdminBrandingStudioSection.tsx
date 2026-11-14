@@ -168,15 +168,15 @@ export const AdminBrandingStudioSection: React.FC = () => {
   ]);
 
   const sampleCreator = creators[0] || {
-    id: 'creator_elena',
-    name: 'Elena Vance',
-    username: 'elenavance',
-    category: 'High Fashion & Editorial',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-    coverImage: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=1200&q=80',
-    bio: 'Creative director, runway archivist, and couture photographer sharing behind-the-scenes fittings and private critiques.',
-    followersCount: 148200,
-    subscribersCount: 3420
+    id: 'preview_creator',
+    name: 'Partner Creator Preview',
+    username: 'creator_preview',
+    category: 'Editorial & Media',
+    avatar: '',
+    coverImage: '',
+    bio: 'Theme surface and typography preview for creator profiles on ACOVON.',
+    followersCount: 0,
+    subscribersCount: 0
   };
 
   const samplePost = posts[0];
@@ -1129,12 +1129,18 @@ export const AdminBrandingStudioSection: React.FC = () => {
                     className="p-4 rounded-xl bg-[#18181f] border border-[#272730] flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs"
                   >
                     <div className="flex items-center gap-3">
-                      <img
-                        src={adm.avatar}
-                        alt={adm.name}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border border-[#2e2e38]"
-                      />
+                      {adm.avatar ? (
+                        <img
+                          src={adm.avatar}
+                          alt={adm.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full object-cover border border-[#2e2e38]"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-[#24242d] border border-[#2e2e38] flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                          {(adm.name || 'A').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <div className="font-bold text-white">
                           {adm.name} <span className="text-neutral-400 font-normal">@{adm.username}</span>
@@ -1393,12 +1399,21 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       }}
                       className="relative border overflow-hidden p-4 flex items-end justify-between min-h-[210px]"
                     >
-                      <img
-                        src={sampleCreator.coverImage}
-                        alt={sampleCreator.name}
-                        referrerPolicy="no-referrer"
-                        className="absolute inset-0 w-full h-full object-cover opacity-55"
-                      />
+                      {sampleCreator.coverImage ? (
+                        <img
+                          src={sampleCreator.coverImage}
+                          alt={sampleCreator.name}
+                          referrerPolicy="no-referrer"
+                          className="absolute inset-0 w-full h-full object-cover opacity-55"
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            background: `linear-gradient(135deg, ${pt.bgElevated}, ${pt.accentPrimary}22)`
+                          }}
+                          className="absolute inset-0"
+                        />
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
                       <div className="relative z-10 space-y-1.5 max-w-full sm:max-w-md min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1444,12 +1459,18 @@ export const AdminBrandingStudioSection: React.FC = () => {
                             }}
                             className="p-0.5 rounded-full"
                           >
-                            <img
-                              src={cr.avatar}
-                              alt={cr.name}
-                              referrerPolicy="no-referrer"
-                              className="w-12 h-12 rounded-full object-cover border-2 border-black"
-                            />
+                            {cr.avatar ? (
+                              <img
+                                src={cr.avatar}
+                                alt={cr.name}
+                                referrerPolicy="no-referrer"
+                                className="w-12 h-12 rounded-full object-cover border-2 border-black"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-[#18181f] border-2 border-black flex items-center justify-center text-xs font-bold text-white">
+                                {(cr.name || 'C').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
                           </div>
                           <span style={{ color: pt.textSecondary }} className="text-[10px] truncate max-w-[64px]">
                             {cr.username}
@@ -1469,14 +1490,21 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       className="border overflow-hidden"
                     >
                       <div className="relative h-40 w-full bg-black">
-                        <img
-                          src={sampleCreator.coverImage}
-                          alt={sampleCreator.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover opacity-80"
-                        />
+                        {sampleCreator.coverImage ? (
+                          <img
+                            src={sampleCreator.coverImage}
+                            alt={sampleCreator.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover opacity-80"
+                          />
+                        ) : (
+                          <div
+                            style={{ background: `linear-gradient(135deg, ${pt.bgElevated}, ${pt.accentPrimary}33)` }}
+                            className="w-full h-full"
+                          />
+                        )}
                         <div className="absolute bottom-2 right-2 bg-black/90 text-white text-[10px] font-mono px-1.5 py-0.5 rounded">
-                          14:28 · 4K HDR
+                          4K HDR Preview
                         </div>
                         <div className="absolute bottom-0 inset-x-0 h-1 bg-white/20">
                           <div style={{ backgroundColor: '#FF0000' }} className="h-full w-2/3" />
@@ -1484,20 +1512,29 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       </div>
                       <div className="p-3 flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-start gap-2.5">
-                          <img
-                            src={sampleCreator.avatar}
-                            alt={sampleCreator.name}
-                            referrerPolicy="no-referrer"
-                            className="w-9 h-9 rounded-full object-cover mt-0.5"
-                          />
+                          {sampleCreator.avatar ? (
+                            <img
+                              src={sampleCreator.avatar}
+                              alt={sampleCreator.name}
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 rounded-full object-cover mt-0.5"
+                            />
+                          ) : (
+                            <div
+                              style={{ backgroundColor: pt.bgElevated, color: pt.accentPrimary }}
+                              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 shrink-0"
+                            >
+                              {(sampleCreator.name || 'C').slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
                           <div>
                             <div style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }} className="text-xs font-bold">
-                              Paris Couture Week Masterclass &amp; Backstage Documentary
+                              Creator Feature Broadcast &amp; Studio Documentary
                             </div>
                             <div style={{ color: pt.textMuted }} className="text-[11px] flex items-center gap-1">
                               <span>{sampleCreator.name}</span>
                               <VerifiedBadge forceShow size="xs" />
-                              <span>· 84K views · 3 hours ago</span>
+                              <span>· 0 views</span>
                             </div>
                           </div>
                         </div>
@@ -1521,12 +1558,21 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
-                        <img
-                          src={sampleCreator.avatar}
-                          alt={sampleCreator.name}
-                          referrerPolicy="no-referrer"
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
+                        {sampleCreator.avatar ? (
+                          <img
+                            src={sampleCreator.avatar}
+                            alt={sampleCreator.name}
+                            referrerPolicy="no-referrer"
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            style={{ backgroundColor: pt.bgElevated, color: pt.accentPrimary }}
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                          >
+                            {(sampleCreator.name || 'C').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div>
                           <div className="flex items-center gap-1.5">
                             <span
@@ -1538,7 +1584,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                             <VerifiedBadge forceShow size="xs" />
                           </div>
                           <div style={{ color: pt.textMuted }} className="text-xs">
-                            @{sampleCreator.username} · 2h ago
+                            @{sampleCreator.username} · Preview
                           </div>
                         </div>
                       </div>
@@ -1551,13 +1597,13 @@ export const AdminBrandingStudioSection: React.FC = () => {
                         }}
                         className="px-3 py-1.5 text-xs font-bold"
                       >
-                        Subscribe · $14.99
+                        Subscribe
                       </button>
                     </div>
 
                     <p style={{ color: pt.textSecondary }} className="text-xs sm:text-sm leading-relaxed">
                       {samplePost?.content ||
-                        'Exclusive Paris Atelier behind-the-scenes couture lookbook and private evening fitting.'}
+                        'Live theme typography, surface border, and accent contrast preview for ACOVON creator feed cards.'}
                     </p>
 
                     <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: pt.borderSubtle }}>
@@ -1596,13 +1642,22 @@ export const AdminBrandingStudioSection: React.FC = () => {
                   />
                   <div className="p-4 -mt-8 space-y-3">
                     <div className="flex items-end justify-between gap-3 flex-wrap">
-                      <img
-                        src={sampleCreator.avatar}
-                        alt={sampleCreator.name}
-                        referrerPolicy="no-referrer"
-                        style={{ borderColor: pt.bgSurface }}
-                        className="w-16 h-16 rounded-2xl object-cover border-4"
-                      />
+                      {sampleCreator.avatar ? (
+                        <img
+                          src={sampleCreator.avatar}
+                          alt={sampleCreator.name}
+                          referrerPolicy="no-referrer"
+                          style={{ borderColor: pt.bgSurface }}
+                          className="w-16 h-16 rounded-2xl object-cover border-4"
+                        />
+                      ) : (
+                        <div
+                          style={{ borderColor: pt.bgSurface, backgroundColor: pt.bgElevated, color: pt.accentPrimary }}
+                          className="w-16 h-16 rounded-2xl border-4 flex items-center justify-center text-base font-bold shrink-0"
+                        >
+                          {(sampleCreator.name || 'C').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -1625,7 +1680,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                           }}
                           className="px-3.5 py-1.5 text-xs font-bold"
                         >
-                          Subscribe $14.99/mo
+                          Subscribe
                         </button>
                       </div>
                     </div>
@@ -1638,7 +1693,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                         <VerifiedBadge forceShow size="xs" />
                       </h4>
                       <p style={{ color: pt.textMuted }} className="text-xs">
-                        @{sampleCreator.username} · {sampleCreator.category} · 148.2k followers
+                        @{sampleCreator.username} · {sampleCreator.category} · {(sampleCreator.followersCount || 0).toLocaleString()} followers
                       </p>
                     </div>
                     <p style={{ color: pt.textSecondary }} className="text-xs leading-relaxed">
@@ -1664,14 +1719,14 @@ export const AdminBrandingStudioSection: React.FC = () => {
                         style={{ backgroundColor: pt.bgElevated, color: pt.accentPrimary }}
                         className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm"
                       >
-                        JC
+                        MP
                       </div>
                       <div>
                         <div style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }} className="font-bold text-sm">
-                          Jordan Cross
+                          Member Preview
                         </div>
                         <div style={{ color: pt.textMuted }} className="text-xs">
-                          @jordancross · Fan Member · 4 Active Subscriptions
+                          @member_preview · Fan Account
                         </div>
                       </div>
                     </div>
@@ -1695,9 +1750,9 @@ export const AdminBrandingStudioSection: React.FC = () => {
               {previewSection === 'creator_studio' && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
-                    { label: 'Monthly Revenue', value: '$38,420.00', sub: '+18.4% this month' },
-                    { label: 'Active Subscribers', value: '3,420', sub: '94% retention rate' },
-                    { label: 'PPV & Custom Video', value: '$9,150.00', sub: '42 orders completed' }
+                    { label: 'Monthly Revenue', value: '$0.00', sub: 'Active subscription volume' },
+                    { label: 'Active Subscribers', value: '0', sub: '0% retention rate' },
+                    { label: 'PPV & Custom Video', value: '$0.00', sub: '0 orders completed' }
                   ].map(stat => (
                     <div
                       key={stat.label}
@@ -1768,7 +1823,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       style={{ backgroundColor: pt.bgElevated, color: pt.textPrimary, borderRadius: pt.buttonRadius }}
                       className="p-2.5 max-w-xs"
                     >
-                      Welcome to my VIP patron circle! Let me know what you thought of the new Paris lookbook.
+                      Message thread bubble style preview for light &amp; dark theme contrast.
                     </div>
                     <div
                       style={{
@@ -1778,7 +1833,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       }}
                       className="p-2.5 max-w-xs ml-auto font-medium"
                     >
-                      The lighting and cinematography were extraordinary!
+                      Outbound accent message contrast preview.
                     </div>
                   </div>
                 </div>
@@ -1916,10 +1971,10 @@ export const AdminBrandingStudioSection: React.FC = () => {
                     <Bell className="w-4 h-4 shrink-0" style={{ color: pt.accentPrimary }} />
                     <div>
                       <div style={{ color: pt.textPrimary }} className="font-semibold">
-                        Elena Vance published a new subscriber post
+                        {sampleCreator.name} published a new subscriber post
                       </div>
                       <div style={{ color: pt.textMuted }} className="text-[11px]">
-                        2 minutes ago · Exclusive Gallery
+                        Just now · Exclusive Gallery
                       </div>
                     </div>
                   </div>
@@ -1944,7 +1999,7 @@ export const AdminBrandingStudioSection: React.FC = () => {
                       style={{ fontFamily: pt.fontHeading, color: pt.textPrimary }}
                       className="text-2xl font-bold font-mono tabular-nums"
                     >
-                      $245.50 USD
+                      $0.00 USD
                     </div>
                   </div>
                   <button

@@ -181,11 +181,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
                 className="relative group w-16 h-16 shrink-0 cursor-pointer"
                 title="Upload Profile Image"
               >
-                <img 
-                  src={avatar} 
-                  alt={name} 
-                  className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/50" 
-                />
+                {avatar ? (
+                  <img 
+                    src={avatar} 
+                    alt={name} 
+                    className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/50" 
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-[#1f1f26] border-2 border-[#d4af37]/50 flex items-center justify-center text-lg font-bold text-[#fce7b0]">
+                    {(name || 'A').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 touch-always-visible transition-opacity flex items-center justify-center">
                   <Camera className="w-5 h-5 text-[#d4af37]" />
                 </div>
@@ -306,11 +312,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ onClose }) =
 };
 
 export const PaymentMethodsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [methods, setMethods] = useState([
-    { id: '1', type: 'Visa', last4: '4242', exp: '12/28', isDefault: true },
-    { id: '2', type: 'Mastercard', last4: '8812', exp: '09/27', isDefault: false },
-    { id: '3', type: 'Crypto Wallet (USDC/USDT)', last4: '0x8F9...3B1a', exp: 'Polygon ERC-20', isDefault: false }
-  ]);
+  const [methods, setMethods] = useState<Array<{ id: string; type: string; last4: string; exp: string; isDefault: boolean }>>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCardNumber, setNewCardNumber] = useState('');
   const [newCardExpiry, setNewCardExpiry] = useState('');
@@ -347,31 +349,37 @@ export const PaymentMethodsModal: React.FC<{ onClose: () => void }> = ({ onClose
         </div>
 
         <div className="space-y-3">
-          {methods.map(m => (
-            <div key={m.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-2 flex-wrap xs:flex-nowrap">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#22222a] flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-neutral-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-white flex items-center gap-2">
-                    <span>{m.type} •••• {m.last4}</span>
-                    {m.isDefault && (
-                      <span className="text-[10px] text-[#d4af37] bg-[#d4af37]/10 px-1.5 py-0.5 rounded">Default</span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-neutral-400">Expires {m.exp}</div>
-                </div>
-              </div>
-              <button 
-                onClick={() => setMethods(prev => prev.filter(x => x.id !== m.id))}
-                className="text-neutral-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
-                title="Remove method"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+          {methods.length === 0 ? (
+            <div className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl text-center text-xs text-neutral-400">
+              No saved payment methods yet.
             </div>
-          ))}
+          ) : (
+            methods.map(m => (
+              <div key={m.id} className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl flex items-center justify-between gap-2 flex-wrap xs:flex-nowrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#22222a] flex items-center justify-center">
+                    <CreditCard className="w-5 h-5 text-neutral-300" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white flex items-center gap-2">
+                      <span>{m.type} •••• {m.last4}</span>
+                      {m.isDefault && (
+                        <span className="text-[10px] text-[#d4af37] bg-[#d4af37]/10 px-1.5 py-0.5 rounded">Default</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-neutral-400">Expires {m.exp}</div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setMethods(prev => prev.filter(x => x.id !== m.id))}
+                  className="text-neutral-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                  title="Remove method"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
         </div>
 
         {showAddForm ? (
@@ -472,11 +480,17 @@ export const SubscriptionManagementModal: React.FC<{
               return (
                 <div key={sub.id} className="p-3.5 sm:p-4 bg-[#18181c] border border-[#27272a] rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 sm:gap-4">
                   <div className="flex items-center gap-3">
-                    <img 
-                      src={creator?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'} 
-                      alt={creator?.name || 'Creator'} 
-                      className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/40"
-                    />
+                    {creator?.avatar ? (
+                      <img 
+                        src={creator.avatar} 
+                        alt={creator?.name || 'Creator'} 
+                        className="w-10 h-10 rounded-full object-cover border border-[#d4af37]/40"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-[#1f1f26] border border-[#d4af37]/40 flex items-center justify-center text-xs font-bold text-[#fce7b0] shrink-0">
+                        {(creator?.name || 'C').charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <div className="text-xs font-semibold text-white">{creator?.name || 'Creator'}</div>
                       <div className="text-[11px] text-[#d4af37]">{sub.tierName} Tier · ${sub.monthlyPrice.toFixed(2)}/mo</div>

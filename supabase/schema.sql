@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   uid UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_legal_name TEXT NOT NULL CHECK (char_length(full_legal_name) BETWEEN 2 AND 120),
   username TEXT NOT NULL UNIQUE CHECK (char_length(username) BETWEEN 3 AND 40),
-  role TEXT NOT NULL DEFAULT 'fan' CHECK (role IN ('fan', 'creator', 'admin')),
+  role TEXT NOT NULL DEFAULT 'fan' CHECK (role IN ('fan', 'creator', 'admin', 'moderator')),
   account_status TEXT NOT NULL DEFAULT 'active' CHECK (account_status IN ('active', 'suspended', 'disabled', 'pending_deletion')),
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   profile_picture_url TEXT NOT NULL DEFAULT '',
@@ -302,5 +302,608 @@ CREATE POLICY "Creators and admins can read post revisions"
     )
     OR EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role = 'admin')
   );
+
+-- ============================================================================
+-- 8. CENTRALIZED CREATOR APPLICATIONS, NOTIFICATIONS, AUDIT LOGS & ATOMIC RPCS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.creator_applications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  username TEXT NOT NULL,
+  email TEXT NOT NULL,
+  avatar TEXT NOT NULL DEFAULT '',
+  document_type TEXT NOT NULL DEFAULT 'drivers_license' CHECK (document_type IN ('passport', 'drivers_license', 'national_id')),
+  document_number TEXT NOT NULL DEFAULT '',
+  document_file_url TEXT NOT NULL DEFAULT '',
+  selfie_url TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'info_requested')),
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_by_admin_id TEXT,
+  reviewed_by_admin_name TEXT,
+  reviewed_at TIMESTAMPTZ,
+  notes TEXT,
+  application_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_applications_status_submitted
+  ON public.creator_applications (status, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_creator_applications_user_id
+  ON public.creator_applications (user_id);
+CREATE INDEX IF NOT EXISTS idx_creator_applications_email
+  ON public.creator_applications (lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_applications_one_pending_per_user
+  ON public.creator_applications (user_id)
+  WHERE status IN ('pending', 'info_requested');
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  target_role TEXT NOT NULL DEFAULT 'user' CHECK (target_role IN ('fan', 'creator', 'admin', 'user')),
+  application_id TEXT,
+  type TEXT NOT NULL DEFAULT 'system',
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  read BOOLEAN NOT NULL DEFAULT FALSE,
+  event_key TEXT UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+  ON public.notifications (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_target_role
+  ON public.notifications (target_role, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.creator_application_audit_logs (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL,
+  applicant_user_id TEXT NOT NULL,
+  applicant_email TEXT NOT NULL,
+  applicant_name TEXT NOT NULL DEFAULT '',
+  previous_status TEXT NOT NULL,
+  new_status TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('submitted', 'approved', 'rejected', 'info_requested', 'reconciled')),
+  admin_id TEXT NOT NULL,
+  admin_name TEXT NOT NULL,
+  admin_role TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_app_audit_application_id
+  ON public.creator_application_audit_logs (application_id, created_at DESC);
+
+ALTER TABLE public.creator_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.creator_application_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Users can view ONLY their own applications; Admins/Moderators can view ALL applications
+CREATE POLICY "Users read own creator applications"
+  ON public.creator_applications FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid()::text);
+
+CREATE POLICY "Admins read all creator applications"
+  ON public.creator_applications FOR SELECT
+  TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator')));
+
+-- Users can ONLY submit their own application in 'pending' status (cannot self-approve)
+CREATE POLICY "Users insert own pending creator application"
+  ON public.creator_applications FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid()::text AND status = 'pending');
+
+-- Only authenticated Admins/Moderators can update creator applications
+CREATE POLICY "Admins update creator applications"
+  ON public.creator_applications FOR UPDATE
+  TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator')))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator')));
+
+-- Notifications RLS
+CREATE POLICY "Users read own notifications and admins read admin notifications"
+  ON public.notifications FOR SELECT
+  TO authenticated
+  USING (
+    user_id = auth.uid()::text
+    OR (
+      target_role = 'admin'
+      AND EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator'))
+    )
+  );
+
+CREATE POLICY "Users mark own notifications read"
+  ON public.notifications FOR UPDATE
+  TO authenticated
+  USING (user_id = auth.uid()::text)
+  WITH CHECK (user_id = auth.uid()::text);
+
+CREATE POLICY "Admins insert notifications"
+  ON public.notifications FOR INSERT
+  TO authenticated
+  WITH CHECK (EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator')) OR (user_id = auth.uid()::text AND target_role = 'admin'));
+
+-- Audit Logs RLS (Admins read only; immutable from client)
+CREATE POLICY "Admins read creator application audit logs"
+  ON public.creator_application_audit_logs FOR SELECT
+  TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role IN ('admin', 'moderator')));
+
+-- Enable Supabase Realtime for creator_applications and notifications
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.creator_applications;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN OTHERS THEN NULL;
+END $$;
+
+-- Atomic Creator Application Approval RPC (upgrades existing Fan user to Creator in one transaction)
+CREATE OR REPLACE FUNCTION public.approve_creator_application(
+  p_application_id TEXT,
+  p_notes TEXT DEFAULT 'Creator application approved by administrator.'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_admin_uid UUID := auth.uid();
+  v_admin_row public.users%ROWTYPE;
+  v_app public.creator_applications%ROWTYPE;
+  v_now TIMESTAMPTZ := NOW();
+BEGIN
+  IF v_admin_uid IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: Authentication required.';
+  END IF;
+
+  SELECT * INTO v_admin_row FROM public.users WHERE uid = v_admin_uid;
+  IF NOT FOUND OR v_admin_row.role NOT IN ('admin', 'moderator') THEN
+    RAISE EXCEPTION 'Forbidden: Only authorized administrators can approve creator applications.';
+  END IF;
+
+  SELECT * INTO v_app FROM public.creator_applications WHERE id = p_application_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Not Found: Creator application % does not exist.', p_application_id;
+  END IF;
+
+  IF v_app.user_id = v_admin_uid::text THEN
+    RAISE EXCEPTION 'Forbidden: Administrators cannot approve their own creator application.';
+  END IF;
+
+  IF v_app.status NOT IN ('pending', 'info_requested') THEN
+    RAISE EXCEPTION 'Conflict: Application % is already finalized with status %.', p_application_id, v_app.status;
+  END IF;
+
+  UPDATE public.creator_applications
+  SET
+    status = 'approved',
+    reviewed_by_admin_id = v_admin_uid::text,
+    reviewed_by_admin_name = v_admin_row.full_legal_name,
+    reviewed_at = v_now,
+    notes = COALESCE(NULLIF(trim(p_notes), ''), 'Creator application approved by administrator.'),
+    updated_at = v_now
+  WHERE id = p_application_id;
+
+  UPDATE public.users
+  SET
+    role = 'creator',
+    updated_at = v_now
+  WHERE uid::text = v_app.user_id;
+
+  INSERT INTO public.creator_application_audit_logs (
+    id, application_id, applicant_user_id, applicant_email, applicant_name,
+    previous_status, new_status, action, admin_id, admin_name, admin_role, notes, created_at
+  ) VALUES (
+    'caudit_' || replace(gen_random_uuid()::text, '-', ''),
+    v_app.id, v_app.user_id, v_app.email, v_app.name,
+    v_app.status, 'approved', 'approved',
+    v_admin_uid::text, v_admin_row.full_legal_name, v_admin_row.role,
+    COALESCE(NULLIF(trim(p_notes), ''), 'Creator application approved by administrator.'), v_now
+  );
+
+  INSERT INTO public.notifications (
+    id, user_id, target_role, application_id, type, title, message, read, event_key, created_at
+  ) VALUES (
+    'notif_' || replace(gen_random_uuid()::text, '-', ''),
+    v_app.user_id, 'creator', v_app.id, 'verification',
+    'Creator Account Activated',
+    'Congratulations! Your Creator application has been approved. Your ACOVON Creator account is now active.',
+    FALSE,
+    'creator_app_approved_' || v_app.id,
+    v_now
+  )
+  ON CONFLICT (event_key) DO NOTHING;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'application_id', v_app.id,
+    'user_id', v_app.user_id,
+    'new_status', 'approved',
+    'new_role', 'creator'
+  );
+END;
+$$;
+
+-- Atomic Creator Application Rejection RPC (preserves existing account as Fan)
+CREATE OR REPLACE FUNCTION public.reject_creator_application(
+  p_application_id TEXT,
+  p_notes TEXT DEFAULT 'Creator application was not approved.'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_admin_uid UUID := auth.uid();
+  v_admin_row public.users%ROWTYPE;
+  v_app public.creator_applications%ROWTYPE;
+  v_now TIMESTAMPTZ := NOW();
+BEGIN
+  IF v_admin_uid IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: Authentication required.';
+  END IF;
+
+  SELECT * INTO v_admin_row FROM public.users WHERE uid = v_admin_uid;
+  IF NOT FOUND OR v_admin_row.role NOT IN ('admin', 'moderator') THEN
+    RAISE EXCEPTION 'Forbidden: Only authorized administrators can reject creator applications.';
+  END IF;
+
+  SELECT * INTO v_app FROM public.creator_applications WHERE id = p_application_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Not Found: Creator application % does not exist.', p_application_id;
+  END IF;
+
+  IF v_app.status NOT IN ('pending', 'info_requested') THEN
+    RAISE EXCEPTION 'Conflict: Application % is already finalized with status %.', p_application_id, v_app.status;
+  END IF;
+
+  UPDATE public.creator_applications
+  SET
+    status = 'rejected',
+    reviewed_by_admin_id = v_admin_uid::text,
+    reviewed_by_admin_name = v_admin_row.full_legal_name,
+    reviewed_at = v_now,
+    notes = COALESCE(NULLIF(trim(p_notes), ''), 'Creator application was not approved.'),
+    updated_at = v_now
+  WHERE id = p_application_id;
+
+  UPDATE public.users
+  SET
+    role = CASE WHEN role IN ('admin', 'moderator') THEN role ELSE 'fan' END,
+    updated_at = v_now
+  WHERE uid::text = v_app.user_id;
+
+  INSERT INTO public.creator_application_audit_logs (
+    id, application_id, applicant_user_id, applicant_email, applicant_name,
+    previous_status, new_status, action, admin_id, admin_name, admin_role, notes, created_at
+  ) VALUES (
+    'caudit_' || replace(gen_random_uuid()::text, '-', ''),
+    v_app.id, v_app.user_id, v_app.email, v_app.name,
+    v_app.status, 'rejected', 'rejected',
+    v_admin_uid::text, v_admin_row.full_legal_name, v_admin_row.role,
+    COALESCE(NULLIF(trim(p_notes), ''), 'Creator application was not approved.'), v_now
+  );
+
+  INSERT INTO public.notifications (
+    id, user_id, target_role, application_id, type, title, message, read, event_key, created_at
+  ) VALUES (
+    'notif_' || replace(gen_random_uuid()::text, '-', ''),
+    v_app.user_id, 'fan', v_app.id, 'verification',
+    'Creator Application Update',
+    'Your Creator application was not approved: ' || COALESCE(NULLIF(trim(p_notes), ''), 'Verification requirements were not met.'),
+    FALSE,
+    'creator_app_rejected_' || v_app.id,
+    v_now
+  )
+  ON CONFLICT (event_key) DO NOTHING;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'application_id', v_app.id,
+    'user_id', v_app.user_id,
+    'new_status', 'rejected',
+    'new_role', 'fan'
+  );
+END;
+$$;
+
+-- ============================================================================
+-- REAL-TIME LIVESTREAMING & 1-ON-1 WEBRTC VIDEO CALLING TABLES
+-- ============================================================================
+
+-- 11. Livestreams Table (Broadcast sessions, provider metadata, access gating, recording config)
+CREATE TABLE IF NOT EXISTS public.livestreams (
+  id TEXT PRIMARY KEY,
+  creator_id TEXT NOT NULL,
+  creator_name TEXT NOT NULL DEFAULT '',
+  creator_username TEXT NOT NULL DEFAULT '',
+  creator_avatar TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  cover_image TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT 'Entertainment',
+  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  access_mode TEXT NOT NULL DEFAULT 'public' CHECK (access_mode IN ('public', 'all_subscribers', 'selected_plan', 'pay_per_view', 'private_invite')),
+  allowed_tier_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ppv_ticket_price NUMERIC(10, 2) DEFAULT NULL,
+  allowed_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'live', 'ended')),
+  provider TEXT NOT NULL DEFAULT 'webrtc_live' CHECK (provider IN ('webrtc_live', 'cloudflare_stream', 'obs_rtmps')),
+  stream_session_id TEXT DEFAULT NULL,
+  cloudflare_input_uid TEXT DEFAULT NULL,
+  hls_playback_url TEXT DEFAULT NULL,
+  dash_playback_url TEXT DEFAULT NULL,
+  viewer_count INTEGER NOT NULL DEFAULT 0,
+  total_revenue NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  expected_duration_minutes INTEGER NOT NULL DEFAULT 60,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  recording_settings JSONB NOT NULL DEFAULT '{"mode":"disabled","replayPermission":"public"}'::jsonb,
+  recording_status TEXT NOT NULL DEFAULT 'not_recorded' CHECK (recording_status IN ('not_recorded', 'recording', 'processing', 'ready', 'unpublished', 'removed')),
+  recording_url TEXT DEFAULT NULL,
+  is_replay_published BOOLEAN NOT NULL DEFAULT FALSE,
+  active_poll JSONB DEFAULT NULL,
+  started_at TIMESTAMPTZ DEFAULT NULL,
+  scheduled_for TIMESTAMPTZ DEFAULT NULL,
+  ended_at TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Host-only ingest credentials isolated from public SELECT
+CREATE TABLE IF NOT EXISTS public.livestream_ingest_secrets (
+  stream_id TEXT PRIMARY KEY REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  creator_id TEXT NOT NULL,
+  whip_ingest_url TEXT DEFAULT NULL,
+  rtmps_ingest_url TEXT DEFAULT NULL,
+  rtmps_stream_key TEXT DEFAULT NULL,
+  passcode_hash TEXT DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 12. Real Deduplicated Livestream Viewer Sessions
+CREATE TABLE IF NOT EXISTS public.livestream_viewer_sessions (
+  id TEXT PRIMARY KEY,
+  stream_id TEXT NOT NULL REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  viewer_id TEXT NOT NULL,
+  connection_id TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_livestream_viewers_active ON public.livestream_viewer_sessions (stream_id, is_active);
+
+-- 13. Livestream Live Chat, Gifts, Tips & Priority Messages
+CREATE TABLE IF NOT EXISTS public.livestream_chat_messages (
+  id TEXT PRIMARY KEY,
+  stream_id TEXT NOT NULL REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  sender_name TEXT NOT NULL,
+  sender_avatar TEXT NOT NULL DEFAULT '',
+  sender_role TEXT NOT NULL DEFAULT 'viewer' CHECK (sender_role IN ('viewer', 'subscriber', 'vip', 'creator', 'moderator')),
+  message TEXT NOT NULL,
+  message_type TEXT NOT NULL DEFAULT 'standard' CHECK (message_type IN ('standard', 'highlighted', 'priority_question', 'gift', 'tip')),
+  amount_paid NUMERIC(10, 2) DEFAULT NULL,
+  gift_data JSONB DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_livestream_chat_stream ON public.livestream_chat_messages (stream_id, created_at);
+
+-- 14. Official Livestream Recordings Table
+CREATE TABLE IF NOT EXISTS public.livestream_recordings (
+  id TEXT PRIMARY KEY,
+  stream_id TEXT NOT NULL UNIQUE REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  creator_id TEXT NOT NULL,
+  provider_video_uid TEXT DEFAULT NULL,
+  file_url TEXT DEFAULT NULL,
+  hls_url TEXT DEFAULT NULL,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  size_bytes BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'not_recorded' CHECK (status IN ('not_recorded', 'recording', 'processing', 'ready', 'unpublished', 'removed')),
+  mode TEXT NOT NULL DEFAULT 'disabled' CHECK (mode IN ('disabled', 'free', 'paid')),
+  price NUMERIC(10, 2) DEFAULT NULL,
+  replay_permission TEXT NOT NULL DEFAULT 'public',
+  is_published BOOLEAN NOT NULL DEFAULT FALSE,
+  views_count INTEGER NOT NULL DEFAULT 0,
+  purchases_count INTEGER NOT NULL DEFAULT 0,
+  gross_revenue NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  platform_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  net_revenue NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 15. Livestream Ticket & Replay Purchases
+CREATE TABLE IF NOT EXISTS public.livestream_purchases (
+  id TEXT PRIMARY KEY,
+  stream_id TEXT NOT NULL REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  purchase_type TEXT NOT NULL CHECK (purchase_type IN ('ticket', 'replay')),
+  amount NUMERIC(10, 2) NOT NULL,
+  platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  net_creator_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (stream_id, user_id, purchase_type)
+);
+
+-- 16. Private 1-on-1 Video Call Sessions
+CREATE TABLE IF NOT EXISTS public.video_call_sessions (
+  id TEXT PRIMARY KEY,
+  creator_id TEXT NOT NULL,
+  fan_id TEXT NOT NULL,
+  creator_name TEXT NOT NULL DEFAULT '',
+  creator_username TEXT NOT NULL DEFAULT '',
+  creator_avatar TEXT NOT NULL DEFAULT '',
+  fan_name TEXT NOT NULL DEFAULT '',
+  fan_username TEXT NOT NULL DEFAULT '',
+  fan_avatar TEXT NOT NULL DEFAULT '',
+  rate_per_minute NUMERIC(10, 2) NOT NULL,
+  spending_limit NUMERIC(10, 2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'calling' CHECK (status IN ('calling', 'ringing', 'accepted', 'connecting', 'connected', 'ended', 'declined', 'missed', 'failed')),
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  total_cost NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  creator_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  billing_settled BOOLEAN NOT NULL DEFAULT FALSE,
+  connection_error TEXT DEFAULT NULL,
+  end_reason TEXT DEFAULT NULL,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  accepted_at TIMESTAMPTZ DEFAULT NULL,
+  connected_at TIMESTAMPTZ DEFAULT NULL,
+  ended_at TIMESTAMPTZ DEFAULT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_calls_participants ON public.video_call_sessions (creator_id, fan_id, status);
+
+-- 17. Video Call Participants & Live Connection State
+CREATE TABLE IF NOT EXISTS public.video_call_participants (
+  call_id TEXT NOT NULL REFERENCES public.video_call_sessions(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  participant_role TEXT NOT NULL CHECK (participant_role IN ('fan', 'creator')),
+  connection_state TEXT NOT NULL DEFAULT 'new',
+  camera_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  mic_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (call_id, user_id)
+);
+
+-- 18. Authoritative Video Call Billing Records (Idempotent Settlement Ledger)
+CREATE TABLE IF NOT EXISTS public.video_call_billing_records (
+  id TEXT PRIMARY KEY,
+  call_id TEXT NOT NULL UNIQUE REFERENCES public.video_call_sessions(id) ON DELETE CASCADE,
+  fan_id TEXT NOT NULL,
+  creator_id TEXT NOT NULL,
+  billed_seconds INTEGER NOT NULL DEFAULT 0,
+  rate_per_minute NUMERIC(10, 2) NOT NULL,
+  gross_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  net_creator_earnings NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 19. WebRTC / Streaming Provider Metadata
+CREATE TABLE IF NOT EXISTS public.rtc_provider_metadata (
+  id TEXT PRIMARY KEY,
+  stream_id TEXT DEFAULT NULL REFERENCES public.livestreams(id) ON DELETE CASCADE,
+  call_id TEXT DEFAULT NULL REFERENCES public.video_call_sessions(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  external_uid TEXT DEFAULT NULL,
+  protocol TEXT DEFAULT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Enable RLS on all livestream & video call tables
+ALTER TABLE public.livestreams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.livestream_ingest_secrets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.livestream_viewer_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.livestream_chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.livestream_recordings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.livestream_purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.video_call_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.video_call_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.video_call_billing_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rtc_provider_metadata ENABLE ROW LEVEL SECURITY;
+
+-- Livestream RLS Policies
+DROP POLICY IF EXISTS "Livestreams are readable" ON public.livestreams;
+CREATE POLICY "Livestreams are readable"
+  ON public.livestreams FOR SELECT
+  USING (TRUE);
+
+DROP POLICY IF EXISTS "Approved creators can insert own livestreams" ON public.livestreams;
+CREATE POLICY "Approved creators can insert own livestreams"
+  ON public.livestreams FOR INSERT
+  WITH CHECK (
+    auth.uid()::text = creator_id
+    AND EXISTS (
+      SELECT 1 FROM public.users u WHERE u.uid = auth.uid() AND u.role = 'creator'
+    )
+  );
+
+DROP POLICY IF EXISTS "Creators and admins update own livestreams" ON public.livestreams;
+CREATE POLICY "Creators and admins update own livestreams"
+  ON public.livestreams FOR UPDATE
+  USING (auth.uid()::text = creator_id OR public.is_admin_or_moderator())
+  WITH CHECK (auth.uid()::text = creator_id OR public.is_admin_or_moderator());
+
+DROP POLICY IF EXISTS "Host-only livestream ingest secrets" ON public.livestream_ingest_secrets;
+CREATE POLICY "Host-only livestream ingest secrets"
+  ON public.livestream_ingest_secrets FOR ALL
+  USING (auth.uid()::text = creator_id OR public.is_admin_or_moderator())
+  WITH CHECK (auth.uid()::text = creator_id OR public.is_admin_or_moderator());
+
+DROP POLICY IF EXISTS "Live chat readable and writable by participants" ON public.livestream_chat_messages;
+CREATE POLICY "Live chat readable and writable by participants"
+  ON public.livestream_chat_messages FOR SELECT
+  USING (TRUE);
+
+DROP POLICY IF EXISTS "Authenticated users send own live chat" ON public.livestream_chat_messages;
+CREATE POLICY "Authenticated users send own live chat"
+  ON public.livestream_chat_messages FOR INSERT
+  WITH CHECK (auth.uid()::text = sender_id);
+
+-- Video Call RLS Policies (strict participant isolation)
+DROP POLICY IF EXISTS "Video call participants view own calls" ON public.video_call_sessions;
+CREATE POLICY "Video call participants view own calls"
+  ON public.video_call_sessions FOR SELECT
+  USING (auth.uid()::text = fan_id OR auth.uid()::text = creator_id OR public.is_admin_or_moderator());
+
+DROP POLICY IF EXISTS "Fans initiate video calls as themselves" ON public.video_call_sessions;
+CREATE POLICY "Fans initiate video calls as themselves"
+  ON public.video_call_sessions FOR INSERT
+  WITH CHECK (auth.uid()::text = fan_id);
+
+DROP POLICY IF EXISTS "Participants update own video calls" ON public.video_call_sessions;
+CREATE POLICY "Participants update own video calls"
+  ON public.video_call_sessions FOR UPDATE
+  USING (auth.uid()::text = fan_id OR auth.uid()::text = creator_id OR public.is_admin_or_moderator());
+
+DROP POLICY IF EXISTS "Participants view own billing records" ON public.video_call_billing_records;
+CREATE POLICY "Participants view own billing records"
+  ON public.video_call_billing_records FOR SELECT
+  USING (auth.uid()::text = fan_id OR auth.uid()::text = creator_id OR public.is_admin_or_moderator());
+
+-- Enable Realtime subscriptions for live broadcasts, chat, and incoming calls
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.livestreams;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.livestream_chat_messages;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.video_call_sessions;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END IF;
+END $$;
+
+
 
 
