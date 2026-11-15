@@ -379,6 +379,110 @@ export class AuthoritativeCreatorApplicationStore {
     };
   }
 
+  private ensureCreatorProfile(
+    db: CreatorApplicationsDB,
+    user: User,
+    app?: CreatorVerification,
+    adminActor?: { id: string; name: string }
+  ): CreatorProfile {
+    const nowStr = formatShortTimestamp();
+    const cleanEmail = normalizeEmail(user.email || app?.email);
+    const appData = app?.applicationData;
+    const displayName = appData?.displayName || app?.name || user.name || 'Creator';
+    const username = user.username || app?.username || normalizeUsername(cleanEmail.split('@')[0]);
+    const email = user.email || app?.email || `${username}@acovon.com`;
+    const avatar = user.avatar || app?.avatar || app?.selfieUrl || DEFAULT_AVATAR;
+    const tierPrice = Number(appData?.monthlyTierPrice) > 0 ? Number(appData?.monthlyTierPrice) : 14.99;
+    const category = appData?.category || 'Fashion & Luxury';
+    const bio = appData?.bio || 'Official ACOVON verified creator.';
+
+    const existingCreatorIdx = db.creators.findIndex(
+      c => c.id === user.id || (cleanEmail && normalizeEmail(c.email) === cleanEmail)
+    );
+    const existingCreator = existingCreatorIdx >= 0 ? db.creators[existingCreatorIdx] : undefined;
+
+    const creatorProfile: CreatorProfile = existingCreator
+      ? {
+          ...existingCreator,
+          id: user.id,
+          name: existingCreator.name || displayName,
+          username: existingCreator.username || username,
+          email,
+          avatar: existingCreator.avatar || avatar,
+          bio: appData?.bio || existingCreator.bio || bio,
+          category: appData?.category || existingCreator.category || category,
+          role: 'creator',
+          isVerified: true,
+          accountStatus: user.accountStatus || existingCreator.accountStatus || 'active',
+          walletBalance: typeof user.walletBalance === 'number' ? user.walletBalance : existingCreator.walletBalance,
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          creatorApprovedByAdminId: adminActor?.id || user.creatorApprovedByAdminId || existingCreator.creatorApprovedByAdminId,
+          creatorApprovedByAdminName: adminActor?.name || user.creatorApprovedByAdminName || existingCreator.creatorApprovedByAdminName,
+          creatorApprovedAt: user.creatorApprovedAt || existingCreator.creatorApprovedAt || nowStr,
+          creatorRejectionReason: undefined,
+          updatedAt: nowStr
+        }
+      : {
+          id: user.id,
+          name: displayName,
+          username,
+          email,
+          avatar,
+          coverImage: DEFAULT_COVER,
+          bio,
+          category,
+          role: 'creator',
+          accountStatus: user.accountStatus || 'active',
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          creatorApprovedByAdminId: adminActor?.id || user.creatorApprovedByAdminId,
+          creatorApprovedByAdminName: adminActor?.name || user.creatorApprovedByAdminName,
+          creatorApprovedAt: user.creatorApprovedAt || nowStr,
+          updatedAt: nowStr,
+          walletBalance: typeof user.walletBalance === 'number' ? user.walletBalance : 0,
+          pendingBalance: 0,
+          totalEarnings: 0,
+          withdrawnAmount: 0,
+          subscribersCount: 0,
+          followersCount: 0,
+          isVerified: true,
+          is18PlusConfirmed: true,
+          dateJoined: user.dateJoined || new Date().toISOString().split('T')[0],
+          country: user.country || 'United States',
+          isLiveForCalls: true,
+          callRatePerMinute: 3.5,
+          instantCallsEnabled: true,
+          minCallMinutes: 5,
+          maxCallMinutes: 60,
+          acceptingCustomRequests: true,
+          customRequestBasePrice: 50.0,
+          customRequestDeliveryDays: 3,
+          customRequestTerms: 'Custom video commissions and personalized creator video recordings.',
+          tiers: [
+            {
+              id: `tier_std_${Date.now()}`,
+              name: 'Standard Access',
+              price: Number(tierPrice.toFixed(2)),
+              perks: ['Full feed access', 'Community posts', 'Exclusive photo previews']
+            },
+            {
+              id: `tier_vip_${Date.now()}`,
+              name: 'VIP Gold Access',
+              price: Number((tierPrice * 2.5).toFixed(2)),
+              perks: ['Full feed access', 'VIP Livestreams included', 'Direct 1-on-1 messaging', 'Priority custom requests']
+            }
+          ]
+        };
+
+    if (existingCreatorIdx >= 0) {
+      db.creators[existingCreatorIdx] = creatorProfile;
+    } else {
+      db.creators.unshift(creatorProfile);
+    }
+    return creatorProfile;
+  }
+
   // Sync user account without ever allowing client role escalation
   public syncUserAccount(input: {
     id?: string;
@@ -389,6 +493,7 @@ export class AuthoritativeCreatorApplicationStore {
     dateJoined?: string;
     country?: string;
     is18PlusConfirmed?: boolean;
+    remoteRole?: UserRole;
   }): {
     user: User;
     creatorProfile?: CreatorProfile;
@@ -404,11 +509,25 @@ export class AuthoritativeCreatorApplicationStore {
     });
 
     if (existing) {
+      const promoteFromRemoteCreator =
+        input.remoteRole === 'creator' &&
+        existing.user.role !== 'admin' &&
+        existing.user.role !== 'moderator';
+
       const updatedUser: User = {
         ...existing.user,
         name: existing.user.name || (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
         avatar: existing.user.avatar || input.avatar || DEFAULT_AVATAR,
         email: cleanEmail || existing.user.email,
+        ...(promoteFromRemoteCreator
+          ? {
+              role: 'creator' as UserRole,
+              creatorApplicationStatus: 'approved' as const,
+              creatorApprovalStatus: 'approved' as const,
+              isVerified: true,
+              creatorRejectionReason: undefined
+            }
+          : {}),
         lastLoginAt: nowStr,
         updatedAt: nowStr
       };
@@ -426,18 +545,19 @@ export class AuthoritativeCreatorApplicationStore {
       ? `${baseUsername}_${crypto.randomBytes(2).toString('hex')}`
       : baseUsername;
 
+    const initialRole: UserRole = input.remoteRole === 'creator' ? 'creator' : 'fan';
     const newUser: User = {
       id: userId,
       name: (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
       username: finalUsername,
       email: cleanEmail,
       avatar: input.avatar || DEFAULT_AVATAR,
-      role: 'fan', // ALWAYS fan for new synced users; promotions only via admin approval
+      role: initialRole, // ONLY fan unless authoritative Supabase/admin store already holds creator
       accountStatus: 'active',
-      creatorApplicationStatus: 'not_applied',
-      creatorApprovalStatus: 'not_applied',
+      creatorApplicationStatus: initialRole === 'creator' ? 'approved' : 'not_applied',
+      creatorApprovalStatus: initialRole === 'creator' ? 'approved' : 'not_applied',
       walletBalance: 0,
-      isVerified: false,
+      isVerified: initialRole === 'creator',
       is18PlusConfirmed: input.is18PlusConfirmed !== false,
       dateJoined: input.dateJoined || new Date().toISOString().split('T')[0],
       lastLoginAt: nowStr,
@@ -457,11 +577,6 @@ export class AuthoritativeCreatorApplicationStore {
     notifications: AppNotification[];
   } {
     const cleanEmail = normalizeEmail(user.email);
-    const creatorProfile =
-      user.role === 'creator'
-        ? this.findCreatorProfile(db, { userId: user.id, email: cleanEmail })
-        : undefined;
-
     const userApps = db.applications
       .filter(
         a =>
@@ -470,13 +585,93 @@ export class AuthoritativeCreatorApplicationStore {
       )
       .sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
 
-    const latestApplication = userApps[0] ? this.enrichApplication(db, userApps[0]) : undefined;
+    const latestAppRaw = userApps[0];
+    const hasAnyApprovedApp = userApps.some(a => a.status === 'approved');
+    const latestIsBlocked =
+      latestAppRaw?.status === 'pending' ||
+      latestAppRaw?.status === 'info_requested' ||
+      latestAppRaw?.status === 'rejected';
+
+    let existingCreator = this.findCreatorProfile(db, {
+      userId: user.id,
+      email: cleanEmail,
+      username: user.username
+    });
+
+    const isAccountActive =
+      user.accountStatus !== 'suspended' &&
+      user.accountStatus !== 'banned' &&
+      user.accountStatus !== 'disabled';
+
+    const shouldBeApprovedCreator =
+      user.role !== 'admin' &&
+      user.role !== 'moderator' &&
+      isAccountActive &&
+      (latestAppRaw?.status === 'approved' ||
+        (hasAnyApprovedApp && !latestIsBlocked) ||
+        (user.role === 'creator' && user.creatorApprovalStatus !== 'pending' && user.creatorApprovalStatus !== 'rejected') ||
+        (Boolean(existingCreator) && !latestIsBlocked));
+
+    let effectiveUser = deepClone(user);
+    let dbDirty = false;
+
+    if (shouldBeApprovedCreator) {
+      const approvedApp = userApps.find(a => a.status === 'approved') || latestAppRaw;
+      if (
+        effectiveUser.role !== 'creator' ||
+        effectiveUser.creatorApprovalStatus !== 'approved' ||
+        effectiveUser.creatorApplicationStatus !== 'approved' ||
+        !effectiveUser.isVerified
+      ) {
+        effectiveUser = {
+          ...effectiveUser,
+          role: 'creator',
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          isVerified: true,
+          creatorRejectionReason: undefined,
+          creatorApprovedAt: effectiveUser.creatorApprovedAt || approvedApp?.reviewedAt || formatShortTimestamp(),
+          creatorApprovedByAdminId: effectiveUser.creatorApprovedByAdminId || approvedApp?.reviewedByAdminId,
+          creatorApprovedByAdminName: effectiveUser.creatorApprovedByAdminName || approvedApp?.reviewedByAdminName
+        };
+        const entry = this.findUserEntry(db, { userId: effectiveUser.id, email: cleanEmail });
+        db.users[entry?.key || effectiveUser.id] = deepClone(effectiveUser);
+        dbDirty = true;
+      }
+      if (!existingCreator || existingCreator.id !== effectiveUser.id) {
+        existingCreator = this.ensureCreatorProfile(db, effectiveUser, approvedApp);
+        dbDirty = true;
+      }
+    } else if (
+      effectiveUser.role !== 'admin' &&
+      effectiveUser.role !== 'moderator' &&
+      latestAppRaw &&
+      (latestAppRaw.status === 'pending' || latestAppRaw.status === 'info_requested') &&
+      effectiveUser.creatorApprovalStatus !== 'pending'
+    ) {
+      effectiveUser = {
+        ...effectiveUser,
+        role: 'fan',
+        creatorApplicationStatus: 'pending',
+        creatorApprovalStatus: 'pending'
+      };
+      const entry = this.findUserEntry(db, { userId: effectiveUser.id, email: cleanEmail });
+      db.users[entry?.key || effectiveUser.id] = deepClone(effectiveUser);
+      dbDirty = true;
+    }
+
+    if (dbDirty) {
+      this.writeDB(db);
+    }
+
+    const creatorProfile = shouldBeApprovedCreator ? existingCreator : undefined;
+    const latestApplication = latestAppRaw ? this.enrichApplication(db, latestAppRaw) : undefined;
     const notifications = db.notifications.filter(
-      n => n.userId === user.id && n.targetRole !== 'admin'
+      n => n.userId === effectiveUser.id && n.targetRole !== 'admin'
     );
 
     return {
-      user: deepClone(user),
+      user: deepClone(effectiveUser),
       creatorProfile: creatorProfile ? deepClone(creatorProfile) : undefined,
       latestApplication,
       notifications: deepClone(notifications)
@@ -491,19 +686,52 @@ export class AuthoritativeCreatorApplicationStore {
     notifications: AppNotification[];
   } {
     const db = this.readDB();
+    const cleanEmail = normalizeEmail(query.email);
     const existing = this.findUserEntry(db, {
       userId: query.userId,
-      email: query.email
+      email: cleanEmail
     });
 
-    if (!existing) {
-      return { found: false, notifications: [] };
+    if (existing) {
+      return {
+        found: true,
+        ...this.buildSessionStateFromDB(db, existing.user)
+      };
     }
 
-    return {
-      found: true,
-      ...this.buildSessionStateFromDB(db, existing.user)
-    };
+    // Fallback: if an application or creator exists by userId/email even before db.users was synced
+    const matchedCreator = this.findCreatorProfile(db, { userId: query.userId, email: cleanEmail });
+    const matchedApp = db.applications.find(
+      a => (query.userId && a.userId === query.userId) || (cleanEmail && normalizeEmail(a.email) === cleanEmail)
+    );
+    if (matchedCreator || matchedApp) {
+      const uid = matchedCreator?.id || matchedApp?.userId || query.userId || `user_fan_${Date.now()}`;
+      const resolvedEmail = cleanEmail || normalizeEmail(matchedCreator?.email || matchedApp?.email);
+      const synthesized: User = {
+        id: uid,
+        name: matchedCreator?.name || matchedApp?.name || resolvedEmail.split('@')[0] || 'Member',
+        username: matchedCreator?.username || matchedApp?.username || normalizeUsername(resolvedEmail.split('@')[0]),
+        email: resolvedEmail || `${uid}@acovon.com`,
+        avatar: matchedCreator?.avatar || matchedApp?.avatar || DEFAULT_AVATAR,
+        role: matchedCreator || matchedApp?.status === 'approved' ? 'creator' : 'fan',
+        accountStatus: matchedCreator?.accountStatus || 'active',
+        creatorApplicationStatus: matchedCreator || matchedApp?.status === 'approved' ? 'approved' : matchedApp?.status === 'rejected' ? 'rejected' : 'pending',
+        creatorApprovalStatus: matchedCreator || matchedApp?.status === 'approved' ? 'approved' : matchedApp?.status === 'rejected' ? 'rejected' : 'pending',
+        walletBalance: matchedCreator?.walletBalance || 0,
+        isVerified: Boolean(matchedCreator || matchedApp?.status === 'approved'),
+        is18PlusConfirmed: true,
+        dateJoined: matchedCreator?.dateJoined || matchedApp?.submittedAt?.split(' ')[0] || new Date().toISOString().split('T')[0],
+        country: matchedCreator?.country || 'United States'
+      };
+      db.users[uid] = synthesized;
+      this.writeDB(db);
+      return {
+        found: true,
+        ...this.buildSessionStateFromDB(db, synthesized)
+      };
+    }
+
+    return { found: false, notifications: [] };
   }
 
   public submitCreatorApplication(input: {
@@ -837,10 +1065,88 @@ export class AuthoritativeCreatorApplicationStore {
       if (!id || !userId) continue;
 
       const email = normalizeEmail(row.email);
-      const existsById = db.applications.some(a => a.id === id);
-      if (existsById) continue;
-
       const status = (row.status || 'pending') as CreatorVerification['status'];
+      const submittedAt = row.submitted_at
+        ? String(row.submitted_at).replace('T', ' ').slice(0, 16)
+        : formatShortTimestamp();
+      const reviewedAt = row.reviewed_at ? String(row.reviewed_at).replace('T', ' ').slice(0, 16) : undefined;
+
+      const existingIdx = db.applications.findIndex(a => a.id === id);
+      if (existingIdx >= 0) {
+        const existingApp = db.applications[existingIdx];
+        const statusChanged = existingApp.status !== status;
+        const matchedEntry = this.findUserEntry(db, { userId, email: email || existingApp.email });
+        const needsCreatorSync =
+          status === 'approved' &&
+          (!matchedEntry ||
+            matchedEntry.user.role !== 'creator' ||
+            matchedEntry.user.creatorApprovalStatus !== 'approved' ||
+            !this.findCreatorProfile(db, { userId: matchedEntry.user.id, email: email || matchedEntry.user.email }));
+
+        if (!statusChanged && !needsCreatorSync) continue;
+
+        const updatedApp: CreatorVerification = {
+          ...existingApp,
+          status,
+          reviewedByAdminId: row.reviewed_by_admin_id || existingApp.reviewedByAdminId,
+          reviewedByAdminName: row.reviewed_by_admin_name || existingApp.reviewedByAdminName,
+          reviewedAt: reviewedAt || existingApp.reviewedAt,
+          notes: row.notes || existingApp.notes,
+          updatedAt: formatShortTimestamp()
+        };
+        db.applications[existingIdx] = updatedApp;
+
+        const targetUserId = matchedEntry?.user.id || userId;
+        const targetKey = matchedEntry?.key || targetUserId;
+        const resolvedEmail = email || matchedEntry?.user.email || existingApp.email || '';
+        const nowStr = formatShortTimestamp();
+
+        if (status === 'approved') {
+          const upgradedUser: User = {
+            ...(matchedEntry?.user || {
+              id: targetUserId,
+              name: updatedApp.name,
+              username: updatedApp.username,
+              email: resolvedEmail || `${updatedApp.username}@acovon.com`,
+              avatar: updatedApp.avatar || DEFAULT_AVATAR,
+              accountStatus: 'active',
+              walletBalance: 0,
+              is18PlusConfirmed: true,
+              dateJoined: submittedAt.split(' ')[0] || new Date().toISOString().split('T')[0],
+              country: 'United States'
+            }),
+            role: 'creator',
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true,
+            creatorApprovedByAdminId: updatedApp.reviewedByAdminId,
+            creatorApprovedByAdminName: updatedApp.reviewedByAdminName,
+            creatorApprovedAt: updatedApp.reviewedAt || nowStr,
+            creatorRejectionReason: undefined,
+            updatedAt: nowStr
+          };
+          db.users[targetKey] = upgradedUser;
+          this.ensureCreatorProfile(db, upgradedUser, updatedApp, {
+            id: updatedApp.reviewedByAdminId || 'system',
+            name: updatedApp.reviewedByAdminName || 'Admin'
+          });
+        } else if (status === 'rejected' && matchedEntry) {
+          db.users[targetKey] = {
+            ...matchedEntry.user,
+            role:
+              matchedEntry.user.role === 'admin' || matchedEntry.user.role === 'moderator'
+                ? matchedEntry.user.role
+                : 'fan',
+            creatorApplicationStatus: 'rejected',
+            creatorApprovalStatus: 'rejected',
+            creatorRejectionReason: updatedApp.notes,
+            updatedAt: nowStr
+          };
+        }
+        merged += 1;
+        continue;
+      }
+
       if (status === 'pending' || status === 'info_requested') {
         const hasPending = db.applications.some(
           a =>
@@ -849,10 +1155,6 @@ export class AuthoritativeCreatorApplicationStore {
         );
         if (hasPending) continue;
       }
-
-      const submittedAt = row.submitted_at
-        ? String(row.submitted_at).replace('T', ' ').slice(0, 16)
-        : formatShortTimestamp();
 
       const app: CreatorVerification = {
         id,
@@ -869,25 +1171,56 @@ export class AuthoritativeCreatorApplicationStore {
         submittedAt,
         reviewedByAdminId: row.reviewed_by_admin_id || undefined,
         reviewedByAdminName: row.reviewed_by_admin_name || undefined,
-        reviewedAt: row.reviewed_at ? String(row.reviewed_at).replace('T', ' ').slice(0, 16) : undefined,
+        reviewedAt,
         notes: row.notes || undefined,
         source: 'supabase_sync',
         applicationData: row.application_data && typeof row.application_data === 'object' ? row.application_data : undefined
       };
 
-      if (email && !this.findUserEntry(db, { userId, email })) {
-        db.users[userId] = {
-          id: userId,
+      const matchedEntry = this.findUserEntry(db, { userId, email });
+      const resolvedUid = matchedEntry?.user.id || userId;
+      const targetKey = matchedEntry?.key || resolvedUid;
+      if (status === 'approved') {
+        const upgradedUser: User = {
+          ...(matchedEntry?.user || {
+            id: resolvedUid,
+            name: app.name,
+            username: app.username,
+            email: email || app.email || `${app.username}@acovon.com`,
+            avatar: app.avatar || DEFAULT_AVATAR,
+            accountStatus: 'active',
+            walletBalance: 0,
+            is18PlusConfirmed: true,
+            dateJoined: submittedAt.split(' ')[0] || new Date().toISOString().split('T')[0],
+            country: 'United States'
+          }),
+          role: 'creator',
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          isVerified: true,
+          creatorApprovedByAdminId: app.reviewedByAdminId,
+          creatorApprovedByAdminName: app.reviewedByAdminName,
+          creatorApprovedAt: app.reviewedAt || formatShortTimestamp(),
+          creatorRejectionReason: undefined
+        };
+        db.users[targetKey] = upgradedUser;
+        this.ensureCreatorProfile(db, upgradedUser, app, {
+          id: app.reviewedByAdminId || 'system',
+          name: app.reviewedByAdminName || 'Admin'
+        });
+      } else if (email && !matchedEntry) {
+        db.users[resolvedUid] = {
+          id: resolvedUid,
           name: app.name,
           username: app.username,
           email,
           avatar: app.avatar || DEFAULT_AVATAR,
-          role: status === 'approved' ? 'creator' : 'fan',
+          role: 'fan',
           accountStatus: 'active',
-          creatorApplicationStatus: status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending',
-          creatorApprovalStatus: status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending',
+          creatorApplicationStatus: status === 'rejected' ? 'rejected' : 'pending',
+          creatorApprovalStatus: status === 'rejected' ? 'rejected' : 'pending',
           walletBalance: 0,
-          isVerified: status === 'approved',
+          isVerified: false,
           is18PlusConfirmed: true,
           dateJoined: submittedAt.split(' ')[0] || new Date().toISOString().split('T')[0],
           country: 'United States'
@@ -1539,6 +1872,102 @@ export class AuthoritativeCreatorApplicationStore {
     }
     this.writeDB(db);
     return { ok: true, creator: deepClone(updated) };
+  }
+
+  public adminUpdateUserAccountOnServer(
+    userId: string,
+    adminActor: { id: string; name: string; role: string },
+    updates: {
+      role?: UserRole;
+      accountStatus?: AccountStatus;
+      statusReason?: string;
+      isVerified?: boolean;
+      adminPermissionLevel?: User['adminPermissionLevel'];
+      adminPermissions?: string[];
+    }
+  ):
+    | { ok: true; user: User; creatorProfile?: CreatorProfile }
+    | ({ ok: false } & StoreHttpError) {
+    if (adminActor.role !== 'admin' && adminActor.role !== 'moderator') {
+      return { ok: false, statusCode: 403, error: 'Forbidden: Administrator role required.' };
+    }
+
+    const db = this.readDB();
+    const entry = this.findUserEntry(db, { userId });
+    if (!entry) {
+      return { ok: false, statusCode: 404, error: `User "${userId}" not found.` };
+    }
+
+    const nowStr = formatShortTimestamp();
+    const prevUser = entry.user;
+    const nextRole = updates.role || prevUser.role;
+
+    const updatedUser: User = {
+      ...prevUser,
+      ...updates,
+      role: nextRole,
+      ...(updates.role === 'creator'
+        ? {
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true,
+            creatorApprovedByAdminId: adminActor.id,
+            creatorApprovedByAdminName: adminActor.name,
+            creatorApprovedAt: prevUser.creatorApprovedAt || nowStr,
+            creatorRejectionReason: undefined
+          }
+        : updates.role === 'fan'
+        ? {
+            creatorApplicationStatus: 'not_applied',
+            creatorApprovalStatus: 'not_applied'
+          }
+        : {}),
+      updatedAt: nowStr
+    };
+
+    db.users[entry.key] = updatedUser;
+
+    let creatorProfile: CreatorProfile | undefined;
+    const cleanEmail = normalizeEmail(updatedUser.email);
+
+    if (nextRole === 'creator') {
+      const matchingApp = db.applications.find(
+        a => a.userId === updatedUser.id || (cleanEmail && normalizeEmail(a.email) === cleanEmail)
+      );
+      if (matchingApp && matchingApp.status !== 'approved') {
+        const idx = db.applications.findIndex(a => a.id === matchingApp.id);
+        if (idx >= 0) {
+          db.applications[idx] = {
+            ...matchingApp,
+            status: 'approved',
+            reviewedByAdminId: adminActor.id,
+            reviewedByAdminName: adminActor.name,
+            reviewedAt: nowStr,
+            updatedAt: nowStr
+          };
+        }
+      }
+      creatorProfile = this.ensureCreatorProfile(db, updatedUser, matchingApp, adminActor);
+    } else {
+      const creatorIdx = db.creators.findIndex(
+        c => c.id === updatedUser.id || (cleanEmail && normalizeEmail(c.email) === cleanEmail)
+      );
+      if (creatorIdx >= 0) {
+        db.creators[creatorIdx] = {
+          ...db.creators[creatorIdx],
+          accountStatus: updatedUser.accountStatus,
+          isVerified: updatedUser.isVerified,
+          updatedAt: nowStr
+        };
+      }
+    }
+
+    this.writeDB(db);
+    return {
+      ok: true,
+      user: deepClone(updatedUser),
+      creatorProfile: creatorProfile ? deepClone(creatorProfile) : undefined
+    };
   }
 }
 

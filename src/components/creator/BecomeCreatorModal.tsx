@@ -31,6 +31,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     currentUser, 
     applyToBecomeCreator, 
     userPendingVerification,
+    isCurrentUserApprovedCreator,
     verifications
   } = useApp();
 
@@ -90,14 +91,20 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     }
   };
 
-  // If already pending or rejected
-  const isPending = !!userPendingVerification || submittedConfirmation;
+  // If already approved, pending, or latest rejected
+  const isApprovedCreator = isCurrentUserApprovedCreator && !submittedConfirmation;
+  const isPending = (!!userPendingVerification || submittedConfirmation) && !isApprovedCreator;
   const cleanUserEmail = String(currentUser.email || '').trim().toLowerCase();
-  const latestRejectedVerification = verifications.find(
-    v =>
-      v.status === 'rejected' &&
-      (v.userId === currentUser.id || (cleanUserEmail && String(v.email || '').toLowerCase() === cleanUserEmail))
-  );
+  const userVerifications = verifications
+    .filter(
+      v =>
+        v.userId === currentUser.id ||
+        (cleanUserEmail && String(v.email || '').toLowerCase() === cleanUserEmail)
+    )
+    .sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+  const latestVerification = userVerifications[0];
+  const latestRejectedVerification =
+    latestVerification && latestVerification.status === 'rejected' ? latestVerification : undefined;
 
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +113,12 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
       setErrorMessage('Please enter a creator display name.');
       return;
     }
+    const price = Number(monthlyTierPrice);
+    if (!Number.isFinite(price) || price < 4.99 || price > 250) {
+      setErrorMessage('Monthly subscription price must be between $4.99 and $250.00.');
+      return;
+    }
+    setMonthlyTierPrice(Number(price.toFixed(2)));
     setStep(2);
   };
 
@@ -113,6 +126,10 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
+    if (uploadingDoc || uploadingSelfie) {
+      setErrorMessage('Please wait for your verification image upload to complete before submitting.');
+      return;
+    }
     if (!documentNumber.trim()) {
       setErrorMessage('Please provide your ID document number.');
       return;
@@ -200,8 +217,29 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
           </span>
         </div>
 
-        {/* Existing Pending Application / Submission Confirmed Banner */}
-        {isPending ? (
+        {/* Approved Creator Account Active Banner / Pending / Form */}
+        {isApprovedCreator ? (
+          <div className="space-y-5">
+            <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-2.5">
+              <div className="flex items-center gap-2 text-emerald-300">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <h4 className="font-bold text-sm text-white">Creator Account Active</h4>
+              </div>
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                Your creator application for <strong>{currentUser.name}</strong> ({currentUser.email}) has already been approved. You now have full access to Creator Studio, video &amp; photo uploads, Pay-Per-View posts, and Go Live broadcasting.
+              </p>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : isPending ? (
           <div className="space-y-5">
             {submittedConfirmation && (
               <div className="p-3.5 bg-emerald-950/50 border border-emerald-500/40 rounded-xl flex items-center gap-2.5 text-xs text-emerald-200">
@@ -318,7 +356,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                       <span className="absolute left-3 top-2.5 text-xs text-neutral-400">$</span>
                       <input
                         type="number"
-                        step="0.5"
+                        step="0.01"
                         min="4.99"
                         max="250"
                         value={monthlyTierPrice}
@@ -549,10 +587,14 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                     </button>
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || uploadingDoc || uploadingSelfie}
                       className="px-5 py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-bold text-xs rounded-xl transition-all cursor-pointer shadow-lg shadow-[#d4af37]/20 disabled:opacity-50"
                     >
-                      {isSubmitting ? 'Submitting...' : 'Submit Application'}
+                      {uploadingDoc || uploadingSelfie
+                        ? 'Uploading Verification Image...'
+                        : isSubmitting
+                        ? 'Submitting...'
+                        : 'Submit Application'}
                     </button>
                   </div>
                 </div>

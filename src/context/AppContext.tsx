@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   User,
   CreatorProfile,
@@ -1349,7 +1349,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { ...PLATFORM_ADMIN_ACCOUNTS };
   });
 
+  const usersRef = useRef<Record<string, User>>(users);
   useEffect(() => {
+    usersRef.current = users;
     try {
       localStorage.setItem('acovon_users_v2', JSON.stringify(users));
     } catch {
@@ -1373,6 +1375,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const uid = String(row.uid || row.id || '');
             const email = String(row.email || '').toLowerCase();
             if (!uid) return;
+            const rowRole = ((row.role as UserRole) || 'fan');
+            const isCreatorRow = rowRole === 'creator';
             const existingEntry = Object.entries(next).find(
               ([k, u]) => k === uid || u.id === uid || (email && u.email.toLowerCase() === email)
             );
@@ -1392,12 +1396,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   row.profile_picture_url && String(row.profile_picture_url).startsWith('http') && !isDemoAssetUrl(row.profile_picture_url)
                     ? String(row.profile_picture_url)
                     : '',
-                role: (row.role as UserRole) || 'fan',
+                role: rowRole,
                 accountStatus: (row.account_status as AccountStatus) || 'active',
-                creatorApplicationStatus: 'not_applied',
-                creatorApprovalStatus: 'not_applied',
+                creatorApplicationStatus: isCreatorRow ? 'approved' : 'not_applied',
+                creatorApprovalStatus: isCreatorRow ? 'approved' : 'not_applied',
                 walletBalance: 0,
-                isVerified: Boolean(row.email_verified),
+                isVerified: isCreatorRow ? true : Boolean(row.email_verified),
                 is18PlusConfirmed: true,
                 dateJoined: joinedDate,
                 lastLoginAt: row.last_login_at
@@ -1406,6 +1410,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 country: 'United States'
               };
               next[uid] = mappedUser;
+            } else if (isCreatorRow) {
+              const [existingKey, existingUser] = existingEntry;
+              if (
+                existingUser.role !== 'admin' &&
+                existingUser.role !== 'moderator' &&
+                (existingUser.role !== 'creator' || existingUser.creatorApprovalStatus !== 'approved')
+              ) {
+                changed = true;
+                next[existingKey] = {
+                  ...existingUser,
+                  role: 'creator',
+                  creatorApplicationStatus: 'approved',
+                  creatorApprovalStatus: 'approved',
+                  isVerified: true
+                };
+              }
             }
           });
           if (changed) {
@@ -1423,7 +1443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    const syncAuthSessionUser = (sessionUser: any) => {
+    const syncAuthSessionUser = (sessionUser: any, accessToken?: string) => {
       if (!sessionUser || !sessionUser.email) return;
       const email = String(sessionUser.email).trim().toLowerCase();
       const uid = String(sessionUser.id || `user_fan_${Date.now()}`);
@@ -1464,16 +1484,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const preserveAdminSession =
         isOnAdminRoute || (hasAdminToken && (storedRole === 'admin' || storedRole === 'moderator'));
 
-      let resolvedLocalUser: User | null = null;
-      setUsers(prev => {
-        const existingEntry = Object.entries(prev).find(
-          ([k, u]) => k === uid || u.id === uid || u.email.toLowerCase() === email
-        );
-        if (existingEntry) {
-          resolvedLocalUser = existingEntry[1];
-          return prev;
-        }
-        const newUser: User = {
+      const currentUsersMap = usersRef.current || {};
+      const existingEntry = Object.entries(currentUsersMap).find(
+        ([k, u]) => k === uid || u.id === uid || (email && u.email.toLowerCase() === email)
+      );
+
+      let resolvedLocalUser: User;
+      if (existingEntry) {
+        resolvedLocalUser = existingEntry[1];
+      } else {
+        resolvedLocalUser = {
           id: uid,
           name: String(metaName),
           username: cleanUsername,
@@ -1491,39 +1511,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: nowTimestamp,
           country: 'United States'
         };
-        resolvedLocalUser = newUser;
-        const next = { [uid]: newUser, ...prev };
-        try {
-          localStorage.setItem('acovon_users_v2', JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
+        setUsers(prev => {
+          if (prev[uid]) return prev;
+          const next = { [uid]: resolvedLocalUser, ...prev };
+          try {
+            localStorage.setItem('acovon_users_v2', JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
+      }
 
-      if (!preserveAdminSession && resolvedLocalUser) {
+      if (!preserveAdminSession) {
         setIsAuthenticated(true);
         setCurrentUser(prev => {
           const prevEmail = String(prev?.email || '').trim().toLowerCase();
           if (
             prev?.id === 'user_fan_1' ||
+            prev?.id === 'guest_visitor' ||
             (prevEmail && prevEmail !== email) ||
-            (prev?.id !== uid && resolvedLocalUser)
+            prev?.id !== resolvedLocalUser.id
           ) {
-            return resolvedLocalUser!;
+            return resolvedLocalUser;
           }
           return prev;
         });
         setActiveRole(prev => {
-          const targetRole = resolvedLocalUser?.role || 'fan';
-          return prev === 'admin' || prev === 'moderator' ? prev : targetRole;
+          if (prev === 'admin' || prev === 'moderator') return prev;
+          return resolvedLocalUser.role || 'fan';
         });
       }
 
       // Sync with centralized backend so Admin sees user & user gets authoritative role/creator status
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['x-supabase-access-token'] = accessToken;
+      }
       fetch('/api/users/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           id: uid,
           name: String(metaName),
@@ -1568,13 +1595,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (!preserveAdminSession) {
             setIsAuthenticated(true);
-            if (authUser.role === 'creator' && data.creatorProfile) {
-              setCurrentUser(data.creatorProfile);
+            if (authUser.role === 'creator') {
+              setCurrentUser(data.creatorProfile || authUser);
               setActiveRole('creator');
             } else {
               setCurrentUser(prev => {
                 const prevEmail = String(prev?.email || '').trim().toLowerCase();
-                if (!prevEmail || prevEmail === email || prev?.id === 'user_fan_1' || prev?.id === authUser.id) {
+                if (
+                  !prevEmail ||
+                  prevEmail === email ||
+                  prev?.id === 'user_fan_1' ||
+                  prev?.id === 'guest_visitor' ||
+                  prev?.id === authUser.id
+                ) {
                   return authUser;
                 }
                 return prev;
@@ -1591,14 +1624,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       if (data.session?.user) {
-        syncAuthSessionUser(data.session.user);
+        syncAuthSessionUser(data.session.user, data.session.access_token);
       }
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       if (session?.user) {
-        syncAuthSessionUser(session.user);
+        syncAuthSessionUser(session.user, session.access_token);
       }
     });
 
@@ -3533,7 +3566,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Authoritative Backend Role & Creator Approval Detection
-  const findUserEntryByKeyOrId = (userIdOrKey: string): { key: string; user: User } | undefined => {
+  const findUserEntryByKeyOrId = (userIdOrKey: string, email?: string): { key: string; user: User } | undefined => {
     if (users[userIdOrKey]) {
       return { key: userIdOrKey, user: users[userIdOrKey] };
     }
@@ -3541,15 +3574,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (foundKey) {
       return { key: foundKey, user: users[foundKey] };
     }
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (cleanEmail) {
+      const emailKey = Object.keys(users).find(
+        k => String(users[k]?.email || '').trim().toLowerCase() === cleanEmail
+      );
+      if (emailKey) {
+        return { key: emailKey, user: users[emailKey] };
+      }
+    }
     return undefined;
+  };
+
+  const getLatestUserVerification = (userId?: string, email?: string): CreatorVerification | undefined => {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const matches = verifications.filter(
+      v =>
+        (userId && v.userId === userId) ||
+        (cleanEmail && String(v.email || '').trim().toLowerCase() === cleanEmail)
+    );
+    if (matches.length === 0) return undefined;
+    return [...matches].sort((a, b) =>
+      String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''))
+    )[0];
   };
 
   // Authoritative evaluation of whether the current authenticated user is an active, approved Creator
   const isCurrentUserApprovedCreator: boolean = (() => {
     if (!currentUser || !currentUser.id) return false;
-    const userEntry = findUserEntryByKeyOrId(currentUser.id);
+    const cleanEmail = String(currentUser.email || '').trim().toLowerCase();
+    const userEntry = findUserEntryByKeyOrId(currentUser.id, cleanEmail);
     const userRecord = userEntry?.user;
-    const creatorRecord = creators.find(c => c.id === currentUser.id);
+    const creatorRecord = creators.find(
+      c =>
+        c.id === currentUser.id ||
+        (cleanEmail && String(c.email || '').trim().toLowerCase() === cleanEmail)
+    );
+    const latestVerif = getLatestUserVerification(currentUser.id, cleanEmail);
 
     // Check account suspension / ban status
     const effectiveStatus = creatorRecord?.accountStatus || userRecord?.accountStatus || currentUser.accountStatus || 'active';
@@ -3557,36 +3618,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    // Check if there is an unapproved (pending or rejected) creator application on record
+    // Latest application status takes precedence if pending/info_requested/rejected
+    if (
+      latestVerif?.status === 'pending' ||
+      latestVerif?.status === 'info_requested' ||
+      latestVerif?.status === 'rejected'
+    ) {
+      return false;
+    }
+
+    if (latestVerif?.status === 'approved') {
+      return true;
+    }
+
+    // Check explicit approval status on userRecord
     const approvalStatus = userRecord?.creatorApprovalStatus || userRecord?.creatorApplicationStatus;
-    if (approvalStatus === 'pending' || approvalStatus === 'rejected' || approvalStatus === 'not_applied') {
+    if (approvalStatus === 'pending' || approvalStatus === 'rejected') {
       return false;
     }
 
-    // Must be either an approved creator in users or a verified creator in creators
-    if (userRecord && userRecord.role !== 'creator') {
-      return false;
+    if (userRecord) {
+      if (userRecord.role !== 'creator') {
+        return false;
+      }
+      return Boolean(
+        creatorRecord ||
+          approvalStatus === 'approved' ||
+          userRecord.role === 'creator'
+      );
     }
 
-    return Boolean(creatorRecord || (userRecord && userRecord.role === 'creator' && approvalStatus === 'approved'));
+    return Boolean(
+      creatorRecord &&
+        (currentUser.role === 'creator' || activeRole === 'creator')
+    );
   })();
 
   // Reconcile currentUser and activeRole with authoritative backend records (prevents frontend role tampering and auto-upgrades logged-in fans upon admin approval)
   useEffect(() => {
     if (!currentUser?.id) return;
-    const userEntry = findUserEntryByKeyOrId(currentUser.id);
+    const cleanEmail = String(currentUser.email || '').trim().toLowerCase();
+    const userEntry = findUserEntryByKeyOrId(currentUser.id, cleanEmail);
     const userRecord = userEntry?.user;
-    const creatorRecord = creators.find(c => c.id === currentUser.id);
+    const creatorRecord = creators.find(
+      c =>
+        c.id === currentUser.id ||
+        (cleanEmail && String(c.email || '').trim().toLowerCase() === cleanEmail)
+    );
+    const latestVerif = getLatestUserVerification(currentUser.id, cleanEmail);
+
+    if (latestVerif?.status === 'approved') {
+      if (activeRole !== 'creator' || currentUser.role !== 'creator') {
+        setActiveRole('creator');
+        setCurrentUser(
+          creatorRecord || {
+            ...(userRecord || currentUser),
+            role: 'creator',
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true
+          }
+        );
+      }
+      return;
+    }
 
     if (userRecord) {
       const approvalStatus = userRecord.creatorApprovalStatus || userRecord.creatorApplicationStatus;
-      // If backend says user is a fan (or pending/rejected creator applicant), enforce 'fan' role even if localStorage was tampered with
-      if (
-        userRecord.role === 'fan' ||
+      const isPendingOrRejected =
         approvalStatus === 'pending' ||
         approvalStatus === 'rejected' ||
-        approvalStatus === 'not_applied'
-      ) {
+        latestVerif?.status === 'pending' ||
+        latestVerif?.status === 'info_requested' ||
+        latestVerif?.status === 'rejected';
+
+      // If backend says user is a fan (or pending/rejected creator applicant), enforce 'fan' role even if localStorage was tampered with
+      if (userRecord.role === 'fan' || isPendingOrRejected) {
         if (activeRole === 'creator' || currentUser.role === 'creator') {
           setActiveRole('fan');
           setCurrentUser({ ...userRecord, role: 'fan' });
@@ -3595,14 +3702,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // If backend says user was approved as a creator, upgrade their session automatically
-      if (userRecord.role === 'creator' && approvalStatus === 'approved' && creatorRecord) {
+      if (userRecord.role === 'creator' && (approvalStatus === 'approved' || Boolean(creatorRecord))) {
         if (activeRole !== 'creator' || currentUser.role !== 'creator') {
           setActiveRole('creator');
-          setCurrentUser(creatorRecord);
+          setCurrentUser(creatorRecord || userRecord);
         }
       }
     }
-  }, [users, creators, verifications, currentUser?.id, currentUser?.role, activeRole]);
+  }, [users, creators, verifications, currentUser?.id, currentUser?.role, currentUser?.email, activeRole]);
 
   // Role Switcher helper (enforces authoritative account role)
   const switchUserRole = (role: UserRole, specificCreatorId?: string) => {
@@ -3858,27 +3965,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
 
-    // Persist user centrally on Express server so Admin & cross-browser sessions see every sign-up immediately
-    fetch('/api/users/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: newUserId,
-        name: fullName,
-        username: finalUsername,
-        email,
-        avatar: newUser.avatar,
-        dateJoined: nowDate,
-        country: newUser.country,
-        is18PlusConfirmed: true
+    // Persist user centrally on Express server and apply any authoritative role/profile (e.g. already-approved creator)
+    supabase.auth
+      .getSession()
+      .then(({ data: sData }) => {
+        const token = sData?.session?.access_token || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['x-supabase-access-token'] = token;
+        return fetch('/api/users/sync', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            id: newUserId,
+            name: fullName,
+            username: finalUsername,
+            email,
+            avatar: newUser.avatar,
+            dateJoined: nowDate,
+            country: newUser.country,
+            is18PlusConfirmed: true
+          })
+        });
       })
-    }).catch(() => {});
+      .then(r => r.json())
+      .then(state => {
+        if (!state?.success || !state.user) return;
+        const srvUser = state.user as User;
+        setUsers(prev => ({
+          ...prev,
+          [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+        }));
+        if (state.creatorProfile) {
+          setCreators(prev => {
+            const idx = prev.findIndex(c => c.id === state.creatorProfile.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = state.creatorProfile;
+              return next;
+            }
+            return [state.creatorProfile, ...prev];
+          });
+        }
+        if (state.latestApplication) {
+          setVerifications(prev => [
+            state.latestApplication,
+            ...prev.filter(v => v.id !== state.latestApplication.id)
+          ]);
+        }
+        if (input.autoLogin !== false && srvUser.role === 'creator') {
+          setCurrentUser(state.creatorProfile || srvUser);
+          setActiveRole('creator');
+        }
+      })
+      .catch(() => {});
 
-    // Also persist to Supabase users table if available
+    // Insert new user into Supabase users table only if no row already exists (never overwrite creator role back to fan)
     supabase
       .from('users')
-      .upsert(
-        {
+      .select('uid, role')
+      .eq('uid', newUserId)
+      .maybeSingle()
+      .then(({ data: existingSupaRow }) => {
+        if (existingSupaRow) return;
+        return supabase.from('users').insert({
           uid: newUserId,
           full_legal_name: fullName,
           username: finalUsername,
@@ -3891,10 +4040,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           last_login_at: new Date().toISOString()
-        },
-        { onConflict: 'uid' }
-      )
-      .then(() => {});
+        });
+      })
+      .then(() => {}, () => {});
 
     // Record registration in Admin Audit Logs so Admin sees the new sign-up in audit history too
     const signupAudit: AdminAuditLog = {
@@ -3993,32 +4141,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       detectedRole = 'moderator';
       sessionAccount = { ...matchedUser, lastLoginAt: nowTimestamp };
     } else {
+      const latestUserVerif = getLatestUserVerification(
+        matchedUser?.id || matchedCreator?.id,
+        matchedUser?.email || matchedCreator?.email
+      );
+
       // Check creator approval status
       const approvalStatus =
         matchedUser?.creatorApprovalStatus ||
         matchedUser?.creatorApplicationStatus ||
+        (latestUserVerif?.status === 'approved' ? 'approved' : undefined) ||
         (matchedCreator ? 'approved' : 'not_applied');
 
-      const hasPendingOrRejectedVerif = verifications.some(
-        v =>
-          (v.userId === matchedUser?.id || v.username.toLowerCase() === identifier) &&
-          (v.status === 'pending' || v.status === 'rejected')
-      );
+      const hasPendingOrRejectedVerif =
+        latestUserVerif?.status === 'pending' ||
+        latestUserVerif?.status === 'info_requested' ||
+        latestUserVerif?.status === 'rejected';
 
       const isApprovedCreator =
-        approvalStatus === 'approved' &&
         !hasPendingOrRejectedVerif &&
-        Boolean(matchedCreator || matchedUser?.role === 'creator');
+        (latestUserVerif?.status === 'approved' ||
+          (approvalStatus === 'approved' && Boolean(matchedCreator || matchedUser?.role === 'creator')) ||
+          (matchedUser?.role === 'creator' && Boolean(matchedCreator)));
 
-      if (isApprovedCreator && matchedCreator) {
+      if (isApprovedCreator) {
         detectedRole = 'creator';
-        sessionAccount = {
-          ...matchedCreator,
-          role: 'creator',
-          creatorApplicationStatus: 'approved',
-          creatorApprovalStatus: 'approved',
-          lastLoginAt: nowTimestamp
-        };
+        sessionAccount = matchedCreator
+          ? {
+              ...matchedCreator,
+              role: 'creator',
+              creatorApplicationStatus: 'approved',
+              creatorApprovalStatus: 'approved',
+              lastLoginAt: nowTimestamp
+            }
+          : {
+              ...matchedUser!,
+              role: 'creator',
+              creatorApplicationStatus: 'approved',
+              creatorApprovalStatus: 'approved',
+              lastLoginAt: nowTimestamp
+            };
       } else {
         // Standard Fan, Pending Creator Applicant, or Rejected Creator Applicant remains a Fan
         detectedRole = 'fan';
@@ -4091,18 +4253,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     } else {
       const effectiveUid = supabaseUserId || sessionAccount.id;
-      fetch('/api/users/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: effectiveUid,
-          name: sessionAccount.name,
-          username: sessionAccount.username,
-          email: sessionAccount.email,
-          avatar: sessionAccount.avatar,
-          dateJoined: sessionAccount.dateJoined
+      supabase.auth
+        .getSession()
+        .then(({ data: sData }) => {
+          const token = sData?.session?.access_token || '';
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['x-supabase-access-token'] = token;
+          return fetch('/api/users/sync', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              id: effectiveUid,
+              name: sessionAccount.name,
+              username: sessionAccount.username,
+              email: sessionAccount.email,
+              avatar: sessionAccount.avatar,
+              dateJoined: sessionAccount.dateJoined
+            })
+          });
         })
-      })
         .then(r => r.json())
         .then(state => {
           if (!state?.success || !state.user) return;
@@ -4128,8 +4297,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return [state.latestApplication, ...filtered];
             });
           }
-          if (serverUser.role === 'creator' && state.creatorProfile) {
-            setCurrentUser(state.creatorProfile);
+          if (serverUser.role === 'creator') {
+            setCurrentUser(state.creatorProfile || serverUser);
             setActiveRole('creator');
           } else {
             setCurrentUser(serverUser);
@@ -5838,67 +6007,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isAdminSession =
       (activeRole === 'admin' || activeRole === 'moderator' || currentUser.role === 'admin' || currentUser.role === 'moderator');
     const adminToken = getStoredAdminToken();
+    const currentEmail = String(currentUser.email || '').trim().toLowerCase();
+
+    const hydrateNonAdminSessionState = async () => {
+      if (cancelled || isAdminSession) return;
+      try {
+        let supaAccessToken = '';
+        try {
+          const { data: sData } = await supabase.auth.getSession();
+          supaAccessToken = sData?.session?.access_token || '';
+        } catch {
+          supaAccessToken = '';
+        }
+
+        const headers: Record<string, string> = {};
+        if (supaAccessToken) {
+          headers['x-supabase-access-token'] = supaAccessToken;
+        }
+
+        const res = await fetch(
+          `/api/users/session-state?userId=${encodeURIComponent(currentUser.id)}&email=${encodeURIComponent(currentUser.email || '')}`,
+          { headers }
+        );
+        const state = await res.json();
+        if (cancelled || !state?.success || !state.found || !state.user) return;
+        const serverUser = state.user as User;
+
+        setUsers(prev => ({
+          ...prev,
+          [serverUser.id]: { ...(prev[serverUser.id] || {}), ...serverUser }
+        }));
+        if (state.creatorProfile) {
+          setCreators(prev => {
+            const idx = prev.findIndex(c => c.id === state.creatorProfile.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = state.creatorProfile;
+              return next;
+            }
+            return [state.creatorProfile, ...prev];
+          });
+        }
+        if (state.latestApplication) {
+          setVerifications(prev => {
+            const others = prev.filter(v => v.id !== state.latestApplication.id);
+            return [state.latestApplication, ...others];
+          });
+        }
+        if (Array.isArray(state.notifications) && state.notifications.length > 0) {
+          setNotifications(prev => {
+            const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
+            state.notifications.forEach((n: AppNotification) => {
+              map.set(n.eventKey || n.id, n);
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        if (serverUser.role === 'creator') {
+          const targetAccount = state.creatorProfile || serverUser;
+          setCurrentUser(prev => {
+            if (prev.role !== 'creator' || (state.creatorProfile && !(prev as any).tiers)) {
+              return targetAccount;
+            }
+            return prev;
+          });
+          setActiveRole('creator');
+        } else if (serverUser.role === 'fan' && activeRole === 'creator') {
+          setCurrentUser(serverUser);
+          setActiveRole('fan');
+        }
+      } catch {
+        // ignore transient network error
+      }
+    };
 
     // 1) If non-admin user has an un-synced local pending application from before, recover it to server
-    if (!isAdminSession && currentUser.role === 'fan') {
-      const localPending = verifications.find(
-        v =>
-          (v.userId === currentUser.id ||
-            (v.email && currentUser.email && v.email.toLowerCase() === currentUser.email.toLowerCase())) &&
-          (v.status === 'pending' || v.status === 'info_requested')
-      );
-      if (localPending) {
-        fetch('/api/creator-applications/recover-own', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user: currentUser, application: localPending })
-        }).catch(() => {});
+    if (!isAdminSession) {
+      if (currentUser.role === 'fan') {
+        const localPending = verifications.find(
+          v =>
+            (v.userId === currentUser.id ||
+              (v.email && currentEmail && v.email.toLowerCase() === currentEmail)) &&
+            (v.status === 'pending' || v.status === 'info_requested')
+        );
+        if (localPending) {
+          fetch('/api/creator-applications/recover-own', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: currentUser, application: localPending })
+          }).catch(() => {});
+        }
       }
 
-      // 2) Hydrate authoritative user role & approval state from backend
-      fetch(
-        `/api/users/session-state?userId=${encodeURIComponent(currentUser.id)}&email=${encodeURIComponent(currentUser.email || '')}`
-      )
-        .then(r => r.json())
-        .then(state => {
-          if (cancelled || !state?.success || !state.found || !state.user) return;
-          const serverUser = state.user as User;
-          setUsers(prev => ({
-            ...prev,
-            [serverUser.id]: { ...(prev[serverUser.id] || {}), ...serverUser }
-          }));
-          if (state.creatorProfile) {
-            setCreators(prev => {
-              const idx = prev.findIndex(c => c.id === state.creatorProfile.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = state.creatorProfile;
-                return next;
-              }
-              return [state.creatorProfile, ...prev];
-            });
-          }
-          if (state.latestApplication) {
-            setVerifications(prev => {
-              const others = prev.filter(v => v.id !== state.latestApplication.id);
-              return [state.latestApplication, ...others];
-            });
-          }
-          if (Array.isArray(state.notifications) && state.notifications.length > 0) {
-            setNotifications(prev => {
-              const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
-              state.notifications.forEach((n: AppNotification) => {
-                map.set(n.eventKey || n.id, n);
-              });
-              return Array.from(map.values());
-            });
-          }
-          if (serverUser.role === 'creator' && state.creatorProfile && activeRole !== 'creator') {
-            setCurrentUser(state.creatorProfile);
-            setActiveRole('creator');
-          }
-        })
-        .catch(() => {});
+      // 2) Hydrate authoritative user role & approval state from backend for both fans and creators
+      hydrateNonAdminSessionState();
     }
 
     // 3) Admin centralized sync + reconciliation
@@ -5969,9 +6172,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   return [payload.creatorProfile, ...prev];
                 });
               }
-              if (currentUser.id === srvUser.id) {
-                if (srvUser.role === 'creator' && payload.creatorProfile) {
-                  setCurrentUser(payload.creatorProfile);
+              const srvEmail = String(srvUser.email || '').trim().toLowerCase();
+              const isCurrent =
+                currentUser.id === srvUser.id ||
+                (Boolean(currentEmail) && Boolean(srvEmail) && currentEmail === srvEmail);
+              if (isCurrent) {
+                if (srvUser.role === 'creator') {
+                  setCurrentUser(payload.creatorProfile || srvUser);
                   setActiveRole('creator');
                 } else {
                   setCurrentUser(srvUser);
@@ -6005,8 +6212,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cancelled) return;
       if (isAdminSession && getStoredAdminToken()) {
         refreshCreatorApplications().catch(() => {});
+      } else if (!isAdminSession) {
+        hydrateNonAdminSessionState();
       }
     });
+
+    const handleWindowFocus = () => {
+      if (cancelled) return;
+      if (isAdminSession && getStoredAdminToken()) {
+        refreshCreatorApplications().catch(() => {});
+      } else if (!isAdminSession) {
+        hydrateNonAdminSessionState();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleWindowFocus();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleWindowFocus);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
     const fallbackInterval = isAdminSession
       ? setInterval(() => {
@@ -6014,15 +6245,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             refreshCreatorApplications().catch(() => {});
           }
         }, 25000)
-      : null;
+      : setInterval(() => {
+          if (!cancelled) {
+            hydrateNonAdminSessionState();
+          }
+        }, 20000);
 
     return () => {
       cancelled = true;
       if (evtSource) evtSource.close();
       unsubscribeSupaRealtime();
-      if (fallbackInterval) clearInterval(fallbackInterval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleWindowFocus);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      clearInterval(fallbackInterval);
     };
-  }, [isAuthenticated, currentUser?.id, activeRole]);
+  }, [isAuthenticated, currentUser?.id, currentUser?.email, activeRole]);
 
   const reviewVerification = async (
     id: string,
@@ -6357,14 +6598,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const userPendingVerification = verifications.find(
-    v =>
-      (v.userId === currentUser.id ||
-        (Boolean(currentUser.email) &&
-          Boolean(v.email) &&
-          v.email!.toLowerCase() === currentUser.email.toLowerCase())) &&
-      (v.status === 'pending' || v.status === 'info_requested')
-  );
+  const latestCurrentVerification = getLatestUserVerification(currentUser.id, currentUser.email);
+  const userPendingVerification =
+    latestCurrentVerification &&
+    (latestCurrentVerification.status === 'pending' || latestCurrentVerification.status === 'info_requested')
+      ? latestCurrentVerification
+      : undefined;
 
   const resolveReport = (reportId: string, actionTaken: string) => {
     adminUpdateReport(reportId, { status: 'resolved', actionTaken });
@@ -6391,26 +6630,145 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     let targetName = userId;
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const enrichedUpdates: Record<string, any> = {
+      ...updates,
+      ...(updates.role === 'creator'
+        ? {
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true,
+            creatorApprovedByAdminId: currentUser.id,
+            creatorApprovedByAdminName: currentUser.name,
+            creatorApprovedAt: nowStr,
+            creatorRejectionReason: undefined
+          }
+        : updates.role === 'fan'
+        ? {
+            creatorApplicationStatus: 'not_applied',
+            creatorApprovalStatus: 'not_applied'
+          }
+        : {}),
+      updatedAt: nowStr
+    };
 
+    let matchedTargetUser: User | undefined;
     setUsers(prev => {
       const next = { ...prev };
       const key = Object.keys(next).find(k => next[k].id === userId || k === userId);
       if (key && next[key]) {
         targetName = `${next[key].name} (@${next[key].username})`;
-        next[key] = { ...next[key], ...updates };
+        matchedTargetUser = { ...next[key], ...enrichedUpdates };
+        next[key] = matchedTargetUser;
       }
       return next;
     });
 
-    setCreators(prev =>
-      prev.map(c => {
-        if (c.id === userId) {
-          targetName = `${c.name} (@${c.username})`;
-          return { ...c, ...updates };
+    setCreators(prev => {
+      const existingIdx = prev.findIndex(c => c.id === userId);
+      if (existingIdx >= 0) {
+        return prev.map(c => {
+          if (c.id === userId) {
+            targetName = `${c.name} (@${c.username})`;
+            return { ...c, ...enrichedUpdates };
+          }
+          return c;
+        });
+      }
+      if (updates.role === 'creator') {
+        const u = matchedTargetUser || findUserEntryByKeyOrId(userId)?.user;
+        if (u) {
+          const newProfile: CreatorProfile = {
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            email: u.email,
+            avatar: u.avatar || '',
+            coverImage: '',
+            bio: u.bio || 'Official ACOVON verified creator.',
+            category: 'Fashion & Luxury',
+            role: 'creator',
+            accountStatus: u.accountStatus || 'active',
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            creatorApprovedByAdminId: currentUser.id,
+            creatorApprovedByAdminName: currentUser.name,
+            creatorApprovedAt: nowStr,
+            updatedAt: nowStr,
+            walletBalance: u.walletBalance || 0,
+            pendingBalance: 0,
+            totalEarnings: 0,
+            withdrawnAmount: 0,
+            subscribersCount: 0,
+            followersCount: 0,
+            isVerified: true,
+            is18PlusConfirmed: true,
+            dateJoined: u.dateJoined || new Date().toISOString().split('T')[0],
+            country: u.country || 'United States',
+            isLiveForCalls: true,
+            callRatePerMinute: 3.5,
+            instantCallsEnabled: true,
+            minCallMinutes: 5,
+            maxCallMinutes: 60,
+            acceptingCustomRequests: true,
+            customRequestBasePrice: 50.0,
+            customRequestDeliveryDays: 3,
+            customRequestTerms: 'Custom video commissions and personalized creator video recordings.',
+            tiers: [
+              {
+                id: `tier_std_${Date.now()}`,
+                name: 'Standard Access',
+                price: 14.99,
+                perks: ['Full feed access', 'Community posts', 'Exclusive photo previews']
+              },
+              {
+                id: `tier_vip_${Date.now()}`,
+                name: 'VIP Gold Access',
+                price: 37.49,
+                perks: ['Full feed access', 'VIP Livestreams included', 'Direct 1-on-1 messaging', 'Priority custom requests']
+              }
+            ]
+          };
+          return [newProfile, ...prev];
         }
-        return c;
+      }
+      return prev;
+    });
+
+    const adminToken = getStoredAdminToken();
+    if (adminToken) {
+      fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify(updates)
       })
-    );
+        .then(r => r.json())
+        .then(data => {
+          if (!data?.success) return;
+          if (data.user) {
+            const srvUser = data.user as User;
+            setUsers(prev => ({
+              ...prev,
+              [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+            }));
+          }
+          if (data.creatorProfile) {
+            setCreators(prev => {
+              const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = data.creatorProfile;
+                return next;
+              }
+              return [data.creatorProfile, ...prev];
+            });
+          }
+        })
+        .catch(() => {});
+    }
 
     logAdminAction({
       category: updates.adminPermissionLevel ? 'permission_change' : 'user_account',

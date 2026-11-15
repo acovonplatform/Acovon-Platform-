@@ -104,7 +104,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator';
   if (!isCreator) return null;
 
-  const currentCreatorProfile = creators.find(c => c.id === currentUser.id);
+  const currentCreatorProfile = creators.find(
+    c =>
+      c.id === currentUser.id ||
+      (Boolean(currentUser.email) &&
+        Boolean(c.email) &&
+        c.email.toLowerCase() === currentUser.email.toLowerCase())
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraCaptureInputRef = useRef<HTMLInputElement>(null);
@@ -592,6 +598,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
         commentsDisabled: disableComments,
         downloadsDisabled: disableDownloads
       });
+
+      if (!createdPostId) {
+        setIsPublishing(false);
+        setErrorMessage('Your post could not be published because your creator verification session is still syncing. Please refresh and try again.');
+        return;
+      }
 
       // Persist selected video cover association on backend for every video asset
       selectedFiles.forEach(item => {
@@ -1317,7 +1329,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
                     </label>
                     <input
                       type="number"
-                      step="0.5"
+                      step="0.01"
                       min="1"
                       max="150"
                       value={ppvPrice}

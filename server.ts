@@ -1016,6 +1016,27 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     }
   };
 
+  const fetchSupabaseUserRecord = async (
+    req: express.Request | undefined,
+    userId?: string
+  ): Promise<{ role?: string; account_status?: string } | null> => {
+    const cleanId = String(userId || '').trim();
+    if (!cleanId) return null;
+    const client = getRequestSupabaseClient(req);
+    if (!client) return null;
+    try {
+      const { data, error } = await (client as any)
+        .from('users')
+        .select('uid, role, account_status')
+        .eq('uid', cleanId)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  };
+
   // --------------------------------------------------------------------------
   // API: Permanent Media Asset Upload (Unique Immutable File Storage — before JSON parser)
   // --------------------------------------------------------------------------
@@ -2024,6 +2045,13 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         return res.status(400).json({ success: false, error: 'Valid user email is required.' });
       }
 
+      await pullSupabaseCreatorApplications(req);
+      const remoteUser = await fetchSupabaseUserRecord(req, id);
+      const remoteRole =
+        remoteUser?.role === 'creator' || remoteUser?.role === 'admin' || remoteUser?.role === 'moderator'
+          ? (remoteUser.role as any)
+          : undefined;
+
       const result = creatorAppStore.syncUserAccount({
         id,
         name,
@@ -2032,18 +2060,23 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         avatar,
         dateJoined,
         country,
-        is18PlusConfirmed
+        is18PlusConfirmed,
+        remoteRole: remoteRole === 'creator' ? 'creator' : undefined
       });
 
       const reqSupabase = getRequestSupabaseClient(req);
       if (reqSupabase) {
         try {
+          const safeRemoteRole =
+            remoteUser?.role === 'creator' || remoteUser?.role === 'admin' || remoteUser?.role === 'moderator'
+              ? remoteUser.role
+              : result.user.role;
           await (reqSupabase as any).from('users').upsert(
             {
               uid: result.user.id,
               full_legal_name: result.user.name,
               username: result.user.username,
-              role: result.user.role,
+              role: safeRemoteRole,
               account_status: result.user.accountStatus || 'active',
               email_verified: true,
               profile_picture_url: result.user.avatar || '',
@@ -2071,10 +2104,92 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         return res.status(400).json({ success: false, error: 'userId or email is required.' });
       }
       await pullSupabaseCreatorApplications(req);
+      if (userId) {
+        const remoteUser = await fetchSupabaseUserRecord(req, userId);
+        if (remoteUser?.role === 'creator' && email && email.includes('@')) {
+          creatorAppStore.syncUserAccount({
+            id: userId,
+            email,
+            remoteRole: 'creator'
+          });
+        } else if (remoteUser?.role === 'creator') {
+          const existingState = creatorAppStore.getUserSessionState({ userId, email });
+          if (existingState.found && existingState.user && existingState.user.role !== 'creator') {
+            creatorAppStore.syncUserAccount({
+              id: existingState.user.id,
+              email: existingState.user.email,
+              remoteRole: 'creator'
+            });
+          }
+        }
+      }
       const state = creatorAppStore.getUserSessionState({ userId, email });
       return res.json({ success: true, ...state });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch user session state';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/admin/users/:userId', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can update user accounts.' });
+    }
+
+    try {
+      const { userId } = req.params;
+      const body = req.body || {};
+      const result = creatorAppStore.adminUpdateUserAccountOnServer(
+        userId,
+        { id: auth.actor.id, name: auth.actor.name, role: auth.actor.role },
+        {
+          role: body.role,
+          accountStatus: body.accountStatus,
+          statusReason: body.statusReason,
+          isVerified: body.isVerified,
+          adminPermissionLevel: body.adminPermissionLevel,
+          adminPermissions: body.adminPermissions
+        }
+      );
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          await (reqSupabase as any)
+            .from('users')
+            .update({
+              role: result.user.role,
+              account_status: result.user.accountStatus || 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('uid', result.user.id);
+        } catch {
+          // ignore optional remote sync error
+        }
+      }
+
+      broadcastCreatorAppEvent('application_reviewed', {
+        decision: result.user.role === 'creator' ? 'approved' : 'updated',
+        user: result.user,
+        creatorProfile: result.creatorProfile,
+        userId: result.user.id
+      });
+
+      return res.json({
+        success: true,
+        user: result.user,
+        creatorProfile: result.creatorProfile
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update user account';
       return res.status(500).json({ success: false, error: msg });
     }
   });
@@ -2682,12 +2797,17 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       const { actorId, actorName, actorRole, isApprovedCreator, post, ...rest } = body;
       const postData = (post && typeof post === 'object' ? post : rest) as Partial<Post>;
       const taxonomyDb = readTaxonomyDB(taxonomyDbPath);
+      const serverSession = actorId ? creatorAppStore.getUserSessionState({ userId: actorId }) : undefined;
+      const effectiveApprovedCreator =
+        Boolean(isApprovedCreator) ||
+        actorRole === 'creator' ||
+        Boolean(serverSession?.found && serverSession.user?.role === 'creator' && serverSession.user.creatorApprovalStatus === 'approved');
 
       const result = postStore.createPost({
         actorId,
         actorName,
-        actorRole,
-        isApprovedCreator,
+        actorRole: serverSession?.user?.role || actorRole,
+        isApprovedCreator: effectiveApprovedCreator,
         postData,
         categoriesList: taxonomyDb.categories,
         countriesList: taxonomyDb.countries
