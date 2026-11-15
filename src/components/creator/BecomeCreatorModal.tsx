@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
+import { uploadUserFileToSupabase } from '../../services/supabase';
+import {
+  compressImageForUpload,
+  fileToBase64,
+  safeReadJsonResponse,
+  sanitizeHeaderValue,
+  sanitizeUploadFileName
+} from '../../utils/safeHttp';
 import { 
   X, 
   ShieldCheck, 
@@ -70,26 +78,91 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     if (target === 'doc') setUploadingDoc(true);
     else setUploadingSelfie(true);
     setErrorMessage(null);
+
     try {
-      const res = await fetch('/api/media/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-          'x-file-name': file.name,
-          'x-mime-type': file.type || 'image/jpeg',
-          'x-owner-id': currentUser.id
-        },
-        body: file
-      });
-      const data = await res.json();
-      if (res.ok && data?.success && data.url) {
-        if (target === 'doc') setDocFileUrl(data.url);
-        else setSelfieUrl(data.url);
-      } else {
-        setErrorMessage(data?.error || 'Failed to upload verification image.');
+      const preparedFile = await compressImageForUpload(file);
+      const safeFileName = sanitizeUploadFileName(preparedFile.name, `verification_${target}.jpg`);
+      const safeMimeType = sanitizeHeaderValue(preparedFile.type, 'image/jpeg');
+      const safeOwnerId = sanitizeHeaderValue(currentUser.id, 'anonymous').slice(0, 128);
+
+      let uploadedUrl: string | null = null;
+      let lastError: string | null = null;
+
+      // 1. Primary path: raw binary upload with strictly ASCII-safe headers (avoids ISO-8859-1 fetch error)
+      try {
+        const res = await fetch('/api/media/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'x-file-name': safeFileName,
+            'x-mime-type': safeMimeType,
+            'x-owner-id': safeOwnerId
+          },
+          body: preparedFile
+        });
+        const parsed = await safeReadJsonResponse<{ success?: boolean; url?: string; error?: string }>(res);
+        if (parsed.ok && parsed.data?.success && parsed.data.url) {
+          uploadedUrl = parsed.data.url;
+        } else {
+          lastError = parsed.data?.error || parsed.errorMessage || `Upload failed (HTTP ${res.status})`;
+        }
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err.message : 'Primary upload connection failed.';
       }
-    } catch {
-      setErrorMessage('Network error uploading verification image.');
+
+      // 2. Fallback path: JSON base64 upload endpoint (resilient across mobile/strict proxies)
+      if (!uploadedUrl) {
+        try {
+          const dataBase64 = await fileToBase64(preparedFile);
+          const fallbackRes = await fetch('/api/media/upload-base64', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: safeFileName,
+              mimeType: safeMimeType,
+              ownerId: safeOwnerId,
+              dataBase64
+            })
+          });
+          const fallbackParsed = await safeReadJsonResponse<{ success?: boolean; url?: string; error?: string }>(fallbackRes);
+          if (fallbackParsed.ok && fallbackParsed.data?.success && fallbackParsed.data.url) {
+            uploadedUrl = fallbackParsed.data.url;
+          } else if (fallbackParsed.data?.error || fallbackParsed.errorMessage) {
+            lastError = fallbackParsed.data?.error || fallbackParsed.errorMessage || lastError;
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.message) {
+            lastError = err.message;
+          }
+        }
+      }
+
+      // 3. Secondary fallback: Supabase Storage if configured
+      if (!uploadedUrl) {
+        try {
+          const supaRes = await uploadUserFileToSupabase({
+            uid: currentUser.id || 'anonymous',
+            file: preparedFile,
+            featureName: 'verifications',
+            visibility: 'private'
+          });
+          if (supaRes.success && supaRes.signedUrl) {
+            uploadedUrl = supaRes.signedUrl;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (uploadedUrl) {
+        if (target === 'doc') setDocFileUrl(uploadedUrl);
+        else setSelfieUrl(uploadedUrl);
+      } else {
+        setErrorMessage(lastError || 'Failed to upload verification image. Please try another photo.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to upload verification image.';
+      setErrorMessage(msg);
     } finally {
       if (target === 'doc') setUploadingDoc(false);
       else setUploadingSelfie(false);

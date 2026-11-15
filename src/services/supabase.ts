@@ -4,6 +4,7 @@ import {
   SUPABASE_URL,
   SUPABASE_PUBLIC_KEY
 } from '../supabaseClient.js';
+import { fileToBase64, safeReadJsonResponse, sanitizeHeaderValue } from '../utils/safeHttp';
 
 // ============================================================================
 // 1. CENTRALIZED SUPABASE CONFIGURATION & INITIALIZATION
@@ -615,21 +616,51 @@ export async function uploadUserFileToSupabase(params: {
   // 1. Always store uploaded media permanently on ACOVON media storage (/api/media/upload)
   // so URLs (/api/media/files/...) never expire after 1 hour or break across page reloads.
   try {
+    const safeMime = sanitizeHeaderValue(file.type || resolvedMime, 'application/octet-stream');
+    const safeOwner = sanitizeHeaderValue(ownerUid, 'anonymous').slice(0, 128);
+    const safePostId = sanitizeHeaderValue(resolvedItemId, '').slice(0, 128);
+
     const serverRes = await fetch('/api/media/upload', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
         'x-file-name': sanitizedName,
-        'x-mime-type': file.type || resolvedMime,
-        'x-owner-id': ownerUid,
-        'x-post-id': resolvedItemId
+        'x-mime-type': safeMime,
+        'x-owner-id': safeOwner,
+        ...(safePostId ? { 'x-post-id': safePostId } : {})
       },
       body: file
     });
 
-    if (serverRes.ok) {
-      const serverData = await serverRes.json();
-      if (serverData?.success && serverData?.url) {
+    const parsedServer = serverRes.ok ? await safeReadJsonResponse(serverRes) : null;
+    let serverData = parsedServer?.data;
+
+    if ((!serverData?.success || !serverData?.url) && resolvedCategory === 'image' && file.size <= 20 * 1024 * 1024) {
+      try {
+        const dataBase64 = await fileToBase64(file);
+        const b64Res = await fetch('/api/media/upload-base64', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: sanitizedName,
+            mimeType: safeMime,
+            ownerId: safeOwner,
+            postId: safePostId || undefined,
+            dataBase64
+          })
+        });
+        if (b64Res.ok) {
+          const parsedB64 = await safeReadJsonResponse(b64Res);
+          if (parsedB64.data?.success && parsedB64.data?.url) {
+            serverData = parsedB64.data;
+          }
+        }
+      } catch {
+        // continue to Supabase storage fallback
+      }
+    }
+
+    if (serverData?.success && serverData?.url) {
         if (onProgress) onProgress(85);
         const permanentUrl: string = serverData.url;
         const record: SupabaseUserFileRecord = {
@@ -670,7 +701,6 @@ export async function uploadUserFileToSupabase(params: {
           storagePath: permanentUrl,
           signedUrl: permanentUrl
         };
-      }
     }
   } catch (err) {
     console.warn('Permanent server media upload notice:', err);

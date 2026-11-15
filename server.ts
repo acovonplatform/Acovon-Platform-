@@ -1191,6 +1191,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
         const mediaId = `media_${crypto.randomUUID()}`;
         const fileName = `${mediaId}${ext}`;
+        fs.mkdirSync(postStore.mediaUploadsDir, { recursive: true });
         const destPath = path.join(postStore.mediaUploadsDir, fileName);
         tmpPath = `${destPath}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
         fs.writeFileSync(tmpPath, buffer);
@@ -1373,6 +1374,85 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   );
 
   app.use(express.json({ limit: '50mb' }));
+
+  // --------------------------------------------------------------------------
+  // API: Permanent Media Asset Upload (JSON Base64 Fallback for Proxy / Mobile Compatibility)
+  // --------------------------------------------------------------------------
+  app.post('/api/media/upload-base64', (req, res) => {
+    let tmpPath = '';
+    try {
+      const body = req.body || {};
+      const rawBase64 = String(body.dataBase64 || '').trim();
+      if (!rawBase64) {
+        return res.status(400).json({ success: false, error: 'Uploaded media payload is empty.' });
+      }
+      const cleanBase64 = rawBase64.includes(',') ? rawBase64.slice(rawBase64.indexOf(',') + 1) : rawBase64;
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      if (buffer.length < 1) {
+        return res.status(400).json({ success: false, error: 'Uploaded media payload is invalid or empty.' });
+      }
+
+      const rawName = String(body.fileName || 'upload.bin').slice(0, 200);
+      const mimeType = String(body.mimeType || 'image/jpeg').slice(0, 128);
+      const ownerId = String(body.ownerId || 'anonymous').slice(0, 128);
+      const postId = body.postId ? String(body.postId).slice(0, 128) : undefined;
+
+      let ext = path.extname(rawName).toLowerCase().replace(/[^a-z0-9.]/g, '');
+      if (!ext) {
+        if (mimeType.includes('png')) ext = '.png';
+        else if (mimeType.includes('webp')) ext = '.webp';
+        else if (mimeType.includes('gif')) ext = '.gif';
+        else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = '.jpg';
+        else if (mimeType.includes('mp4')) ext = '.mp4';
+        else if (mimeType.includes('webm')) ext = '.webm';
+        else ext = '.bin';
+      }
+
+      const mediaId = `media_${crypto.randomUUID()}`;
+      const fileName = `${mediaId}${ext}`;
+      fs.mkdirSync(postStore.mediaUploadsDir, { recursive: true });
+      const destPath = path.join(postStore.mediaUploadsDir, fileName);
+      tmpPath = `${destPath}.${process.pid}.${crypto.randomBytes(3).toString('hex')}.tmp`;
+      fs.writeFileSync(tmpPath, buffer);
+      fs.renameSync(tmpPath, destPath);
+      tmpPath = '';
+
+      const finalStat = fs.statSync(destPath);
+      const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+      const url = `/api/media/files/${fileName}`;
+
+      const record = {
+        mediaId,
+        fileName,
+        originalFilename: path.basename(rawName).slice(0, 200),
+        ownerId,
+        mimeType,
+        sizeBytes: finalStat.size,
+        sha256,
+        url,
+        postId,
+        createdAt: new Date().toISOString()
+      };
+      postStore.registerUploadedMedia(record);
+
+      return res.status(201).json({
+        success: true,
+        mediaId,
+        fileName,
+        url,
+        mimeType,
+        sizeBytes: finalStat.size,
+        sha256,
+        record
+      });
+    } catch (err: unknown) {
+      if (tmpPath && fs.existsSync(tmpPath)) {
+        try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+      }
+      const msg = err instanceof Error ? err.message : 'Failed to store uploaded media';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
 
   const publicDir = path.resolve(__dirname, 'public');
   if (fs.existsSync(publicDir)) {
@@ -6337,6 +6417,32 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
     return wss;
   };
+
+  // Guarantee every /api/* unknown route or Express body/stream error returns JSON (never empty or HTML)
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ success: false, error: 'API endpoint not found.' });
+  });
+
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!err) return next();
+    if (res.headersSent) return next(err);
+    const status =
+      typeof err.status === 'number'
+        ? err.status
+        : typeof err.statusCode === 'number'
+        ? err.statusCode
+        : err.type === 'entity.too.large'
+        ? 413
+        : 400;
+    const message =
+      err.type === 'entity.too.large'
+        ? 'Uploaded payload exceeds maximum server size limit.'
+        : err.message || 'Server request error.';
+    if (req.path.startsWith('/api') || req.originalUrl.startsWith('/api')) {
+      return res.status(status).json({ success: false, error: message });
+    }
+    return res.status(status).json({ success: false, error: message });
+  });
 
   return {
     app,

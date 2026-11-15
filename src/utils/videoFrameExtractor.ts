@@ -1,3 +1,5 @@
+import { safeReadJsonResponse, sanitizeHeaderValue, sanitizeUploadFileName } from './safeHttp';
+
 export interface ExtractedVideoFrame {
   id: string;
   url: string;
@@ -302,7 +304,8 @@ async function extractFramesViaBrowserCanvas(params: {
             })
           });
           if (saveResp.ok) {
-            const savedData = await saveResp.json();
+            const parsed = await safeReadJsonResponse(saveResp);
+            const savedData = parsed.data;
             if (savedData?.success && Array.isArray(savedData.frames) && savedData.frames.length > 0) {
               settled = true;
               clearTimeout(overallTimer);
@@ -374,17 +377,18 @@ export async function extractVideoCoverFrames(params: {
       const resp = await fetch('/api/videos/extract-frames', {
         method: 'POST',
         headers: {
-          'Content-Type': params.file.type || 'application/octet-stream',
-          'x-file-name': params.file.name,
-          ...(params.creatorId ? { 'x-creator-id': params.creatorId } : {}),
-          ...(params.postId ? { 'x-post-id': params.postId } : {}),
-          ...(params.videoMediaId ? { 'x-video-media-id': params.videoMediaId } : {})
+          'Content-Type': 'application/octet-stream',
+          'x-file-name': sanitizeUploadFileName(params.file.name, 'upload.mp4'),
+          ...(params.creatorId ? { 'x-creator-id': sanitizeHeaderValue(params.creatorId) } : {}),
+          ...(params.postId ? { 'x-post-id': sanitizeHeaderValue(params.postId) } : {}),
+          ...(params.videoMediaId ? { 'x-video-media-id': sanitizeHeaderValue(params.videoMediaId) } : {})
         },
         body: params.file
       });
 
       if (resp.ok) {
-        const data = await resp.json();
+        const parsed = await safeReadJsonResponse(resp);
+        const data = parsed.data;
         if (data?.success && Array.isArray(data.frames) && data.frames.length > 0) {
           return {
             success: true,
@@ -427,7 +431,8 @@ export async function extractVideoCoverFrames(params: {
           })
         });
         if (resp.ok) {
-          const data = await resp.json();
+          const parsed = await safeReadJsonResponse(resp);
+          const data = parsed.data;
           if (data?.success && Array.isArray(data.frames) && data.frames.length > 0) {
             return {
               success: true,
@@ -507,7 +512,8 @@ export async function fetchStoredVideoCoverMetadata(params: {
 
     const resp = await fetch(`/api/videos/cover-metadata?${qs.toString()}`);
     if (!resp.ok) return null;
-    const data = await resp.json();
+    const parsed = await safeReadJsonResponse(resp);
+    const data = parsed.data;
     const rec = data?.record;
     if (!rec || !Array.isArray(rec.frames) || rec.frames.length === 0) return null;
     return {

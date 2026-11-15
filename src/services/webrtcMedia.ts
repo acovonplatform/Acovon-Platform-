@@ -1,4 +1,5 @@
 // Production WebRTC Media, Device Enumeration, ICE/TURN Fetching & Audio Monitoring Helpers
+import { safeJson } from '../utils/safeHttp';
 
 export interface RtcServerConfig {
   iceServers: RTCIceServer[];
@@ -27,7 +28,7 @@ export async function fetchRtcIceConfig(): Promise<RtcServerConfig> {
   try {
     const res = await fetch('/api/rtc/config', { cache: 'no-store' });
     if (res.ok) {
-      const json = await res.json();
+      const json = await safeJson(res);
       if (json?.success && Array.isArray(json.iceServers)) {
         const data: RtcServerConfig = {
           iceServers: json.iceServers,

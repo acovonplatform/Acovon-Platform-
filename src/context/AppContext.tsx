@@ -102,6 +102,7 @@ import {
   applyThemeToDocument
 } from '../data/brandingThemes';
 import { getLocalSampleThumbnails } from '../utils/videoFrameExtractor';
+import { safeJson, safeReadJsonResponse } from '../utils/safeHttp';
 import {
   logoutFromSupabase,
   syncUserPreferencesToSupabase,
@@ -1632,7 +1633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           dateJoined: nowDate
         })
       })
-        .then(r => r.json())
+        .then(r => safeJson(r))
         .then(data => {
           if (!mounted || !data?.success || !data.user) return;
           const authUser = data.user as User;
@@ -1915,7 +1916,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let active = true;
     fetch('/api/posts/state', { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (!active || !data || !data.success) return;
         applyAuthoritativePostsState(data);
@@ -1935,7 +1936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStatuses(prev => prev.filter(s => !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId)));
     setViewedStatusIds([]);
     fetch('/api/posts/state', { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data && data.success) applyAuthoritativePostsState(data);
       })
@@ -2407,7 +2408,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let active = true;
     fetch('/api/verification/state')
-      .then(res => (res.ok ? res.json() : null))
+      .then(res => (res.ok ? safeJson(res) : null))
       .then(data => {
         if (!active || !data || !data.success) return;
         applyAuthoritativeVerificationPayload(data);
@@ -2618,20 +2619,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch('/api/admin/setup-status');
       if (res.ok) {
-        const data = await res.json();
-        const updated: AdminSetupStatus = {
-          isSetupCompleted: Boolean(data.isSetupCompleted),
-          hasAdmin: Boolean(data.hasAdmin),
-          setupCompletedAt: data.setupCompletedAt,
-          adminEmailMasked: data.adminEmailMasked
-        };
-        setAdminSetupStatus(updated);
-        try {
-          localStorage.setItem('acovon_admin_setup_v1', JSON.stringify(updated));
-        } catch {
-          // ignore
+        const data = await safeJson(res);
+        if (data) {
+          const updated: AdminSetupStatus = {
+            isSetupCompleted: Boolean(data.isSetupCompleted),
+            hasAdmin: Boolean(data.hasAdmin),
+            setupCompletedAt: data.setupCompletedAt,
+            adminEmailMasked: data.adminEmailMasked
+          };
+          setAdminSetupStatus(updated);
+          try {
+            localStorage.setItem('acovon_admin_setup_v1', JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+          return updated;
         }
-        return updated;
       }
     } catch {
       // fallback
@@ -2667,9 +2670,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input)
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Server error during administrator provisioning' };
+        return { success: false, error: data.error || parsed.errorMessage || 'Server error during administrator provisioning' };
       }
 
       const nowIso = new Date().toISOString();
@@ -2765,9 +2769,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Invalid administrator credentials.' };
+        return { success: false, error: data.error || parsed.errorMessage || 'Invalid administrator credentials.' };
       }
 
       if (data.adminToken) {
@@ -3205,7 +3210,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         body: JSON.stringify({ userKeyOrId })
       })
-        .then(r => r.json())
+        .then(r => safeJson(r))
         .then(d => {
           if (d?.success && d.adminToken) {
             try {
@@ -3488,7 +3493,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           },
           body: JSON.stringify({ userKeyOrId: targetAdmin.id })
         })
-          .then(r => r.json())
+          .then(r => safeJson(r))
           .then(d => {
             if (d?.success && d.adminToken) {
               try {
@@ -3521,7 +3526,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           },
           body: JSON.stringify({ userKeyOrId: targetMod.id })
         })
-          .then(r => r.json())
+          .then(r => safeJson(r))
           .then(d => {
             if (d?.success && d.adminToken) {
               try {
@@ -3629,7 +3634,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             })
           });
         })
-        .then(r => r.json())
+        .then(r => safeJson(r))
         .then(state => {
           if (!state?.success || !state.user) return;
           const srvUser = state.user as User;
@@ -3754,7 +3759,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
         });
       })
-      .then(r => r.json())
+      .then(r => safeJson(r))
       .then(state => {
         if (!state?.success || !state.user) return;
         const srvUser = state.user as User;
@@ -4054,7 +4059,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         })
         .then(async r => {
-          const d = await r.json().catch(() => ({}));
+          const d = (await safeJson(r)) || {};
           if (r.ok && d?.success && d.adminToken) {
             if (d.creatorProfile) {
               setCreators(prev => {
@@ -4099,7 +4104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 dateJoined: sessionAccount.dateJoined
               })
             });
-            const syncData = await syncRes.json().catch(() => ({}));
+            const syncData = (await safeJson(syncRes)) || {};
             if (syncData?.success && syncData.creatorProfile) {
               setCreators(prev => {
                 const idx = prev.findIndex(c => c.id === syncData.creatorProfile.id);
@@ -4153,7 +4158,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             })
           });
         })
-        .then(r => r.json())
+        .then(r => safeJson(r))
         .then(state => {
           if (!state?.success || !state.user) return;
           const serverUser = state.user as User;
@@ -4272,7 +4277,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           is18PlusConfirmed: true
         })
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await safeJson(res)) || {};
 
       if (res.status === 403 && data?.deleted) {
         await supabase.auth.signOut().catch(() => {});
@@ -4342,7 +4347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 headers,
                 body: JSON.stringify({ email, password: passwordInput || 'supabase_session' })
               });
-              const adminLoginData = await adminLoginRes.json().catch(() => ({}));
+              const adminLoginData = (await safeJson(adminLoginRes)) || {};
               if (adminLoginRes.ok && adminLoginData?.success && adminLoginData.adminToken) {
                 issuedToken = String(adminLoginData.adminToken);
                 if (adminLoginData.user) {
@@ -4721,7 +4726,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         post: newPost
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success && data?.post) {
           const confirmedPost: Post = data.post;
@@ -4786,12 +4791,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       });
 
-      const data = await response.json();
+      const parsed = await safeReadJsonResponse(response);
+      const data = parsed.data || {};
       if (!response.ok || !data.success) {
         return {
           success: false,
           requiresPurchaseWarning: data?.requiresPurchaseWarning,
-          error: data?.error || 'Failed to save post changes.'
+          error: data?.error || parsed.errorMessage || 'Failed to save post changes.'
         };
       }
 
@@ -4885,11 +4891,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       });
 
-      const data = await response.json();
+      const parsed = await safeReadJsonResponse(response);
+      const data = parsed.data || {};
       if (!response.ok || !data.success) {
         return {
           success: false,
-          error: data?.error || 'Failed to delete post.'
+          error: data?.error || parsed.errorMessage || 'Failed to delete post.'
         };
       }
 
@@ -4946,9 +4953,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const response = await fetch(`/api/posts/${encodeURIComponent(postId)}/revisions?${params.toString()}`, {
         cache: 'no-store'
       });
-      const data = await response.json();
+      const parsed = await safeReadJsonResponse(response);
+      const data = parsed.data || {};
       if (!response.ok || !data.success) {
-        return { success: false, revisions: [], error: data?.error || 'Failed to load post revisions.' };
+        return { success: false, revisions: [], error: data?.error || parsed.errorMessage || 'Failed to load post revisions.' };
       }
       return {
         success: true,
@@ -4979,9 +4987,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
         }
       );
-      const data = await response.json();
+      const parsed = await safeReadJsonResponse(response);
+      const data = parsed.data || {};
       if (!response.ok || !data.success || !data.restoredPost) {
-        return { success: false, error: data?.error || 'Failed to restore selected post version.' };
+        return { success: false, error: data?.error || parsed.errorMessage || 'Failed to restore selected post version.' };
       }
       const restored: Post = data.restoredPost;
       setPosts(prev => prev.map(p => (p.id === postId ? restored : p)));
@@ -6140,9 +6149,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers,
         body: opts?.reconcile ? JSON.stringify({ applications: combinedApplications, users }) : undefined
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data?.success) {
-        const errMsg = data?.error || 'Failed to sync creator applications.';
+        const errMsg = data?.error || parsed.errorMessage || 'Failed to sync creator applications.';
         if (res.status === 401 || res.status === 403) {
           try {
             localStorage.removeItem('acovon_admin_token');
@@ -6161,7 +6171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const usersRes = await fetch('/api/admin/users', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const usersData = await usersRes.json().catch(() => ({}));
+        const usersData = (await safeJson(usersRes)) || {};
         if (usersRes.ok && usersData?.success) {
           if (Array.isArray(usersData.users)) {
             const usersMap: Record<string, User> = {};
@@ -6231,7 +6241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           `/api/users/session-state?userId=${encodeURIComponent(currentUser.id)}&email=${encodeURIComponent(currentUser.email || '')}`,
           { headers }
         );
-        const state = await res.json();
+        const state = await safeJson(res);
         if (cancelled) return;
         if (state?.deleted) {
           setDeletedUserIds(prev =>
@@ -6662,9 +6672,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             body: JSON.stringify({ notes })
           }
         );
-        const data = await res.json();
+        const parsed = await safeReadJsonResponse(res);
+        const data = parsed.data || {};
         if (!res.ok || !data?.success) {
-          return { success: false, error: data?.error || 'Application review failed on server.' };
+          return { success: false, error: data?.error || parsed.errorMessage || 'Application review failed on server.' };
         }
 
         // Best-effort mirror to Supabase RPC if user is authenticated via Supabase Admin
@@ -6886,7 +6897,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           applicationData: data
         })
       });
-      const result = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const result = parsed.data || {};
       if (!res.ok || !result?.success) {
         if (result?.existingApplication) {
           setVerifications(prev => [
@@ -6894,7 +6906,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev.filter(v => v.id !== result.existingApplication.id)
           ]);
         }
-        return { success: false, error: result?.error || 'Failed to submit creator application.' };
+        return {
+          success: false,
+          error: result?.error || parsed.errorMessage || 'Failed to submit creator application.'
+        };
       }
 
       const newVerif = result.application as CreatorVerification;
@@ -7156,7 +7171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         body: JSON.stringify(updates)
       })
-        .then(r => r.json())
+        .then(r => safeJson(r))
         .then(data => {
           if (!data?.success) return;
           if (data.user) {
@@ -7261,7 +7276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           statusReason: `Force-converted to Creator automatically by ${currentUser.name}`
         })
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await safeJson(res)) || {};
       if (!res.ok || !data?.success || !data.user) {
         return {
           success: false,
@@ -7375,7 +7390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           Authorization: `Bearer ${adminToken}`
         }
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await safeJson(res)) || {};
       if (!res.ok || !data?.success) {
         return {
           success: false,
@@ -7492,7 +7507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         body: JSON.stringify(input)
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await safeJson(res)) || {};
       if (!res.ok || !data?.success || !data.user) {
         return {
           success: false,
@@ -10778,7 +10793,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           simulateOutcome: outcome
         })
       })
-        .then(r => (r.ok ? r.json() : null))
+        .then(r => (r.ok ? safeJson(r) : null))
         .then(data => {
           if (data?.success) applyAuthoritativeVerificationPayload(data);
         })
@@ -10897,7 +10912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         simulateOutcome: outcome
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11004,7 +11019,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11082,7 +11097,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updates
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11158,7 +11173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11246,7 +11261,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11337,7 +11352,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11508,7 +11523,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -11587,7 +11602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminRole: activeAdminPermissionLevel
       })
     })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => (r.ok ? safeJson(r) : null))
       .then(data => {
         if (data?.success) applyAuthoritativeVerificationPayload(data);
       })
@@ -13982,7 +13997,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let active = true;
     fetch('/api/taxonomy/state')
-      .then(res => (res.ok ? res.json() : null))
+      .then(res => (res.ok ? safeJson(res) : null))
       .then(data => {
         if (!active || !data || !data.success) return;
         const serverDeletedIds: string[] = Array.isArray(data.deletedCategoryIds)
@@ -14168,9 +14183,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...input
         })
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data?.error || 'Failed to add category.' };
+        return { success: false, error: data?.error || parsed.errorMessage || 'Failed to add category.' };
       }
       if (Array.isArray(data.categories)) {
         const nextCats = dedupeCategoryRecords(data.categories);
@@ -14242,9 +14258,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updates
         })
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data?.error || 'Failed to update category.' };
+        return { success: false, error: data?.error || parsed.errorMessage || 'Failed to update category.' };
       }
       if (Array.isArray(data.categories)) {
         const nextCats = dedupeCategoryRecords(data.categories);
@@ -14383,9 +14400,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           actorRole: 'admin'
         })
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data?.error || 'Failed to delete category.' };
+        return { success: false, error: data?.error || parsed.errorMessage || 'Failed to delete category.' };
       }
       if (Array.isArray(data.deletedCategoryIds)) {
         setDeletedCategoryIds(data.deletedCategoryIds);
@@ -14449,9 +14467,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           is_active
         })
       });
-      const data = await res.json();
+      const parsed = await safeReadJsonResponse(res);
+      const data = parsed.data || {};
       if (!res.ok || !data.success) {
-        return { success: false, error: data?.error || 'Failed to update country status.' };
+        return { success: false, error: data?.error || parsed.errorMessage || 'Failed to update country status.' };
       }
       if (Array.isArray(data.countries)) {
         setCountries(data.countries);
