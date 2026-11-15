@@ -65,6 +65,7 @@ export const RoleTargetedAnnouncementBanners: React.FC<
   const {
     currentUser,
     activeRole,
+    isCurrentUserApprovedCreator,
     getVisibleAnnouncementsForCurrentUser,
     getUserAnnouncementStatus,
     markAnnouncementAsRead,
@@ -74,7 +75,7 @@ export const RoleTargetedAnnouncementBanners: React.FC<
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator';
 
   // Fetch strictly role-isolated banner and persistent notice announcements
   const bannerAnnouncements = useMemo(() => {
@@ -458,7 +459,7 @@ export const AnnouncementCenterModal: React.FC<
 
   if (!isOpen) return null;
 
-  const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator = currentUser.role === 'creator' || activeRole === 'creator' || currentUser.role === 'admin' || currentUser.role === 'moderator';
   const visibleAnnouncements = getVisibleAnnouncementsForCurrentUser();
 
   const filteredList = visibleAnnouncements.filter(ann => {

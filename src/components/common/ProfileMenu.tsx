@@ -57,6 +57,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
 }) => {
   const {
     currentUser,
+    users,
     activeRole,
     isCurrentUserApprovedCreator,
     userPendingVerification,
@@ -90,23 +91,45 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const isAuthorizedAdmin = currentUser.role === 'admin' || currentUser.adminPermissionLevel !== undefined;
+  const isAuthorizedAdmin =
+    currentUser.role === 'admin' ||
+    currentUser.role === 'moderator' ||
+    currentUser.adminPermissionLevel !== undefined;
 
   const roleOptions: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = useMemo(() => {
     const list: { label: string; role: UserRole; subtitle: string; specificId?: string }[] = [];
 
     if (isAuthorizedAdmin) {
-      list.push(
+      const defaults: { label: string; role: UserRole; subtitle: string; specificId: string }[] = [
         { label: 'Julian Sterling', role: 'admin', specificId: 'user_admin_1', subtitle: 'Super Admin · Full Platform Control' },
         { label: 'Evelyn Cross', role: 'admin', specificId: 'user_admin_2', subtitle: 'Admin · General Operations' },
         { label: 'Clara Vance', role: 'moderator', specificId: 'user_mod_1', subtitle: 'Moderator · Trust, Safety & Live' },
         { label: 'Henrik Lindqvist', role: 'admin', specificId: 'user_admin_finance', subtitle: 'Finance Admin · Payouts & Ledger' },
         { label: 'Sophia Lin', role: 'admin', specificId: 'user_admin_support', subtitle: 'Support Admin · Tickets & Disputes' }
-      );
+      ];
+      const seenIds = new Set<string>();
+      Object.values(users || {}).forEach(u => {
+        if (!u || !u.id) return;
+        if (u.role === 'admin' || u.role === 'moderator' || u.adminPermissionLevel) {
+          seenIds.add(u.id);
+          const levelLabel = String(u.adminPermissionLevel || u.role || 'admin').replace(/_/g, ' ');
+          list.push({
+            label: u.name || u.username || u.email,
+            role: u.role === 'moderator' ? 'moderator' : 'admin',
+            specificId: u.id,
+            subtitle: `${levelLabel} · ${u.email}`
+          });
+        }
+      });
+      defaults.forEach(d => {
+        if (!seenIds.has(d.specificId)) {
+          list.push(d);
+        }
+      });
     }
 
     return list;
-  }, [isAuthorizedAdmin]);
+  }, [isAuthorizedAdmin, users]);
 
   const handleSelectRole = (opt: typeof roleOptions[0]) => {
     switchUserRole(opt.role, opt.specificId);
@@ -492,7 +515,7 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
           </div>
 
           {/* Admin panel if applicable */}
-          {(activeRole === 'admin' || activeRole === 'moderator') && (
+          {(isAuthorizedAdmin || activeRole === 'admin' || activeRole === 'moderator') && (
             <>
               <div className="h-px bg-[#26262b] my-1.5" />
               <button

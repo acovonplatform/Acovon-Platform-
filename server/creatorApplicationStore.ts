@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import {
   AccountStatus,
+  AdminPermissionLevel,
   AppNotification,
   CreatorApplicationAuditRecord,
   CreatorApplicationData,
@@ -65,6 +66,55 @@ function normalizeUsername(username?: string, fallback?: string): string {
 const DEFAULT_AVATAR = '';
 const DEFAULT_ID_DOC = '';
 const DEFAULT_COVER = '';
+
+const DEFAULT_PERMISSIONS_BY_LEVEL: Record<AdminPermissionLevel, string[]> = {
+  super_admin: [
+    'all_privileges',
+    'manage_platform_branding',
+    'role_assignment',
+    'commission_control',
+    'payout_release',
+    'emergency_killswitch',
+    'user_management',
+    'creator_management',
+    'content_moderation'
+  ],
+  admin: [
+    'user_management',
+    'creator_management',
+    'creator_verification',
+    'content_management',
+    'live_management',
+    'promotions_management',
+    'role_assignment'
+  ],
+  moderator: [
+    'content_moderation',
+    'report_resolution',
+    'creator_verification',
+    'live_moderation'
+  ],
+  finance_admin: [
+    'financial_ledger',
+    'payout_approval',
+    'refund_issuance',
+    'dispute_resolution'
+  ],
+  support_admin: [
+    'support_tickets',
+    'account_recovery',
+    'dispute_mediation'
+  ]
+};
+
+export function getDefaultAdminPermissions(level: AdminPermissionLevel): string[] {
+  return [...(DEFAULT_PERMISSIONS_BY_LEVEL[level] || DEFAULT_PERMISSIONS_BY_LEVEL.admin)];
+}
+
+export function isAdminUserRecord(user?: Partial<User> | null): boolean {
+  if (!user) return false;
+  return user.role === 'admin' || user.role === 'moderator' || Boolean(user.adminPermissionLevel);
+}
 
 export class AuthoritativeCreatorApplicationStore {
   private readonly dataDir: string;
@@ -494,6 +544,8 @@ export class AuthoritativeCreatorApplicationStore {
     country?: string;
     is18PlusConfirmed?: boolean;
     remoteRole?: UserRole;
+    remoteAdminLevel?: AdminPermissionLevel;
+    remoteAdminPermissions?: string[];
   }): {
     user: User;
     creatorProfile?: CreatorProfile;
@@ -508,20 +560,46 @@ export class AuthoritativeCreatorApplicationStore {
       email: cleanEmail
     });
 
+    const isRemoteAdmin = input.remoteRole === 'admin' || input.remoteRole === 'moderator' || Boolean(input.remoteAdminLevel);
+
     if (existing) {
+      const existingIsAdmin = isAdminUserRecord(existing.user);
+      const promoteFromRemoteAdmin = isRemoteAdmin;
       const promoteFromRemoteCreator =
         input.remoteRole === 'creator' &&
-        existing.user.role !== 'admin' &&
-        existing.user.role !== 'moderator';
+        !existingIsAdmin &&
+        !promoteFromRemoteAdmin;
+
+      const resolvedAdminLevel: AdminPermissionLevel | undefined = promoteFromRemoteAdmin
+        ? (input.remoteAdminLevel || existing.user.adminPermissionLevel || (input.remoteRole === 'moderator' ? 'moderator' : 'admin'))
+        : existing.user.adminPermissionLevel;
+
+      const resolvedRole: UserRole = promoteFromRemoteAdmin
+        ? (resolvedAdminLevel === 'moderator' ? 'moderator' : input.remoteRole === 'moderator' ? 'moderator' : 'admin')
+        : existingIsAdmin
+        ? existing.user.role
+        : promoteFromRemoteCreator
+        ? 'creator'
+        : existing.user.role;
+
+      const resolvedAdminPermissions =
+        promoteFromRemoteAdmin && Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
+          ? [...input.remoteAdminPermissions]
+          : existing.user.adminPermissions || (resolvedAdminLevel ? getDefaultAdminPermissions(resolvedAdminLevel) : undefined);
+
+      const grantCreatorFields =
+        resolvedRole === 'admin' || resolvedRole === 'moderator' || promoteFromRemoteCreator;
 
       const updatedUser: User = {
         ...existing.user,
         name: existing.user.name || (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
         avatar: existing.user.avatar || input.avatar || DEFAULT_AVATAR,
         email: cleanEmail || existing.user.email,
-        ...(promoteFromRemoteCreator
+        role: resolvedRole,
+        ...(resolvedAdminLevel ? { adminPermissionLevel: resolvedAdminLevel } : {}),
+        ...(resolvedAdminPermissions ? { adminPermissions: resolvedAdminPermissions } : {}),
+        ...(grantCreatorFields
           ? {
-              role: 'creator' as UserRole,
               creatorApplicationStatus: 'approved' as const,
               creatorApprovalStatus: 'approved' as const,
               isVerified: true,
@@ -545,19 +623,39 @@ export class AuthoritativeCreatorApplicationStore {
       ? `${baseUsername}_${crypto.randomBytes(2).toString('hex')}`
       : baseUsername;
 
-    const initialRole: UserRole = input.remoteRole === 'creator' ? 'creator' : 'fan';
+    const initialAdminLevel: AdminPermissionLevel | undefined = isRemoteAdmin
+      ? (input.remoteAdminLevel || (input.remoteRole === 'moderator' ? 'moderator' : 'admin'))
+      : undefined;
+
+    const initialRole: UserRole = isRemoteAdmin
+      ? (initialAdminLevel === 'moderator' || input.remoteRole === 'moderator' ? 'moderator' : 'admin')
+      : input.remoteRole === 'creator'
+      ? 'creator'
+      : 'fan';
+
+    const autoCreator = initialRole === 'creator' || initialRole === 'admin' || initialRole === 'moderator';
+
     const newUser: User = {
       id: userId,
       name: (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
       username: finalUsername,
       email: cleanEmail,
       avatar: input.avatar || DEFAULT_AVATAR,
-      role: initialRole, // ONLY fan unless authoritative Supabase/admin store already holds creator
+      role: initialRole,
+      ...(initialAdminLevel ? { adminPermissionLevel: initialAdminLevel } : {}),
+      ...(initialAdminLevel
+        ? {
+            adminPermissions:
+              Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
+                ? [...input.remoteAdminPermissions]
+                : getDefaultAdminPermissions(initialAdminLevel)
+          }
+        : {}),
       accountStatus: 'active',
-      creatorApplicationStatus: initialRole === 'creator' ? 'approved' : 'not_applied',
-      creatorApprovalStatus: initialRole === 'creator' ? 'approved' : 'not_applied',
+      creatorApplicationStatus: autoCreator ? 'approved' : 'not_applied',
+      creatorApprovalStatus: autoCreator ? 'approved' : 'not_applied',
       walletBalance: 0,
-      isVerified: initialRole === 'creator',
+      isVerified: autoCreator,
       is18PlusConfirmed: input.is18PlusConfirmed !== false,
       dateJoined: input.dateJoined || new Date().toISOString().split('T')[0],
       lastLoginAt: nowStr,
@@ -603,9 +701,10 @@ export class AuthoritativeCreatorApplicationStore {
       user.accountStatus !== 'banned' &&
       user.accountStatus !== 'disabled';
 
+    const userIsAdmin = isAdminUserRecord(user);
+
     const shouldBeApprovedCreator =
-      user.role !== 'admin' &&
-      user.role !== 'moderator' &&
+      !userIsAdmin &&
       isAccountActive &&
       (latestAppRaw?.status === 'approved' ||
         (hasAnyApprovedApp && !latestIsBlocked) ||
@@ -615,7 +714,43 @@ export class AuthoritativeCreatorApplicationStore {
     let effectiveUser = deepClone(user);
     let dbDirty = false;
 
-    if (shouldBeApprovedCreator) {
+    if (userIsAdmin && isAccountActive) {
+      // Admins & Moderators are automatically approved Creators without needing creator approval
+      const ensuredLevel: AdminPermissionLevel =
+        effectiveUser.adminPermissionLevel ||
+        (effectiveUser.role === 'moderator' ? 'moderator' : 'admin');
+      const ensuredRole: UserRole =
+        effectiveUser.role === 'moderator' || ensuredLevel === 'moderator' ? 'moderator' : 'admin';
+      if (
+        effectiveUser.role !== ensuredRole ||
+        effectiveUser.adminPermissionLevel !== ensuredLevel ||
+        effectiveUser.creatorApprovalStatus !== 'approved' ||
+        effectiveUser.creatorApplicationStatus !== 'approved' ||
+        !effectiveUser.isVerified
+      ) {
+        effectiveUser = {
+          ...effectiveUser,
+          role: ensuredRole,
+          adminPermissionLevel: ensuredLevel,
+          adminPermissions:
+            effectiveUser.adminPermissions && effectiveUser.adminPermissions.length > 0
+              ? effectiveUser.adminPermissions
+              : getDefaultAdminPermissions(ensuredLevel),
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          isVerified: true,
+          creatorRejectionReason: undefined,
+          creatorApprovedAt: effectiveUser.creatorApprovedAt || formatShortTimestamp()
+        };
+        const entry = this.findUserEntry(db, { userId: effectiveUser.id, email: cleanEmail });
+        db.users[entry?.key || effectiveUser.id] = deepClone(effectiveUser);
+        dbDirty = true;
+      }
+      if (!existingCreator || existingCreator.id !== effectiveUser.id) {
+        existingCreator = this.ensureCreatorProfile(db, effectiveUser);
+        dbDirty = true;
+      }
+    } else if (shouldBeApprovedCreator) {
       const approvedApp = userApps.find(a => a.status === 'approved') || latestAppRaw;
       if (
         effectiveUser.role !== 'creator' ||
@@ -643,8 +778,7 @@ export class AuthoritativeCreatorApplicationStore {
         dbDirty = true;
       }
     } else if (
-      effectiveUser.role !== 'admin' &&
-      effectiveUser.role !== 'moderator' &&
+      !userIsAdmin &&
       latestAppRaw &&
       (latestAppRaw.status === 'pending' || latestAppRaw.status === 'info_requested') &&
       effectiveUser.creatorApprovalStatus !== 'pending'
@@ -664,7 +798,7 @@ export class AuthoritativeCreatorApplicationStore {
       this.writeDB(db);
     }
 
-    const creatorProfile = shouldBeApprovedCreator ? existingCreator : undefined;
+    const creatorProfile = (userIsAdmin && isAccountActive) || shouldBeApprovedCreator ? existingCreator : undefined;
     const latestApplication = latestAppRaw ? this.enrichApplication(db, latestAppRaw) : undefined;
     const notifications = db.notifications.filter(
       n => n.userId === effectiveUser.id && n.targetRole !== 'admin'
@@ -1900,19 +2034,45 @@ export class AuthoritativeCreatorApplicationStore {
 
     const nowStr = formatShortTimestamp();
     const prevUser = entry.user;
-    const nextRole = updates.role || prevUser.role;
+    const nextRole: UserRole =
+      updates.role ||
+      (updates.adminPermissionLevel === 'moderator'
+        ? 'moderator'
+        : updates.adminPermissionLevel
+        ? 'admin'
+        : prevUser.role);
+
+    const nextIsAdmin = nextRole === 'admin' || nextRole === 'moderator';
+    const nextAdminLevel: AdminPermissionLevel | undefined = nextIsAdmin
+      ? (updates.adminPermissionLevel ||
+          prevUser.adminPermissionLevel ||
+          (nextRole === 'moderator' ? 'moderator' : 'admin'))
+      : undefined;
+    const nextAdminPermissions: string[] | undefined = nextIsAdmin
+      ? (Array.isArray(updates.adminPermissions) && updates.adminPermissions.length > 0
+          ? [...updates.adminPermissions]
+          : updates.adminPermissionLevel && updates.adminPermissionLevel !== prevUser.adminPermissionLevel
+          ? getDefaultAdminPermissions(updates.adminPermissionLevel)
+          : prevUser.adminPermissions && prevUser.adminPermissions.length > 0
+          ? prevUser.adminPermissions
+          : getDefaultAdminPermissions(nextAdminLevel!))
+      : undefined;
+
+    const grantCreatorStatus = nextRole === 'creator' || nextIsAdmin;
 
     const updatedUser: User = {
       ...prevUser,
       ...updates,
       role: nextRole,
-      ...(updates.role === 'creator'
+      adminPermissionLevel: nextAdminLevel,
+      adminPermissions: nextAdminPermissions,
+      ...(grantCreatorStatus
         ? {
             creatorApplicationStatus: 'approved',
             creatorApprovalStatus: 'approved',
             isVerified: true,
-            creatorApprovedByAdminId: adminActor.id,
-            creatorApprovedByAdminName: adminActor.name,
+            creatorApprovedByAdminId: prevUser.creatorApprovedByAdminId || adminActor.id,
+            creatorApprovedByAdminName: prevUser.creatorApprovedByAdminName || adminActor.name,
             creatorApprovedAt: prevUser.creatorApprovedAt || nowStr,
             creatorRejectionReason: undefined
           }
@@ -1930,7 +2090,7 @@ export class AuthoritativeCreatorApplicationStore {
     let creatorProfile: CreatorProfile | undefined;
     const cleanEmail = normalizeEmail(updatedUser.email);
 
-    if (nextRole === 'creator') {
+    if (grantCreatorStatus) {
       const matchingApp = db.applications.find(
         a => a.userId === updatedUser.id || (cleanEmail && normalizeEmail(a.email) === cleanEmail)
       );
@@ -1967,6 +2127,153 @@ export class AuthoritativeCreatorApplicationStore {
       ok: true,
       user: deepClone(updatedUser),
       creatorProfile: creatorProfile ? deepClone(creatorProfile) : undefined
+    };
+  }
+
+  public addOrPromoteAdminOnServer(
+    adminActor: { id: string; name: string; role: string; adminPermissionLevel?: string },
+    input: {
+      email: string;
+      name?: string;
+      username?: string;
+      adminPermissionLevel: AdminPermissionLevel;
+      adminPermissions?: string[];
+      bio?: string;
+      country?: string;
+    }
+  ):
+    | { ok: true; user: User; creatorProfile: CreatorProfile; promotedExisting: boolean }
+    | ({ ok: false } & StoreHttpError) {
+    if (adminActor.role !== 'admin') {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'Forbidden: Only administrators can add or promote other administrators.'
+      };
+    }
+
+    const actorLevel = adminActor.adminPermissionLevel || 'admin';
+    if (actorLevel !== 'super_admin' && actorLevel !== 'admin') {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'Forbidden: Requires Super Admin or General Admin permission to assign admin roles.'
+      };
+    }
+
+    const cleanEmail = normalizeEmail(input.email);
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return { ok: false, statusCode: 400, error: 'A valid email address is required.' };
+    }
+
+    const allowedLevels: AdminPermissionLevel[] = [
+      'super_admin',
+      'admin',
+      'moderator',
+      'finance_admin',
+      'support_admin'
+    ];
+    const requestedLevel: AdminPermissionLevel = allowedLevels.includes(input.adminPermissionLevel)
+      ? input.adminPermissionLevel
+      : 'admin';
+
+    if (requestedLevel === 'super_admin' && actorLevel !== 'super_admin') {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'Forbidden: Only an existing Super Admin can assign the Super Admin role.'
+      };
+    }
+
+    const db = this.readDB();
+    const existingEntry = this.findUserEntry(db, { email: cleanEmail, username: input.username });
+    const nowStr = formatShortTimestamp();
+    const nextRole: UserRole = requestedLevel === 'moderator' ? 'moderator' : 'admin';
+    const nextPermissions =
+      Array.isArray(input.adminPermissions) && input.adminPermissions.length > 0
+        ? Array.from(new Set(input.adminPermissions.map(p => String(p).trim()).filter(Boolean)))
+        : getDefaultAdminPermissions(requestedLevel);
+
+    if (existingEntry) {
+      if (existingEntry.user.adminPermissionLevel === 'super_admin' && actorLevel !== 'super_admin') {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: 'Forbidden: Only a Super Admin can modify an existing Super Admin account.'
+        };
+      }
+      const updatedUser: User = {
+        ...existingEntry.user,
+        name: (input.name || '').trim() || existingEntry.user.name,
+        email: cleanEmail,
+        role: nextRole,
+        adminPermissionLevel: requestedLevel,
+        adminPermissions: nextPermissions,
+        bio: (input.bio || '').trim() || existingEntry.user.bio,
+        accountStatus: 'active',
+        isVerified: true,
+        is18PlusConfirmed: true,
+        creatorApplicationStatus: 'approved',
+        creatorApprovalStatus: 'approved',
+        creatorApprovedByAdminId: existingEntry.user.creatorApprovedByAdminId || adminActor.id,
+        creatorApprovedByAdminName: existingEntry.user.creatorApprovedByAdminName || adminActor.name,
+        creatorApprovedAt: existingEntry.user.creatorApprovedAt || nowStr,
+        creatorRejectionReason: undefined,
+        updatedAt: nowStr
+      };
+      db.users[existingEntry.key] = updatedUser;
+      const creatorProfile = this.ensureCreatorProfile(db, updatedUser, undefined, adminActor);
+      this.writeDB(db);
+      return {
+        ok: true,
+        user: deepClone(updatedUser),
+        creatorProfile: deepClone(creatorProfile),
+        promotedExisting: true
+      };
+    }
+
+    const newAdminId = `admin_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const resolvedName = (input.name || '').trim() || cleanEmail.split('@')[0] || 'Platform Admin';
+    const baseUsername = normalizeUsername(input.username || resolvedName, cleanEmail.split('@')[0]);
+    const usernameConflict = Object.values(db.users).some(
+      u => normalizeUsername(u.username) === baseUsername
+    );
+    const resolvedUsername = usernameConflict
+      ? `${baseUsername}_${crypto.randomBytes(2).toString('hex')}`
+      : baseUsername;
+
+    const newUser: User = {
+      id: newAdminId,
+      name: resolvedName,
+      username: resolvedUsername,
+      email: cleanEmail,
+      avatar: DEFAULT_AVATAR,
+      bio: (input.bio || '').trim() || `ACOVON ${requestedLevel.replace(/_/g, ' ')} operator & verified creator.`,
+      role: nextRole,
+      adminPermissionLevel: requestedLevel,
+      adminPermissions: nextPermissions,
+      accountStatus: 'active',
+      creatorApplicationStatus: 'approved',
+      creatorApprovalStatus: 'approved',
+      creatorApprovedByAdminId: adminActor.id,
+      creatorApprovedByAdminName: adminActor.name,
+      creatorApprovedAt: nowStr,
+      walletBalance: 0,
+      isVerified: true,
+      is18PlusConfirmed: true,
+      dateJoined: new Date().toISOString().split('T')[0],
+      updatedAt: nowStr,
+      country: (input.country || '').trim() || 'United States'
+    };
+
+    db.users[newAdminId] = newUser;
+    const creatorProfile = this.ensureCreatorProfile(db, newUser, undefined, adminActor);
+    this.writeDB(db);
+    return {
+      ok: true,
+      user: deepClone(newUser),
+      creatorProfile: deepClone(creatorProfile),
+      promotedExisting: false
     };
   }
 }

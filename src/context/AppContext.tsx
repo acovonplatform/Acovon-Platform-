@@ -504,6 +504,20 @@ interface AppContextType {
       adminPermissions?: string[];
     }
   ) => { success: boolean; error?: string };
+  adminAddOrPromoteAdmin: (input: {
+    email: string;
+    name?: string;
+    username?: string;
+    password?: string;
+    adminPermissionLevel: AdminPermissionLevel;
+    adminPermissions?: string[];
+  }) => Promise<{
+    success: boolean;
+    user?: User;
+    creatorProfile?: CreatorProfile;
+    promotedExisting?: boolean;
+    error?: string;
+  }>;
   adminUpdateCreatorControl: (
     creatorId: string,
     updates: Partial<CreatorProfile>
@@ -1377,6 +1391,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (!uid) return;
             const rowRole = ((row.role as UserRole) || 'fan');
             const isCreatorRow = rowRole === 'creator';
+            const isAdminRow = rowRole === 'admin' || rowRole === 'moderator';
             const existingEntry = Object.entries(next).find(
               ([k, u]) => k === uid || u.id === uid || (email && u.email.toLowerCase() === email)
             );
@@ -1397,11 +1412,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     ? String(row.profile_picture_url)
                     : '',
                 role: rowRole,
+                ...(isAdminRow
+                  ? {
+                      adminPermissionLevel: (rowRole === 'moderator' ? 'moderator' : 'admin') as AdminPermissionLevel
+                    }
+                  : {}),
                 accountStatus: (row.account_status as AccountStatus) || 'active',
-                creatorApplicationStatus: isCreatorRow ? 'approved' : 'not_applied',
-                creatorApprovalStatus: isCreatorRow ? 'approved' : 'not_applied',
+                creatorApplicationStatus: isCreatorRow || isAdminRow ? 'approved' : 'not_applied',
+                creatorApprovalStatus: isCreatorRow || isAdminRow ? 'approved' : 'not_applied',
                 walletBalance: 0,
-                isVerified: isCreatorRow ? true : Boolean(row.email_verified),
+                isVerified: isCreatorRow || isAdminRow ? true : Boolean(row.email_verified),
                 is18PlusConfirmed: true,
                 dateJoined: joinedDate,
                 lastLoginAt: row.last_login_at
@@ -1410,6 +1430,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 country: 'United States'
               };
               next[uid] = mappedUser;
+            } else if (isAdminRow) {
+              const [existingKey, existingUser] = existingEntry;
+              if (
+                (existingUser.role !== 'admin' && existingUser.role !== 'moderator') ||
+                existingUser.creatorApprovalStatus !== 'approved'
+              ) {
+                changed = true;
+                next[existingKey] = {
+                  ...existingUser,
+                  role: rowRole,
+                  adminPermissionLevel:
+                    existingUser.adminPermissionLevel ||
+                    (rowRole === 'moderator' ? 'moderator' : 'admin'),
+                  creatorApplicationStatus: 'approved',
+                  creatorApprovalStatus: 'approved',
+                  isVerified: true
+                };
+              }
             } else if (isCreatorRow) {
               const [existingKey, existingUser] = existingEntry;
               if (
@@ -1593,9 +1631,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return Array.from(map.values());
             });
           }
+          if (data.adminToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', String(data.adminToken));
+            } catch {
+              // ignore
+            }
+          }
+          const isAuthUserAdmin =
+            authUser.role === 'admin' ||
+            authUser.role === 'moderator' ||
+            Boolean(authUser.adminPermissionLevel);
           if (!preserveAdminSession) {
             setIsAuthenticated(true);
-            if (authUser.role === 'creator') {
+            if (isAuthUserAdmin) {
+              const effectiveAdminRole: UserRole =
+                authUser.role === 'moderator' ? 'moderator' : 'admin';
+              const resolvedAdminUser: User = {
+                ...authUser,
+                role: effectiveAdminRole,
+                creatorApplicationStatus: 'approved',
+                creatorApprovalStatus: 'approved',
+                isVerified: true
+              };
+              setCurrentUser(resolvedAdminUser);
+              setActiveRole(effectiveAdminRole);
+              if (data.adminToken) {
+                refreshCreatorApplications({ reconcile: true, token: String(data.adminToken) }).catch(() => {});
+              }
+            } else if (authUser.role === 'creator') {
               setCurrentUser(data.creatorProfile || authUser);
               setActiveRole('creator');
             } else {
@@ -3127,12 +3191,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      const adminRole: UserRole = data.user?.role === 'moderator' ? 'moderator' : 'admin';
       const adminUser: User = {
         ...data.user,
+        role: adminRole,
+        creatorApplicationStatus: 'approved',
+        creatorApprovalStatus: 'approved',
+        isVerified: true,
         walletBalance: typeof data.user?.walletBalance === 'number' ? data.user.walletBalance : 0
       };
+      setUsers(prev => ({
+        ...prev,
+        [adminUser.id]: { ...(prev[adminUser.id] || {}), ...adminUser }
+      }));
+      if (data.creatorProfile) {
+        setCreators(prev => {
+          const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = data.creatorProfile;
+            return next;
+          }
+          return [data.creatorProfile, ...prev];
+        });
+      }
       setCurrentUser(adminUser);
-      setActiveRole('admin');
+      setActiveRole(adminRole);
       setIsAuthenticated(true);
       try {
         localStorage.setItem('acovon_current_user', JSON.stringify(adminUser));
@@ -3618,6 +3702,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
+    // Active Administrators and Moderators are automatically Creators and do not require Creator Application approval
+    const hasAdminPrivileges =
+      currentUser.role === 'admin' ||
+      currentUser.role === 'moderator' ||
+      Boolean(currentUser.adminPermissionLevel) ||
+      userRecord?.role === 'admin' ||
+      userRecord?.role === 'moderator' ||
+      Boolean(userRecord?.adminPermissionLevel);
+    if (hasAdminPrivileges) {
+      return true;
+    }
+
     // Latest application status takes precedence if pending/info_requested/rejected
     if (
       latestVerif?.status === 'pending' ||
@@ -3667,6 +3763,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     const latestVerif = getLatestUserVerification(currentUser.id, cleanEmail);
 
+    const isUserRecordAdmin = Boolean(
+      userRecord &&
+        (userRecord.role === 'admin' ||
+          userRecord.role === 'moderator' ||
+          userRecord.adminPermissionLevel)
+    );
+    if (isUserRecordAdmin && userRecord) {
+      const expectedRole: UserRole = userRecord.role === 'moderator' ? 'moderator' : 'admin';
+      if (
+        activeRole !== expectedRole ||
+        currentUser.role !== expectedRole ||
+        currentUser.creatorApprovalStatus !== 'approved' ||
+        currentUser.adminPermissionLevel !== userRecord.adminPermissionLevel
+      ) {
+        setActiveRole(expectedRole);
+        setCurrentUser({
+          ...userRecord,
+          role: expectedRole,
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          isVerified: true
+        });
+      }
+      return;
+    }
+
     if (latestVerif?.status === 'approved') {
       if (activeRole !== 'creator' || currentUser.role !== 'creator') {
         setActiveRole('creator');
@@ -3709,7 +3831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
-  }, [users, creators, verifications, currentUser?.id, currentUser?.role, currentUser?.email, activeRole]);
+  }, [users, creators, verifications, currentUser?.id, currentUser?.role, currentUser?.email, currentUser?.adminPermissionLevel, currentUser?.creatorApprovalStatus, activeRole]);
 
   // Role Switcher helper (enforces authoritative account role)
   const switchUserRole = (role: UserRole, specificCreatorId?: string) => {
@@ -4012,9 +4134,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev.filter(v => v.id !== state.latestApplication.id)
           ]);
         }
-        if (input.autoLogin !== false && srvUser.role === 'creator') {
-          setCurrentUser(state.creatorProfile || srvUser);
-          setActiveRole('creator');
+        if (state.adminToken) {
+          try {
+            localStorage.setItem('acovon_admin_token', String(state.adminToken));
+          } catch {
+            // ignore
+          }
+        }
+        if (input.autoLogin !== false) {
+          if (srvUser.role === 'admin' || srvUser.role === 'moderator' || srvUser.adminPermissionLevel) {
+            const adminRole: UserRole = srvUser.role === 'moderator' ? 'moderator' : 'admin';
+            setCurrentUser({
+              ...srvUser,
+              role: adminRole,
+              creatorApplicationStatus: 'approved',
+              creatorApprovalStatus: 'approved',
+              isVerified: true
+            });
+            setActiveRole(adminRole);
+            if (state.adminToken) {
+              refreshCreatorApplications({ reconcile: true, token: String(state.adminToken) }).catch(() => {});
+            }
+          } else if (srvUser.role === 'creator') {
+            setCurrentUser(state.creatorProfile || srvUser);
+            setActiveRole('creator');
+          }
         }
       })
       .catch(() => {});
@@ -4134,12 +4278,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let detectedRole: UserRole = 'fan';
     let sessionAccount: User | CreatorProfile;
 
-    if (matchedUser?.role === 'admin') {
-      detectedRole = 'admin';
-      sessionAccount = { ...matchedUser, lastLoginAt: nowTimestamp };
+    if (matchedUser?.role === 'admin' || matchedUser?.adminPermissionLevel) {
+      detectedRole = matchedUser.role === 'moderator' ? 'moderator' : 'admin';
+      sessionAccount = {
+        ...matchedUser,
+        role: detectedRole,
+        creatorApplicationStatus: 'approved',
+        creatorApprovalStatus: 'approved',
+        isVerified: true,
+        lastLoginAt: nowTimestamp
+      };
     } else if (matchedUser?.role === 'moderator') {
       detectedRole = 'moderator';
-      sessionAccount = { ...matchedUser, lastLoginAt: nowTimestamp };
+      sessionAccount = {
+        ...matchedUser,
+        role: 'moderator',
+        creatorApplicationStatus: 'approved',
+        creatorApprovalStatus: 'approved',
+        isVerified: true,
+        lastLoginAt: nowTimestamp
+      };
     } else {
       const latestUserVerif = getLatestUserVerification(
         matchedUser?.id || matchedCreator?.id,
@@ -4213,6 +4371,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [userKey]: {
           ...userObj,
           role: detectedRole,
+          ...(detectedRole === 'admin' || detectedRole === 'moderator'
+            ? {
+                creatorApplicationStatus: 'approved' as const,
+                creatorApprovalStatus: 'approved' as const,
+                isVerified: true
+              }
+            : {}),
           lastLoginAt: nowTimestamp,
           updatedAt: nowTimestamp
         }
@@ -4232,6 +4397,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then(async r => {
           const d = await r.json().catch(() => ({}));
           if (r.ok && d?.success && d.adminToken) {
+            if (d.creatorProfile) {
+              setCreators(prev => {
+                const idx = prev.findIndex(c => c.id === d.creatorProfile.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = d.creatorProfile;
+                  return next;
+                }
+                return [d.creatorProfile, ...prev];
+              });
+            }
+            if (d.user) {
+              setUsers(prev => ({
+                ...prev,
+                [d.user.id]: { ...(prev[d.user.id] || {}), ...d.user }
+              }));
+              setCurrentUser(d.user);
+              setActiveRole(d.user.role === 'moderator' ? 'moderator' : 'admin');
+            }
             try {
               localStorage.setItem('acovon_admin_token', String(d.adminToken));
             } catch {
@@ -4239,10 +4423,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             refreshCreatorApplications({ reconcile: true, token: String(d.adminToken) }).catch(() => {});
           } else {
-            setCreatorApplicationSyncStatus(prev => ({
-              ...prev,
-              error: d?.error || 'Could not obtain administrator API session token. Please sign in at /admin/login.'
-            }));
+            // Fallback to /api/users/sync with Supabase access token if admin signed in via Supabase Auth
+            const { data: sData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+            const token = sData?.session?.access_token || '';
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['x-supabase-access-token'] = token;
+            const syncRes = await fetch('/api/users/sync', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                id: supabaseUserId || sessionAccount.id,
+                name: sessionAccount.name,
+                username: sessionAccount.username,
+                email: sessionAccount.email,
+                avatar: sessionAccount.avatar,
+                dateJoined: sessionAccount.dateJoined
+              })
+            });
+            const syncData = await syncRes.json().catch(() => ({}));
+            if (syncData?.success && syncData.creatorProfile) {
+              setCreators(prev => {
+                const idx = prev.findIndex(c => c.id === syncData.creatorProfile.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = syncData.creatorProfile;
+                  return next;
+                }
+                return [syncData.creatorProfile, ...prev];
+              });
+            }
+            if (syncData?.success && syncData.adminToken) {
+              try {
+                localStorage.setItem('acovon_admin_token', String(syncData.adminToken));
+              } catch {
+                // ignore
+              }
+              refreshCreatorApplications({ reconcile: true, token: String(syncData.adminToken) }).catch(() => {});
+            } else {
+              setCreatorApplicationSyncStatus(prev => ({
+                ...prev,
+                error: d?.error || 'Could not obtain administrator API session token. Please sign in at /admin/login.'
+              }));
+            }
           }
         })
         .catch(() => {
@@ -4297,7 +4519,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return [state.latestApplication, ...filtered];
             });
           }
-          if (serverUser.role === 'creator') {
+          if (state.adminToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', String(state.adminToken));
+            } catch {
+              // ignore
+            }
+          }
+          if (serverUser.role === 'admin' || serverUser.role === 'moderator' || serverUser.adminPermissionLevel) {
+            const adminRole: UserRole = serverUser.role === 'moderator' ? 'moderator' : 'admin';
+            setCurrentUser({
+              ...serverUser,
+              role: adminRole,
+              creatorApplicationStatus: 'approved',
+              creatorApprovalStatus: 'approved',
+              isVerified: true
+            });
+            setActiveRole(adminRole);
+            if (state.adminToken) {
+              refreshCreatorApplications({ reconcile: true, token: String(state.adminToken) }).catch(() => {});
+            }
+          } else if (serverUser.role === 'creator') {
             setCurrentUser(state.creatorProfile || serverUser);
             setActiveRole('creator');
           } else {
@@ -5982,6 +6224,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       mergeServerApplicationsSnapshot(data);
+
+      // Also sync full admin user + creator directory (includes admins without creator applications)
+      try {
+        const usersRes = await fetch('/api/admin/users', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const usersData = await usersRes.json().catch(() => ({}));
+        if (usersRes.ok && usersData?.success) {
+          if (Array.isArray(usersData.users)) {
+            const usersMap: Record<string, User> = {};
+            usersData.users.forEach((u: User) => {
+              if (u?.id) usersMap[u.id] = u;
+            });
+            mergeServerApplicationsSnapshot({
+              users: usersMap,
+              creators: Array.isArray(usersData.creators) ? usersData.creators : undefined
+            });
+          }
+        }
+      } catch {
+        // non-fatal
+      }
+
       const srvSupa = data.supabaseStatus || {};
       const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
       setCreatorApplicationSyncStatus({
@@ -6009,8 +6274,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const adminToken = getStoredAdminToken();
     const currentEmail = String(currentUser.email || '').trim().toLowerCase();
 
-    const hydrateNonAdminSessionState = async () => {
-      if (cancelled || isAdminSession) return;
+    const hydrateAuthoritativeSessionState = async () => {
+      if (cancelled) return;
       try {
         let supaAccessToken = '';
         try {
@@ -6064,7 +6329,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        if (serverUser.role === 'creator') {
+        if (state.adminToken) {
+          try {
+            localStorage.setItem('acovon_admin_token', String(state.adminToken));
+          } catch {
+            // ignore
+          }
+          refreshCreatorApplications({ reconcile: true, token: String(state.adminToken) }).catch(() => {});
+        }
+
+        if (serverUser.role === 'admin' || serverUser.role === 'moderator' || serverUser.adminPermissionLevel) {
+          const adminRole: UserRole = serverUser.role === 'moderator' ? 'moderator' : 'admin';
+          setCurrentUser({
+            ...serverUser,
+            role: adminRole,
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true
+          });
+          setActiveRole(adminRole);
+        } else if (serverUser.role === 'creator') {
           const targetAccount = state.creatorProfile || serverUser;
           setCurrentUser(prev => {
             if (prev.role !== 'creator' || (state.creatorProfile && !(prev as any).tiers)) {
@@ -6100,8 +6384,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 2) Hydrate authoritative user role & approval state from backend for both fans and creators
-      hydrateNonAdminSessionState();
+      // 2) Hydrate authoritative user role & approval state from backend
+      hydrateAuthoritativeSessionState();
+    } else if (!adminToken) {
+      // Ensure admin logged in via regular login/Supabase also gets an adminToken + CreatorProfile
+      hydrateAuthoritativeSessionState();
+    } else {
+      const hasAdminCreatorProfile = creators.some(c => c.id === currentUser.id);
+      if (!hasAdminCreatorProfile) {
+        hydrateAuthoritativeSessionState();
+      }
     }
 
     // 3) Admin centralized sync + reconciliation
@@ -6177,7 +6469,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 currentUser.id === srvUser.id ||
                 (Boolean(currentEmail) && Boolean(srvEmail) && currentEmail === srvEmail);
               if (isCurrent) {
-                if (srvUser.role === 'creator') {
+                if (srvUser.role === 'admin' || srvUser.role === 'moderator' || srvUser.adminPermissionLevel) {
+                  const adminRole: UserRole = srvUser.role === 'moderator' ? 'moderator' : 'admin';
+                  setCurrentUser({
+                    ...srvUser,
+                    role: adminRole,
+                    creatorApplicationStatus: 'approved',
+                    creatorApprovalStatus: 'approved',
+                    isVerified: true
+                  });
+                  setActiveRole(adminRole);
+                } else if (srvUser.role === 'creator') {
                   setCurrentUser(payload.creatorProfile || srvUser);
                   setActiveRole('creator');
                 } else {
@@ -6212,8 +6514,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cancelled) return;
       if (isAdminSession && getStoredAdminToken()) {
         refreshCreatorApplications().catch(() => {});
-      } else if (!isAdminSession) {
-        hydrateNonAdminSessionState();
+      } else {
+        hydrateAuthoritativeSessionState();
       }
     });
 
@@ -6221,8 +6523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cancelled) return;
       if (isAdminSession && getStoredAdminToken()) {
         refreshCreatorApplications().catch(() => {});
-      } else if (!isAdminSession) {
-        hydrateNonAdminSessionState();
+      } else {
+        hydrateAuthoritativeSessionState();
       }
     };
 
@@ -6247,7 +6549,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }, 25000)
       : setInterval(() => {
           if (!cancelled) {
-            hydrateNonAdminSessionState();
+            hydrateAuthoritativeSessionState();
           }
         }, 20000);
 
@@ -6621,9 +6923,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminPermissions?: string[];
     }
   ): { success: boolean; error?: string } => {
-    if (updates.adminPermissionLevel !== undefined || updates.adminPermissions !== undefined || updates.role === 'admin') {
+    if (updates.adminPermissionLevel === 'super_admin') {
       if (!hasAdminPermission(['super_admin'])) {
-        return { success: false, error: 'Unauthorized: Only Super Admin can assign or modify administrator permissions.' };
+        return { success: false, error: 'Unauthorized: Only Super Admin can assign Super Admin privileges.' };
+      }
+    } else if (
+      updates.adminPermissionLevel !== undefined ||
+      updates.adminPermissions !== undefined ||
+      updates.role === 'admin'
+    ) {
+      if (!hasAdminPermission(['super_admin', 'admin'])) {
+        return { success: false, error: 'Unauthorized: Requires Super Admin or General Admin permissions.' };
       }
     } else if (!hasAdminPermission(['super_admin', 'admin', 'moderator'])) {
       return { success: false, error: 'Unauthorized: Insufficient privileges to modify user accounts.' };
@@ -6631,9 +6941,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let targetName = userId;
     const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const grantsCreatorPrivileges =
+      updates.role === 'creator' ||
+      updates.role === 'admin' ||
+      updates.role === 'moderator' ||
+      updates.adminPermissionLevel !== undefined;
+
     const enrichedUpdates: Record<string, any> = {
       ...updates,
-      ...(updates.role === 'creator'
+      ...(grantsCreatorPrivileges
         ? {
             creatorApplicationStatus: 'approved',
             creatorApprovalStatus: 'approved',
@@ -6645,6 +6961,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         : updates.role === 'fan'
         ? {
+            adminPermissionLevel: undefined,
+            adminPermissions: undefined,
             creatorApplicationStatus: 'not_applied',
             creatorApprovalStatus: 'not_applied'
           }
@@ -6670,12 +6988,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return prev.map(c => {
           if (c.id === userId) {
             targetName = `${c.name} (@${c.username})`;
-            return { ...c, ...enrichedUpdates };
+            return { ...c, ...enrichedUpdates, role: 'creator' };
           }
           return c;
         });
       }
-      if (updates.role === 'creator') {
+      if (grantsCreatorPrivileges) {
         const u = matchedTargetUser || findUserEntryByKeyOrId(userId)?.user;
         if (u) {
           const newProfile: CreatorProfile = {
@@ -6787,6 +7105,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return { success: true };
+  };
+
+  const adminAddOrPromoteAdmin = async (input: {
+    email: string;
+    name?: string;
+    username?: string;
+    password?: string;
+    adminPermissionLevel: AdminPermissionLevel;
+    adminPermissions?: string[];
+  }): Promise<{
+    success: boolean;
+    user?: User;
+    creatorProfile?: CreatorProfile;
+    promotedExisting?: boolean;
+    error?: string;
+  }> => {
+    if (input.adminPermissionLevel === 'super_admin' && !hasAdminPermission(['super_admin'])) {
+      return {
+        success: false,
+        error: 'Unauthorized: Only Super Admin can create or promote a Super Admin account.'
+      };
+    }
+    if (!hasAdminPermission(['super_admin', 'admin'])) {
+      return {
+        success: false,
+        error: 'Unauthorized: Requires Super Admin or General Admin permissions.'
+      };
+    }
+
+    const adminToken = getStoredAdminToken();
+    if (!adminToken) {
+      return {
+        success: false,
+        error: 'Administrator session token unavailable. Please sign in again via /admin/login.'
+      };
+    }
+
+    try {
+      const res = await fetch('/api/admin/team', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify(input)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data.user) {
+        return {
+          success: false,
+          error: data?.error || 'Could not add or promote administrator account.'
+        };
+      }
+
+      const srvUser = data.user as User;
+      setUsers(prev => ({
+        ...prev,
+        [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+      }));
+
+      if (data.creatorProfile) {
+        setCreators(prev => {
+          const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = data.creatorProfile;
+            return next;
+          }
+          return [data.creatorProfile, ...prev];
+        });
+      }
+
+      logAdminAction({
+        category: 'permission_change',
+        action: data.promotedExisting
+          ? 'Promoted Existing Account to Administrator'
+          : 'Added New Administrator Account',
+        targetType: 'User',
+        targetId: srvUser.id,
+        targetLabel: `${srvUser.name} (@${srvUser.username})`,
+        details: `Assigned role ${srvUser.adminPermissionLevel || srvUser.role} with scopes: ${(srvUser.adminPermissions || []).join(', ')}`,
+        severity: 'warning'
+      });
+
+      return {
+        success: true,
+        user: srvUser,
+        creatorProfile: data.creatorProfile,
+        promotedExisting: Boolean(data.promotedExisting)
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error adding administrator.';
+      return { success: false, error: msg };
+    }
   };
 
   const adminUpdateCreatorControl = (
@@ -7794,7 +8206,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const publishStatus = (
     statusData: Omit<CreatorStatus, 'id' | 'createdAt' | 'expiresAt' | 'viewsCount' | 'uniqueViews' | 'reactions' | 'replies'>
   ): { success: boolean; error?: string; status?: CreatorStatus } => {
-    const isCreatorRole = isAuthenticated && (currentUser.role === 'creator' || activeRole === 'creator');
+    const isCreatorRole =
+      isAuthenticated &&
+      (isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator');
     if (!isCreatorRole) {
       return { success: false, error: 'Only approved creator accounts can publish stories.' };
     }
@@ -12195,7 +12609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Helper: Determine current user's effective Fan vs Creator role for strict audience isolation
   const getCurrentEffectiveAudienceRole = (): 'fan' | 'creator' => {
-    if (currentUser.role === 'creator' || activeRole === 'creator') {
+    if (isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator') {
       return 'creator';
     }
     return 'fan';
@@ -13880,6 +14294,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminLogout,
         logAdminAction,
         adminUpdateUserAccount,
+        adminAddOrPromoteAdmin,
         adminUpdateCreatorControl,
         adminModeratePost,
         adminEmergencyEndLivestream,

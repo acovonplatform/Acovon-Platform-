@@ -101,7 +101,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     startVideoOptimizationJob,
     retryVideoProcessingJob
   } = useApp();
-  const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator =
+    isCurrentUserApprovedCreator ||
+    currentUser.role === 'creator' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'moderator' ||
+    activeRole === 'creator';
   if (!isCreator) return null;
 
   const currentCreatorProfile = creators.find(

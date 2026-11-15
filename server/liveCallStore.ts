@@ -430,8 +430,11 @@ export class AuthoritativeLiveCallStore {
     recordingSettings?: RecordingSettings;
   }): Promise<{ ok: true; stream: Livestream } | { ok: false; statusCode: number; error: string }> {
     const { user, creator } = this.creatorAppStore.getUserOrCreator(input.creatorId);
+    const isAdminAccount =
+      user?.role === 'admin' || user?.role === 'moderator' || Boolean(user?.adminPermissionLevel);
     const isApprovedCreator =
       Boolean(creator) ||
+      isAdminAccount ||
       (user?.role === 'creator' && user.creatorApprovalStatus === 'approved');
 
     if (!isApprovedCreator) {

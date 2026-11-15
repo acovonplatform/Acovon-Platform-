@@ -560,7 +560,7 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
               <span>Share</span>
             </button>
 
-            {isAuthenticated && isAuthor && currentUser.role === 'creator' && (
+            {isAuthenticated && isAuthor && (currentUser.role === 'creator' || currentUser.role === 'admin' || currentUser.role === 'moderator') && (
               <>
                 <button
                   type="button"

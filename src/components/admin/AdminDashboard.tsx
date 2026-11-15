@@ -116,6 +116,71 @@ const ADMIN_ROLE_LABELS: Record<AdminPermissionLevel, { label: string; badgeClas
   }
 };
 
+const ADMIN_ROLE_DEFAULT_PERMS: Record<AdminPermissionLevel, string[]> = {
+  super_admin: [
+    'all_privileges',
+    'manage_platform_branding',
+    'role_assignment',
+    'commission_control',
+    'payout_release',
+    'emergency_killswitch',
+    'user_management',
+    'creator_management',
+    'content_moderation'
+  ],
+  admin: [
+    'user_management',
+    'creator_management',
+    'creator_verification',
+    'content_management',
+    'live_management',
+    'promotions_management',
+    'role_assignment'
+  ],
+  moderator: [
+    'content_moderation',
+    'report_resolution',
+    'creator_verification',
+    'live_moderation'
+  ],
+  finance_admin: [
+    'financial_ledger',
+    'payout_approval',
+    'refund_issuance',
+    'dispute_resolution'
+  ],
+  support_admin: [
+    'support_tickets',
+    'account_recovery',
+    'dispute_mediation'
+  ]
+};
+
+const ALL_ADMIN_PERMISSION_SCOPES: string[] = [
+  'user_management',
+  'creator_management',
+  'creator_verification',
+  'content_management',
+  'content_moderation',
+  'live_management',
+  'live_moderation',
+  'report_resolution',
+  'financial_ledger',
+  'payout_approval',
+  'payout_release',
+  'refund_issuance',
+  'dispute_resolution',
+  'commission_control',
+  'support_tickets',
+  'account_recovery',
+  'dispute_mediation',
+  'promotions_management',
+  'manage_platform_branding',
+  'role_assignment',
+  'emergency_killswitch',
+  'all_privileges'
+];
+
 export interface AdminDashboardProps {
   onExit?: () => void;
   initialSection?: AdminSectionId;
@@ -194,6 +259,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
     switchAdminOperator,
     logAdminAction,
     adminUpdateUserAccount,
+    adminAddOrPromoteAdmin,
     adminUpdateCreatorControl,
     adminModeratePost,
     adminEmergencyEndLivestream,
@@ -339,6 +405,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
   const [adsEnabled, setAdsEnabled] = useState(adSettings.adsEnabled);
   const [pubId, setPubId] = useState(adSettings.adSensePublisherId);
   const [adFrequency, setAdFrequency] = useState(adSettings.frequencyFeedEveryNPosts);
+
+  // Section 13: Add or Promote Administrator Form State
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
+  const [newAdminLevel, setNewAdminLevel] = useState<AdminPermissionLevel>('admin');
+  const [newAdminPerms, setNewAdminPerms] = useState<string[]>(ADMIN_ROLE_DEFAULT_PERMS.admin);
+  const [isAddingAdmin, setIsAddingAdmin] = useState(false);
 
   // Section 14: Audit Logs State
   const [auditSearch, setAuditSearch] = useState('');
@@ -1538,6 +1614,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                       >
                         Creator Applicants ({safeVerifications.length})
                       </button>
+                      {hasAdminPermission(['super_admin', 'admin']) && (
+                        <button
+                          type="button"
+                          onClick={() => navigateToSection('admin_users')}
+                          className="px-3 py-1.5 rounded-xl bg-[#d4af37] hover:bg-[#c59b27] text-black font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add / Promote Admin</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1850,7 +1936,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                             value={inspectedUser.role}
                             onChange={e => {
                               const nextRole = e.target.value as UserRole;
-                              const res = adminUpdateUserAccount(inspectedUser.id, { role: nextRole });
+                              const nextLevel: AdminPermissionLevel | undefined =
+                                nextRole === 'admin'
+                                  ? inspectedUser.adminPermissionLevel && inspectedUser.adminPermissionLevel !== 'moderator'
+                                    ? inspectedUser.adminPermissionLevel
+                                    : 'admin'
+                                  : nextRole === 'moderator'
+                                  ? 'moderator'
+                                  : undefined;
+                              const res = adminUpdateUserAccount(inspectedUser.id, {
+                                role: nextRole,
+                                ...(nextLevel ? { adminPermissionLevel: nextLevel } : {})
+                              });
                               if (res.success) notifyFeedback('success', `Updated role for ${inspectedUser.name} to ${nextRole}.`);
                               else notifyFeedback('error', res.error || 'Permission denied.');
                             }}
@@ -1862,6 +1959,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                             <option value="admin">Admin</option>
                           </select>
                         </div>
+                        {(inspectedUser.role === 'admin' || inspectedUser.role === 'moderator' || inspectedUser.adminPermissionLevel) && (
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-neutral-400">Admin Role Level:</span>
+                            <select
+                              value={
+                                inspectedUser.adminPermissionLevel ||
+                                (inspectedUser.role === 'moderator' ? 'moderator' : 'admin')
+                              }
+                              onChange={e => {
+                                const nextLevel = e.target.value as AdminPermissionLevel;
+                                const res = adminUpdateUserAccount(inspectedUser.id, {
+                                  adminPermissionLevel: nextLevel,
+                                  role: nextLevel === 'moderator' ? 'moderator' : 'admin',
+                                  adminPermissions: ADMIN_ROLE_DEFAULT_PERMS[nextLevel]
+                                });
+                                if (res.success) {
+                                  notifyFeedback(
+                                    'success',
+                                    `Updated ${inspectedUser.name} admin role to ${ADMIN_ROLE_LABELS[nextLevel].label}.`
+                                  );
+                                } else {
+                                  notifyFeedback('error', res.error || 'Permission denied.');
+                                }
+                              }}
+                              className="bg-[#121216] border border-[#2e2e38] rounded-lg px-2.5 py-1 text-white"
+                            >
+                              {activeAdminPermissionLevel === 'super_admin' && (
+                                <option value="super_admin">Super Admin</option>
+                              )}
+                              <option value="admin">General Admin</option>
+                              <option value="moderator">Moderator</option>
+                              <option value="finance_admin">Finance Admin</option>
+                              <option value="support_admin">Support Admin</option>
+                            </select>
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Verified Badge:</span>
                           <button
@@ -4000,110 +4133,352 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
           {/* ================================================================
               13. ADMIN USERS & PERMISSIONS (RBAC)
           ================================================================ */}
-          {activeSection === 'admin_users' && (
-            <div className="space-y-6">
-              <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
-                <div>
-                  <h2 className="text-lg font-bold text-white">13. Administrator Roles &amp; Permission Governance</h2>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Super Admin can assign and revoke permission levels across all administrative operators. Role checks are enforced on every privileged action.
-                  </p>
-                </div>
+          {activeSection === 'admin_users' && (() => {
+            const cleanCandidateEmail = newAdminEmail.trim().toLowerCase();
+            const matchedExistingUser = cleanCandidateEmail
+              ? Object.values(users).find(u => u.email?.toLowerCase() === cleanCandidateEmail)
+              : undefined;
+            const canManageAdmins = hasAdminPermission(['super_admin', 'admin']);
 
-                <div className="space-y-3">
-                  {Object.values(users)
-                    .filter(u => u.role === 'admin' || u.role === 'moderator' || u.adminPermissionLevel)
-                    .map(adm => {
-                      const level = adm.adminPermissionLevel || (adm.role === 'moderator' ? 'moderator' : 'admin');
-                      return (
-                        <div key={adm.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            {adm.avatar ? (
-                              <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50 shrink-0" />
-                            ) : (
-                              <div className="w-12 h-12 rounded-full bg-[#24242d] border border-[#d4af37]/50 flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
-                                {(adm.name || 'A').slice(0, 2).toUpperCase()}
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-bold text-white text-sm">{adm.name}</span>
-                                <span className="text-neutral-400">@{adm.username}</span>
-                                <span className={`font-mono text-[10px] uppercase px-2 py-0.5 rounded border ${ADMIN_ROLE_LABELS[level].badgeClass}`}>
-                                  {ADMIN_ROLE_LABELS[level].label}
-                                </span>
-                              </div>
-                              <div className="text-neutral-400 mt-0.5">{adm.bio}</div>
-                              <div className="text-[11px] font-mono text-neutral-500 mt-0.5">
-                                Email: {adm.email} · Last Active: {adm.lastLoginAt || 'Today'} · Scopes: {(adm.adminPermissions || []).join(', ')}
-                              </div>
-                            </div>
-                          </div>
+            const handleCreateOrPromoteAdmin = async (e: React.FormEvent) => {
+              e.preventDefault();
+              if (!cleanCandidateEmail || !cleanCandidateEmail.includes('@')) {
+                notifyFeedback('error', 'Please enter a valid email address.');
+                return;
+              }
+              if (!matchedExistingUser && newAdminPassword.trim().length < 6) {
+                notifyFeedback('error', 'Please provide an initial password (at least 6 characters) for the new admin account.');
+                return;
+              }
+              setIsAddingAdmin(true);
+              const res = await adminAddOrPromoteAdmin({
+                email: cleanCandidateEmail,
+                name: newAdminName.trim() || undefined,
+                username: newAdminUsername.trim() || undefined,
+                password: newAdminPassword.trim() || undefined,
+                adminPermissionLevel: newAdminLevel,
+                adminPermissions: newAdminPerms
+              });
+              setIsAddingAdmin(false);
+              if (res.success && res.user) {
+                notifyFeedback(
+                  'success',
+                  res.promotedExisting
+                    ? `Promoted ${res.user.email} to ${ADMIN_ROLE_LABELS[newAdminLevel].label} with automatic Creator access.`
+                    : `Added ${res.user.email} as ${ADMIN_ROLE_LABELS[newAdminLevel].label} with automatic Creator & Control Panel access.`
+                );
+                setNewAdminEmail('');
+                setNewAdminName('');
+                setNewAdminUsername('');
+                setNewAdminPassword('');
+                setNewAdminLevel('admin');
+                setNewAdminPerms(ADMIN_ROLE_DEFAULT_PERMS.admin);
+              } else {
+                notifyFeedback('error', res.error || 'Could not save administrator account.');
+              }
+            };
 
-                          <div className="flex flex-wrap items-center gap-2 shrink-0">
-                            {adm.adminPermissionLevel !== 'super_admin' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const res = toggleAdminBrandingPermission(adm.id);
-                                  if (res.success) {
-                                    notifyFeedback(
-                                      'success',
-                                      `${res.granted ? 'Granted' : 'Revoked'} manage_platform_branding permission for ${adm.name}.`
-                                    );
-                                  } else {
-                                    notifyFeedback('error', res.error || 'Only Super Admin can change branding permissions.');
-                                  }
-                                }}
-                                className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border cursor-pointer ${
-                                  (adm.adminPermissions || []).includes('manage_platform_branding')
-                                    ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                                    : 'bg-[#121216] border-[#2e2e38] text-neutral-400 hover:text-white'
-                                }`}
-                              >
-                                {(adm.adminPermissions || []).includes('manage_platform_branding')
-                                  ? '✓ manage_platform_branding'
-                                  : '+ Grant manage_platform_branding'}
-                              </button>
-                            )}
+            return (
+              <div className="space-y-6">
+                {canManageAdmins && (
+                  <div className="bg-[#121216] border border-[#d4af37]/30 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                          <Plus className="w-4 h-4 text-[#d4af37]" />
+                          <span>Add or Promote Administrator</span>
+                        </h2>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          Add a new team member or promote an existing ACOVON user by email, assign their administrative role &amp; scopes, and automatically activate Creator video posting privileges.
+                        </p>
+                      </div>
+                    </div>
 
-                            <select
-                              value={level}
-                              onChange={e => {
-                                const nextLevel = e.target.value as AdminPermissionLevel;
-                                const res = adminUpdateUserAccount(adm.id, {
-                                  adminPermissionLevel: nextLevel,
-                                  role: nextLevel === 'moderator' ? 'moderator' : 'admin'
-                                });
-                                if (res.success) notifyFeedback('success', `Updated ${adm.name} permission level to ${ADMIN_ROLE_LABELS[nextLevel].label}.`);
-                                else notifyFeedback('error', res.error || 'Only Super Admin can change administrator permissions.');
-                              }}
-                              className="w-full xs:w-auto max-w-full min-w-0 bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-1.5 text-white"
-                            >
-                              <option value="super_admin">Super Admin</option>
-                              <option value="admin">General Admin</option>
-                              <option value="moderator">Moderator</option>
-                              <option value="finance_admin">Finance Admin</option>
-                              <option value="support_admin">Support Admin</option>
-                            </select>
-
+                    <form onSubmit={handleCreateOrPromoteAdmin} className="space-y-4 text-xs">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-neutral-300 font-medium mb-1">Email Address *</label>
+                          <input
+                            type="email"
+                            required
+                            value={newAdminEmail}
+                            onChange={e => setNewAdminEmail(e.target.value)}
+                            placeholder="operator@acovon.com"
+                            className="w-full bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-neutral-300 font-medium mb-1">Full Name</label>
+                          <input
+                            type="text"
+                            value={newAdminName}
+                            onChange={e => setNewAdminName(e.target.value)}
+                            placeholder={matchedExistingUser?.name || 'Full name'}
+                            className="w-full bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-neutral-300 font-medium mb-1">Username</label>
+                          <input
+                            type="text"
+                            value={newAdminUsername}
+                            onChange={e => setNewAdminUsername(e.target.value)}
+                            placeholder={matchedExistingUser?.username || 'admin_username'}
+                            className="w-full bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-neutral-300 font-medium mb-1">
+                            {matchedExistingUser ? 'Reset/Set Password (Optional)' : 'Initial Password *'}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showNewAdminPassword ? 'text' : 'password'}
+                              required={!matchedExistingUser}
+                              value={newAdminPassword}
+                              onChange={e => setNewAdminPassword(e.target.value)}
+                              placeholder={matchedExistingUser ? 'Leave blank to keep existing' : 'Min. 6 characters'}
+                              className="w-full bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 pr-9 text-white focus:outline-none focus:border-[#d4af37]"
+                            />
                             <button
-                              onClick={() => {
-                                switchAdminOperator(adm.id);
-                                notifyFeedback('success', `Switched active session to ${adm.name} (${ADMIN_ROLE_LABELS[level].label}).`);
-                              }}
-                              className="px-3 py-1.5 bg-[#23232c] hover:bg-[#2e2e3a] text-[#fce7b0] rounded-xl cursor-pointer text-[11px] font-medium"
+                              type="button"
+                              onClick={() => setShowNewAdminPassword(p => !p)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                              aria-label="Toggle password visibility"
                             >
-                              Switch to Account
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+
+                      {matchedExistingUser && (
+                        <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <span>
+                            Existing user found: <strong>{matchedExistingUser.name}</strong> (@{matchedExistingUser.username}, current role: {matchedExistingUser.role}). Submitting will promote them to the selected Admin role and activate automatic Creator privileges.
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+                        <div>
+                          <label className="block text-neutral-300 font-medium mb-1">Administrative Role</label>
+                          <select
+                            value={newAdminLevel}
+                            onChange={e => {
+                              const lvl = e.target.value as AdminPermissionLevel;
+                              setNewAdminLevel(lvl);
+                              setNewAdminPerms(ADMIN_ROLE_DEFAULT_PERMS[lvl] || []);
+                            }}
+                            className="w-full bg-[#18181f] border border-[#272730] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          >
+                            {activeAdminPermissionLevel === 'super_admin' && (
+                              <option value="super_admin">Super Admin (Full Control)</option>
+                            )}
+                            <option value="admin">General Admin</option>
+                            <option value="moderator">Trust &amp; Safety Moderator</option>
+                            <option value="finance_admin">Finance &amp; Treasury Admin</option>
+                            <option value="support_admin">Support &amp; Concierge Admin</option>
+                          </select>
+                          <p className="text-[11px] text-neutral-400 mt-1.5">
+                            {ADMIN_ROLE_LABELS[newAdminLevel].description}
+                          </p>
+                        </div>
+
+                        <div className="lg:col-span-2">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-neutral-300 font-medium">Custom Permission Scopes</label>
+                            <button
+                              type="button"
+                              onClick={() => setNewAdminPerms(ADMIN_ROLE_DEFAULT_PERMS[newAdminLevel] || [])}
+                              className="text-[11px] text-[#d4af37] hover:underline cursor-pointer"
+                            >
+                              Reset to Role Defaults
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-3 bg-[#18181f] border border-[#272730] rounded-xl max-h-44 overflow-y-auto">
+                            {ALL_ADMIN_PERMISSION_SCOPES.filter(
+                              scope => activeAdminPermissionLevel === 'super_admin' || scope !== 'all_privileges'
+                            ).map(scope => {
+                              const checked = newAdminPerms.includes(scope);
+                              return (
+                                <label
+                                  key={scope}
+                                  className={`flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer text-[11px] border ${
+                                    checked
+                                      ? 'bg-[#d4af37]/15 border-[#d4af37]/40 text-[#fce7b0]'
+                                      : 'bg-[#121216] border-[#24242d] text-neutral-400 hover:text-neutral-200'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setNewAdminPerms(prev =>
+                                        prev.includes(scope)
+                                          ? prev.filter(s => s !== scope)
+                                          : [...prev, scope]
+                                      );
+                                    }}
+                                    className="accent-[#d4af37]"
+                                  />
+                                  <span className="truncate font-mono">{scope}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-3 pt-1">
+                        <button
+                          type="submit"
+                          disabled={isAddingAdmin}
+                          className="px-4 py-2 rounded-xl bg-[#d4af37] hover:bg-[#c59b27] text-black font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>
+                            {isAddingAdmin
+                              ? 'Saving Administrator...'
+                              : matchedExistingUser
+                              ? 'Promote User to Admin'
+                              : 'Add Administrator'}
+                          </span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                <div className="bg-[#121216] border border-[#232329] rounded-2xl p-4 sm:p-6 space-y-5">
+                  <div>
+                    <h2 className="text-lg font-bold text-white">13. Administrator Roles &amp; Permission Governance</h2>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      Manage administrative roles, custom permission scopes, and operator privileges. Every active administrator automatically holds approved Creator video posting access.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {Object.values(users)
+                      .filter(u => u.role === 'admin' || u.role === 'moderator' || u.adminPermissionLevel)
+                      .map(adm => {
+                        const level = adm.adminPermissionLevel || (adm.role === 'moderator' ? 'moderator' : 'admin');
+                        const isSelf = adm.id === currentUser.id;
+                        return (
+                          <div key={adm.id} className="p-4 bg-[#18181f] border border-[#272730] rounded-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 text-xs">
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              {adm.avatar ? (
+                                <img src={adm.avatar} alt={adm.name} className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/50 shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-[#24242d] border border-[#d4af37]/50 flex items-center justify-center text-sm font-bold text-[#fce7b0] shrink-0">
+                                  {(adm.name || 'A').slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-bold text-white text-sm">{adm.name}</span>
+                                  <span className="text-neutral-400">@{adm.username}</span>
+                                  <span className={`font-mono text-[10px] uppercase px-2 py-0.5 rounded border ${ADMIN_ROLE_LABELS[level].badgeClass}`}>
+                                    {ADMIN_ROLE_LABELS[level].label}
+                                  </span>
+                                  <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded border bg-emerald-950/50 border-emerald-500/30 text-emerald-300">
+                                    Auto-Creator Active
+                                  </span>
+                                </div>
+                                <div className="text-neutral-400 mt-0.5">{adm.bio}</div>
+                                <div className="text-[11px] font-mono text-neutral-500 mt-0.5 break-all">
+                                  Email: {adm.email} · Last Active: {adm.lastLoginAt || 'Today'} · Scopes: {(adm.adminPermissions || []).join(', ')}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {adm.adminPermissionLevel !== 'super_admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const res = toggleAdminBrandingPermission(adm.id);
+                                    if (res.success) {
+                                      notifyFeedback(
+                                        'success',
+                                        `${res.granted ? 'Granted' : 'Revoked'} manage_platform_branding permission for ${adm.name}.`
+                                      );
+                                    } else {
+                                      notifyFeedback('error', res.error || 'Only Super Admin can change branding permissions.');
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-[11px] font-semibold border cursor-pointer ${
+                                    (adm.adminPermissions || []).includes('manage_platform_branding')
+                                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                      : 'bg-[#121216] border-[#2e2e38] text-neutral-400 hover:text-white'
+                                  }`}
+                                >
+                                  {(adm.adminPermissions || []).includes('manage_platform_branding')
+                                    ? '✓ manage_platform_branding'
+                                    : '+ Grant manage_platform_branding'}
+                                </button>
+                              )}
+
+                              <select
+                                value={level}
+                                disabled={level === 'super_admin' && activeAdminPermissionLevel !== 'super_admin'}
+                                onChange={e => {
+                                  const nextLevel = e.target.value as AdminPermissionLevel;
+                                  const res = adminUpdateUserAccount(adm.id, {
+                                    adminPermissionLevel: nextLevel,
+                                    role: nextLevel === 'moderator' ? 'moderator' : 'admin',
+                                    adminPermissions: ADMIN_ROLE_DEFAULT_PERMS[nextLevel]
+                                  });
+                                  if (res.success) notifyFeedback('success', `Updated ${adm.name} permission level to ${ADMIN_ROLE_LABELS[nextLevel].label}.`);
+                                  else notifyFeedback('error', res.error || 'Permission denied.');
+                                }}
+                                className="w-full xs:w-auto max-w-full min-w-0 bg-[#121216] border border-[#2e2e38] rounded-xl px-3 py-1.5 text-white disabled:opacity-50"
+                              >
+                                {(activeAdminPermissionLevel === 'super_admin' || level === 'super_admin') && (
+                                  <option value="super_admin">Super Admin</option>
+                                )}
+                                <option value="admin">General Admin</option>
+                                <option value="moderator">Moderator</option>
+                                <option value="finance_admin">Finance Admin</option>
+                                <option value="support_admin">Support Admin</option>
+                              </select>
+
+                              <button
+                                onClick={() => {
+                                  switchAdminOperator(adm.id);
+                                  notifyFeedback('success', `Switched active session to ${adm.name} (${ADMIN_ROLE_LABELS[level].label}).`);
+                                }}
+                                className="px-3 py-1.5 bg-[#23232c] hover:bg-[#2e2e3a] text-[#fce7b0] rounded-xl cursor-pointer text-[11px] font-medium"
+                              >
+                                Switch to Account
+                              </button>
+
+                              {!isSelf && level !== 'super_admin' && canManageAdmins && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const res = adminUpdateUserAccount(adm.id, { role: 'creator' });
+                                    if (res.success) {
+                                      notifyFeedback('success', `Removed admin role from ${adm.name}; retained Creator access.`);
+                                    } else {
+                                      notifyFeedback('error', res.error || 'Permission denied.');
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/30 text-rose-300 rounded-xl cursor-pointer text-[11px] font-medium"
+                                >
+                                  Demote Admin
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ================================================================
               14. PERMANENT ADMINISTRATIVE AUDIT LOGS

@@ -22,7 +22,10 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 import { AuthoritativePostStore, deepClone } from './server/postStore';
-import { AuthoritativeCreatorApplicationStore } from './server/creatorApplicationStore';
+import {
+  AuthoritativeCreatorApplicationStore,
+  getDefaultAdminPermissions
+} from './server/creatorApplicationStore';
 import { AuthoritativeLiveCallStore } from './server/liveCallStore';
 import { getRtcConfiguration, verifyCloudflareWebhookSignature } from './server/streamingProvider';
 import {
@@ -38,11 +41,13 @@ import {
   translateUserGeneratedText
 } from './src/data/i18nData';
 import {
+  AdminPermissionLevel,
   CategoryRecord,
   CountryRecord,
   CreatorVerificationRecord,
   PaidVerificationStatus,
   Post,
+  UserRole,
   UserTranslationPreferences,
   VerificationAuditLog,
   VerificationSettings,
@@ -755,8 +760,9 @@ interface StoredAdminUser {
   username: string;
   email: string;
   passwordHash: string;
-  role: 'admin';
-  adminPermissionLevel: 'super_admin';
+  role: 'admin' | 'moderator';
+  adminPermissionLevel: AdminPermissionLevel;
+  adminPermissions?: string[];
   isVerified: boolean;
   is18PlusConfirmed: boolean;
   accountStatus: 'active';
@@ -785,10 +791,10 @@ function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(`acovon_salt_${password}`).digest('hex');
 }
 
-function readAdminSetup(): AdminSetupData {
+function readAdminSetup(filePath: string = ADMIN_SETUP_FILE): AdminSetupData {
   try {
-    if (fs.existsSync(ADMIN_SETUP_FILE)) {
-      const raw = fs.readFileSync(ADMIN_SETUP_FILE, 'utf-8');
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         return parsed as AdminSetupData;
@@ -800,18 +806,22 @@ function readAdminSetup(): AdminSetupData {
   return { is_setup_completed: false };
 }
 
-function writeAdminSetup(data: AdminSetupData): void {
-  fs.writeFileSync(ADMIN_SETUP_FILE, JSON.stringify(data, null, 2), 'utf-8');
+function writeAdminSetup(data: AdminSetupData, filePath: string = ADMIN_SETUP_FILE): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-function readAdminUsers(): StoredAdminUser[] {
+function readAdminUsers(filePath: string = ADMIN_USERS_FILE): StoredAdminUser[] {
   try {
-    if (fs.existsSync(ADMIN_USERS_FILE)) {
-      const raw = fs.readFileSync(ADMIN_USERS_FILE, 'utf-8');
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         return parsed.map((u: any) => ({
           ...u,
+          role: u.role === 'moderator' ? 'moderator' : 'admin',
+          adminPermissionLevel: u.adminPermissionLevel || (u.role === 'moderator' ? 'moderator' : 'super_admin'),
           walletBalance: typeof u.walletBalance === 'number' ? u.walletBalance : 0
         })) as StoredAdminUser[];
       }
@@ -822,8 +832,10 @@ function readAdminUsers(): StoredAdminUser[] {
   return [];
 }
 
-function writeAdminUsers(users: StoredAdminUser[]): void {
-  fs.writeFileSync(ADMIN_USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+function writeAdminUsers(users: StoredAdminUser[], filePath: string = ADMIN_USERS_FILE): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(users, null, 2), 'utf-8');
 }
 
 function appendAuditLog(entry: AuditLogRecord, filePath: string = ADMIN_AUDIT_FILE): void {
@@ -854,6 +866,8 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   }
   const taxonomyDbPath = path.join(resolvedDataDir, 'taxonomy_db.json');
   const adminAuditPath = path.join(resolvedDataDir, 'admin_audit_logs.json');
+  const adminSetupPath = path.join(resolvedDataDir, 'admin_setup.json');
+  const adminUsersPath = path.join(resolvedDataDir, 'admin_users.json');
   const postStore = new AuthoritativePostStore(resolvedDataDir);
   const creatorAppStore = new AuthoritativeCreatorApplicationStore({
     dataDir: resolvedDataDir,
@@ -1034,6 +1048,114 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       return data;
     } catch {
       return null;
+    }
+  };
+
+  const resolveAuthoritativeAdminRecord = async (
+    req: express.Request | undefined,
+    opts: { userId?: string; email?: string },
+    remoteUserOverride?: { role?: string; account_status?: string } | null
+  ): Promise<{
+    isAdmin: boolean;
+    role?: 'admin' | 'moderator';
+    adminPermissionLevel?: AdminPermissionLevel;
+    adminPermissions?: string[];
+  }> => {
+    const cleanEmail = String(opts.email || '').trim().toLowerCase();
+    const cleanId = String(opts.userId || '').trim();
+
+    const storedAdmins = readAdminUsers(adminUsersPath);
+    const matchedStoredAdmin = storedAdmins.find(
+      u => (cleanEmail && u.email.toLowerCase() === cleanEmail) || (cleanId && u.id === cleanId)
+    );
+    if (matchedStoredAdmin) {
+      const level = matchedStoredAdmin.adminPermissionLevel || (matchedStoredAdmin.role === 'moderator' ? 'moderator' : 'super_admin');
+      return {
+        isAdmin: true,
+        role: matchedStoredAdmin.role === 'moderator' || level === 'moderator' ? 'moderator' : 'admin',
+        adminPermissionLevel: level,
+        adminPermissions: matchedStoredAdmin.adminPermissions || getDefaultAdminPermissions(level)
+      };
+    }
+
+    const setupData = readAdminSetup(adminSetupPath);
+    if (
+      setupData.is_setup_completed &&
+      ((cleanEmail && setupData.admin_email && setupData.admin_email.toLowerCase() === cleanEmail) ||
+        (cleanId && setupData.admin_uid && setupData.admin_uid === cleanId))
+    ) {
+      return {
+        isAdmin: true,
+        role: 'admin',
+        adminPermissionLevel: 'super_admin',
+        adminPermissions: getDefaultAdminPermissions('super_admin')
+      };
+    }
+
+    const db = creatorAppStore.readDB();
+    const matchedDbUser = Object.values(db.users).find(
+      u => (cleanEmail && u.email.toLowerCase() === cleanEmail) || (cleanId && u.id === cleanId)
+    );
+    if (matchedDbUser && (matchedDbUser.role === 'admin' || matchedDbUser.role === 'moderator' || matchedDbUser.adminPermissionLevel)) {
+      const level = matchedDbUser.adminPermissionLevel || (matchedDbUser.role === 'moderator' ? 'moderator' : 'admin');
+      return {
+        isAdmin: true,
+        role: matchedDbUser.role === 'moderator' || level === 'moderator' ? 'moderator' : 'admin',
+        adminPermissionLevel: level,
+        adminPermissions: matchedDbUser.adminPermissions || getDefaultAdminPermissions(level)
+      };
+    }
+
+    const platformAdmin = Object.values(PLATFORM_ADMIN_ACCOUNTS).find(
+      u => (cleanEmail && u.email.toLowerCase() === cleanEmail) || (cleanId && u.id === cleanId)
+    );
+    if (platformAdmin) {
+      const level = platformAdmin.adminPermissionLevel || (platformAdmin.role === 'moderator' ? 'moderator' : 'admin');
+      return {
+        isAdmin: true,
+        role: platformAdmin.role === 'moderator' || level === 'moderator' ? 'moderator' : 'admin',
+        adminPermissionLevel: level,
+        adminPermissions: platformAdmin.adminPermissions || getDefaultAdminPermissions(level)
+      };
+    }
+
+    const remoteUser = remoteUserOverride !== undefined ? remoteUserOverride : await fetchSupabaseUserRecord(req, cleanId);
+    if (remoteUser && (remoteUser.role === 'admin' || remoteUser.role === 'moderator')) {
+      const level: AdminPermissionLevel = remoteUser.role === 'moderator' ? 'moderator' : 'admin';
+      return {
+        isAdmin: true,
+        role: remoteUser.role === 'moderator' ? 'moderator' : 'admin',
+        adminPermissionLevel: level,
+        adminPermissions: getDefaultAdminPermissions(level)
+      };
+    }
+
+    return { isAdmin: false };
+  };
+
+  const isSupabaseTokenVerifiedForUser = async (
+    req: express.Request,
+    expectedEmail?: string,
+    expectedUserId?: string
+  ): Promise<boolean> => {
+    const rawHeader = req.headers['x-supabase-access-token'];
+    const token = typeof rawHeader === 'string' ? rawHeader.trim() : '';
+    if (!supabase) {
+      return true;
+    }
+    if (!token || token.split('.').length !== 3) {
+      return false;
+    }
+    try {
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data?.user) return false;
+      const supaEmail = String(data.user.email || '').trim().toLowerCase();
+      const targetEmail = String(expectedEmail || '').trim().toLowerCase();
+      if (targetEmail && supaEmail && targetEmail === supaEmail) return true;
+      if (expectedUserId && data.user.id === expectedUserId) return true;
+      return false;
+    } catch {
+      return false;
     }
   };
 
@@ -1618,8 +1740,8 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   // --------------------------------------------------------------------------
   app.get('/api/admin/setup-status', async (_req, res) => {
     try {
-      const localSetup = readAdminSetup();
-      const adminUsers = readAdminUsers();
+      const localSetup = readAdminSetup(adminSetupPath);
+      const adminUsers = readAdminUsers(adminUsersPath);
       
       let isCompleted = localSetup.is_setup_completed;
 
@@ -1639,7 +1761,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
               admin_uid: data.admin_uid,
               admin_email: data.admin_email,
               initialized_by: data.initialized_by || 'supabase_table'
-            });
+            }, adminSetupPath);
           }
         } catch {
           // ignore table check error
@@ -1656,7 +1778,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
           admin_email: adminUsers[0].email,
           admin_name: adminUsers[0].name,
           initialized_by: 'existing_admin_account'
-        });
+        }, adminSetupPath);
       }
 
       const maskedEmail = localSetup.admin_email
@@ -1690,8 +1812,8 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     isSetupLocked = true;
 
     try {
-      const currentSetup = readAdminSetup();
-      const existingAdmins = readAdminUsers();
+      const currentSetup = readAdminSetup(adminSetupPath);
+      const existingAdmins = readAdminUsers(adminUsersPath);
 
       // STRICT BACKEND ENFORCEMENT: Never allow creation if already completed
       if (currentSetup.is_setup_completed || existingAdmins.length > 0) {
@@ -1761,6 +1883,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         passwordHash: hashedPassword,
         role: 'admin',
         adminPermissionLevel: 'super_admin',
+        adminPermissions: getDefaultAdminPermissions('super_admin'),
         isVerified: true,
         is18PlusConfirmed: true,
         accountStatus: 'active',
@@ -1770,8 +1893,19 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         createdAt: nowIso
       };
 
-      // 1) Save to local admin store
-      writeAdminUsers([newAdmin]);
+      // 1) Save to local admin store & sync into authoritative creatorAppStore (auto-creator enabled)
+      writeAdminUsers([newAdmin], adminUsersPath);
+      const syncedAdminSession = creatorAppStore.syncUserAccount({
+        id: newAdmin.id,
+        name: newAdmin.name,
+        username: newAdmin.username,
+        email: newAdmin.email,
+        dateJoined: newAdmin.dateJoined,
+        is18PlusConfirmed: true,
+        remoteRole: 'admin',
+        remoteAdminLevel: 'super_admin',
+        remoteAdminPermissions: newAdmin.adminPermissions
+      });
 
       // 2) Write immutable admin setup completed record
       const setupRecord: AdminSetupData = {
@@ -1782,7 +1916,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         admin_name: fullName.trim(),
         initialized_by: 'owner_onetime_setup'
       };
-      writeAdminSetup(setupRecord);
+      writeAdminSetup(setupRecord, adminSetupPath);
 
       // 3) Append audit log
       const auditEntry: AuditLogRecord = {
@@ -1799,12 +1933,11 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         severity: 'critical',
         timestamp: nowIso.replace('T', ' ').slice(0, 16)
       };
-      appendAuditLog(auditEntry);
+      appendAuditLog(auditEntry, adminAuditPath);
 
       // 4) Try syncing to Supabase if available
       if (supabase) {
         try {
-          // Attempt sign up in Supabase Auth
           await supabase.auth.signUp({
             email: cleanEmail,
             password: password,
@@ -1818,7 +1951,6 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
             }
           });
 
-          // Insert into users table
           await (supabase as any).from('users').upsert({
             uid: adminId,
             full_legal_name: fullName.trim(),
@@ -1829,7 +1961,6 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
             updated_at: nowIso
           }, { onConflict: 'uid' });
 
-          // Record in admin_setup table
           await (supabase as any).from('admin_setup').upsert({
             id: 1,
             is_setup_completed: true,
@@ -1844,14 +1975,15 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         }
       }
 
-      // Return public admin user record (without password hash) + signed adminToken
-      const { passwordHash: _, ...safeAdmin } = newAdmin;
+      const { passwordHash: _, ...safeAdminRaw } = newAdmin;
+      const safeAdmin = { ...safeAdminRaw, ...syncedAdminSession.user };
       const adminToken = creatorAppStore.createAdminToken(safeAdmin);
 
       return res.status(201).json({
         success: true,
         message: 'Super Administrator account created successfully. Public admin registration is now permanently closed.',
         user: safeAdmin,
+        creatorProfile: syncedAdminSession.creatorProfile,
         adminToken,
         isSetupCompleted: true
       });
@@ -1877,15 +2009,15 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      const adminUsers = readAdminUsers();
+      const adminUsers = readAdminUsers(adminUsersPath);
       const hashedInput = hashPassword(password);
 
       // Check local registered admin accounts
-      let matchedAdmin = adminUsers.find(
+      let matchedAdmin: Omit<StoredAdminUser, 'passwordHash'> & { passwordHash?: string } | undefined = adminUsers.find(
         u => u.email.toLowerCase() === cleanEmail && u.passwordHash === hashedInput
       );
 
-      // Also check standard mock & DB admin/moderator accounts
+      // Also check standard & DB admin/moderator accounts
       if (!matchedAdmin) {
         if (cleanEmail === 'admin@acovon.com' && password === 'acovon2025') {
           matchedAdmin = {
@@ -1896,6 +2028,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
             passwordHash: hashedInput,
             role: 'admin',
             adminPermissionLevel: 'super_admin',
+            adminPermissions: getDefaultAdminPermissions('super_admin'),
             isVerified: true,
             is18PlusConfirmed: true,
             accountStatus: 'active',
@@ -1919,15 +2052,18 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
                 (candidateAdmin.passwordHash === hashedInput || candidateAdmin.passwordHash === password)) ||
               password === 'acovon2025';
             if (passwordValid) {
+              const level: AdminPermissionLevel =
+                candidateAdmin.adminPermissionLevel ||
+                (candidateAdmin.role === 'moderator' ? 'moderator' : 'super_admin');
               matchedAdmin = {
                 id: candidateAdmin.id,
                 name: candidateAdmin.name,
                 username: candidateAdmin.username,
                 email: candidateAdmin.email.toLowerCase(),
                 passwordHash: hashedInput,
-                role: (candidateAdmin.role === 'moderator' ? 'moderator' : 'admin') as any,
-                adminPermissionLevel: (candidateAdmin.adminPermissionLevel ||
-                  (candidateAdmin.role === 'moderator' ? 'moderator' : 'super_admin')) as any,
+                role: candidateAdmin.role === 'moderator' ? 'moderator' : 'admin',
+                adminPermissionLevel: level,
+                adminPermissions: candidateAdmin.adminPermissions || getDefaultAdminPermissions(level),
                 isVerified: true,
                 is18PlusConfirmed: true,
                 accountStatus: 'active',
@@ -1938,6 +2074,64 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
               };
             }
           }
+        }
+      }
+
+      // Fallback: authenticate via Supabase Auth if user is an authorized admin in DB / Supabase public.users
+      if (!matchedAdmin && supabase) {
+        try {
+          const { data: supaAuthData, error: supaAuthErr } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password
+          });
+          if (!supaAuthErr && supaAuthData?.user) {
+            let remoteRoleRec: { role?: string; account_status?: string } | null = null;
+            if (supaAuthData.session?.access_token) {
+              const authedClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: `Bearer ${supaAuthData.session.access_token}` } }
+              });
+              const { data: uRow } = await (authedClient as any)
+                .from('users')
+                .select('uid, role, account_status')
+                .eq('uid', supaAuthData.user.id)
+                .maybeSingle();
+              if (uRow) remoteRoleRec = uRow;
+            }
+            const adminHint = await resolveAuthoritativeAdminRecord(
+              req,
+              { userId: supaAuthData.user.id, email: cleanEmail },
+              remoteRoleRec
+            );
+            if (adminHint.isAdmin) {
+              const metaName =
+                supaAuthData.user.user_metadata?.full_legal_name ||
+                supaAuthData.user.user_metadata?.full_name ||
+                cleanEmail.split('@')[0];
+              const metaUsername =
+                supaAuthData.user.user_metadata?.username ||
+                cleanEmail.split('@')[0];
+              const level = adminHint.adminPermissionLevel || 'admin';
+              matchedAdmin = {
+                id: supaAuthData.user.id,
+                name: String(metaName),
+                username: String(metaUsername),
+                email: cleanEmail,
+                role: adminHint.role || 'admin',
+                adminPermissionLevel: level,
+                adminPermissions: adminHint.adminPermissions || getDefaultAdminPermissions(level),
+                isVerified: true,
+                is18PlusConfirmed: true,
+                accountStatus: 'active',
+                dateJoined: String(supaAuthData.user.created_at || new Date().toISOString()).split('T')[0],
+                avatar: '',
+                walletBalance: 0,
+                createdAt: new Date().toISOString()
+              };
+            }
+          }
+        } catch {
+          // ignore fallback error
         }
       }
 
@@ -1960,28 +2154,44 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         });
       }
 
+      // Ensure admin account is synced in creatorAppStore and automatically has an approved CreatorProfile
+      const syncedState = creatorAppStore.syncUserAccount({
+        id: matchedAdmin.id,
+        name: matchedAdmin.name,
+        username: matchedAdmin.username,
+        email: matchedAdmin.email,
+        avatar: matchedAdmin.avatar,
+        dateJoined: matchedAdmin.dateJoined,
+        is18PlusConfirmed: true,
+        remoteRole: matchedAdmin.role,
+        remoteAdminLevel: matchedAdmin.adminPermissionLevel,
+        remoteAdminPermissions: matchedAdmin.adminPermissions
+      });
+
       const nowIso = new Date().toISOString();
       appendAuditLog({
         id: `audit_login_${Date.now()}`,
-        adminId: matchedAdmin.id,
-        adminName: matchedAdmin.name,
-        adminRole: matchedAdmin.adminPermissionLevel,
+        adminId: syncedState.user.id,
+        adminName: syncedState.user.name,
+        adminRole: syncedState.user.adminPermissionLevel || syncedState.user.role,
         category: 'auth_security',
         action: 'Administrator Logged In',
         targetType: 'AdminSession',
-        targetId: matchedAdmin.id,
-        targetLabel: `${matchedAdmin.name} (@${matchedAdmin.username})`,
+        targetId: syncedState.user.id,
+        targetLabel: `${syncedState.user.name} (@${syncedState.user.username})`,
         details: `Successful administrator authentication from Admin Login portal.`,
         severity: 'info',
         timestamp: nowIso.replace('T', ' ').slice(0, 16)
-      });
+      }, adminAuditPath);
 
-      const { passwordHash: _, ...safeAdmin } = matchedAdmin;
+      const { passwordHash: _, ...safeAdminRaw } = matchedAdmin;
+      const safeAdmin = { ...safeAdminRaw, ...syncedState.user };
       const adminToken = creatorAppStore.createAdminToken(safeAdmin);
 
       return res.json({
         success: true,
         user: safeAdmin,
+        creatorProfile: syncedState.creatorProfile,
         adminToken,
         message: 'Admin authentication successful.'
       });
@@ -2004,7 +2214,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     }
 
     const { userKeyOrId } = req.body || {};
-    const adminUsers = readAdminUsers();
+    const adminUsers = readAdminUsers(adminUsersPath);
     const db = creatorAppStore.readDB();
     const candidate =
       db.users[userKeyOrId] ||
@@ -2016,7 +2226,19 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       return res.status(404).json({ success: false, error: 'Target administrator operator not found.' });
     }
 
-    const safeUser = { ...candidate };
+    const synced = creatorAppStore.syncUserAccount({
+      id: candidate.id,
+      name: candidate.name,
+      username: candidate.username,
+      email: candidate.email,
+      avatar: candidate.avatar,
+      dateJoined: candidate.dateJoined,
+      remoteRole: candidate.role,
+      remoteAdminLevel: candidate.adminPermissionLevel,
+      remoteAdminPermissions: (candidate as any).adminPermissions
+    });
+
+    const safeUser = { ...synced.user };
     delete (safeUser as any).passwordHash;
     const adminToken = creatorAppStore.createAdminToken({
       id: safeUser.id,
@@ -2030,6 +2252,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     return res.json({
       success: true,
       user: safeUser,
+      creatorProfile: synced.creatorProfile,
       adminToken
     });
   });
@@ -2047,10 +2270,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
       await pullSupabaseCreatorApplications(req);
       const remoteUser = await fetchSupabaseUserRecord(req, id);
-      const remoteRole =
-        remoteUser?.role === 'creator' || remoteUser?.role === 'admin' || remoteUser?.role === 'moderator'
-          ? (remoteUser.role as any)
-          : undefined;
+      const adminHint = await resolveAuthoritativeAdminRecord(req, { userId: id, email: cleanEmail }, remoteUser);
+      const remoteRole: UserRole | undefined = adminHint.isAdmin
+        ? adminHint.role
+        : remoteUser?.role === 'creator'
+        ? 'creator'
+        : undefined;
 
       const result = creatorAppStore.syncUserAccount({
         id,
@@ -2061,7 +2286,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         dateJoined,
         country,
         is18PlusConfirmed,
-        remoteRole: remoteRole === 'creator' ? 'creator' : undefined
+        remoteRole,
+        remoteAdminLevel: adminHint.adminPermissionLevel,
+        remoteAdminPermissions: adminHint.adminPermissions
       });
 
       const reqSupabase = getRequestSupabaseClient(req);
@@ -2089,7 +2316,15 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         }
       }
 
-      return res.json({ success: true, ...result });
+      let adminToken: string | undefined;
+      if (result.user.role === 'admin' || result.user.role === 'moderator') {
+        const verifiedCaller = await isSupabaseTokenVerifiedForUser(req, result.user.email, result.user.id);
+        if (verifiedCaller) {
+          adminToken = creatorAppStore.createAdminToken(result.user);
+        }
+      }
+
+      return res.json({ success: true, ...result, ...(adminToken ? { adminToken } : {}) });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'User sync failed';
       return res.status(500).json({ success: false, error: msg });
@@ -2104,15 +2339,29 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         return res.status(400).json({ success: false, error: 'userId or email is required.' });
       }
       await pullSupabaseCreatorApplications(req);
-      if (userId) {
-        const remoteUser = await fetchSupabaseUserRecord(req, userId);
-        if (remoteUser?.role === 'creator' && email && email.includes('@')) {
+      const remoteUser = userId ? await fetchSupabaseUserRecord(req, userId) : null;
+      const adminHint = await resolveAuthoritativeAdminRecord(req, { userId, email }, remoteUser);
+
+      if (adminHint.isAdmin) {
+        const existingState = creatorAppStore.getUserSessionState({ userId, email });
+        const targetEmail = (email && email.includes('@') ? email : existingState.user?.email) || '';
+        if (targetEmail && (!existingState.found || !existingState.user || (existingState.user.role !== 'admin' && existingState.user.role !== 'moderator'))) {
+          creatorAppStore.syncUserAccount({
+            id: userId || existingState.user?.id,
+            email: targetEmail,
+            remoteRole: adminHint.role,
+            remoteAdminLevel: adminHint.adminPermissionLevel,
+            remoteAdminPermissions: adminHint.adminPermissions
+          });
+        }
+      } else if (remoteUser?.role === 'creator') {
+        if (email && email.includes('@')) {
           creatorAppStore.syncUserAccount({
             id: userId,
             email,
             remoteRole: 'creator'
           });
-        } else if (remoteUser?.role === 'creator') {
+        } else {
           const existingState = creatorAppStore.getUserSessionState({ userId, email });
           if (existingState.found && existingState.user && existingState.user.role !== 'creator') {
             creatorAppStore.syncUserAccount({
@@ -2123,10 +2372,179 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
           }
         }
       }
+
       const state = creatorAppStore.getUserSessionState({ userId, email });
-      return res.json({ success: true, ...state });
+      let adminToken: string | undefined;
+      if (state.found && state.user && (state.user.role === 'admin' || state.user.role === 'moderator')) {
+        const verifiedCaller = await isSupabaseTokenVerifiedForUser(req, state.user.email, state.user.id);
+        if (verifiedCaller) {
+          adminToken = creatorAppStore.createAdminToken(state.user);
+        }
+      }
+      return res.json({ success: true, ...state, ...(adminToken ? { adminToken } : {}) });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch user session state';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.get('/api/admin/users', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can list users.' });
+    }
+
+    try {
+      const dbUsers = creatorAppStore.listAllUsersSafe();
+      const adminFileUsers = readAdminUsers(adminUsersPath);
+      const mergedMap = new Map<string, any>();
+      dbUsers.forEach(u => mergedMap.set(u.id, u));
+      adminFileUsers.forEach(au => {
+        const existing = Array.from(mergedMap.values()).find(
+          u => u.id === au.id || u.email.toLowerCase() === au.email.toLowerCase()
+        );
+        if (!existing) {
+          const { passwordHash: _, ...safeAu } = au;
+          mergedMap.set(au.id, {
+            ...safeAu,
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved'
+          });
+        }
+      });
+      return res.json({
+        success: true,
+        users: Array.from(mergedMap.values()),
+        creators: creatorAppStore.listDirectoryCreators()
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to list users';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/admin/team', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can add administrators.' });
+    }
+
+    try {
+      const body = req.body || {};
+      const requestedLevel = (body.adminPermissionLevel || 'admin') as AdminPermissionLevel;
+      const result = creatorAppStore.addOrPromoteAdminOnServer(
+        {
+          id: auth.actor.id,
+          name: auth.actor.name,
+          role: auth.actor.role,
+          adminPermissionLevel: auth.actor.adminPermissionLevel
+        },
+        {
+          email: String(body.email || ''),
+          name: body.name ? String(body.name) : undefined,
+          username: body.username ? String(body.username) : undefined,
+          adminPermissionLevel: requestedLevel,
+          adminPermissions: Array.isArray(body.adminPermissions) ? body.adminPermissions : undefined,
+          bio: body.bio ? String(body.bio) : undefined,
+          country: body.country ? String(body.country) : undefined
+        }
+      );
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      // Sync to admin_users.json so they can also authenticate via /api/admin/login
+      const cleanPassword = typeof body.password === 'string' ? body.password.trim() : '';
+      const adminUsers = readAdminUsers(adminUsersPath);
+      const existingAdminIdx = adminUsers.findIndex(
+        u => u.email.toLowerCase() === result.user.email.toLowerCase() || u.id === result.user.id
+      );
+      if (cleanPassword || existingAdminIdx >= 0) {
+        const nextStoredAdmin: StoredAdminUser = {
+          id: result.user.id,
+          name: result.user.name,
+          username: result.user.username,
+          email: result.user.email,
+          passwordHash: cleanPassword
+            ? hashPassword(cleanPassword)
+            : existingAdminIdx >= 0
+            ? adminUsers[existingAdminIdx].passwordHash
+            : '',
+          role: result.user.role === 'moderator' ? 'moderator' : 'admin',
+          adminPermissionLevel: result.user.adminPermissionLevel || requestedLevel,
+          adminPermissions: result.user.adminPermissions || getDefaultAdminPermissions(requestedLevel),
+          isVerified: true,
+          is18PlusConfirmed: true,
+          accountStatus: 'active',
+          dateJoined: result.user.dateJoined || new Date().toISOString().split('T')[0],
+          avatar: result.user.avatar || '',
+          walletBalance: result.user.walletBalance || 0,
+          createdAt: existingAdminIdx >= 0 ? adminUsers[existingAdminIdx].createdAt : new Date().toISOString()
+        };
+        if (existingAdminIdx >= 0) {
+          adminUsers[existingAdminIdx] = nextStoredAdmin;
+        } else {
+          adminUsers.push(nextStoredAdmin);
+        }
+        writeAdminUsers(adminUsers, adminUsersPath);
+      }
+
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          await (reqSupabase as any)
+            .from('users')
+            .update({
+              role: result.user.role,
+              account_status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('uid', result.user.id);
+        } catch {
+          // ignore optional remote sync error
+        }
+      }
+
+      appendAuditLog(
+        {
+          id: `audit_admin_team_${Date.now()}`,
+          adminId: auth.actor.id,
+          adminName: auth.actor.name,
+          adminRole: auth.actor.adminPermissionLevel || auth.actor.role,
+          category: 'permission_change',
+          action: result.promotedExisting ? 'Promoted Existing Account to Administrator' : 'Added New Administrator Account',
+          targetType: 'User',
+          targetId: result.user.id,
+          targetLabel: `${result.user.name} (${result.user.email})`,
+          details: `Assigned role ${result.user.adminPermissionLevel || result.user.role} with scopes: ${(result.user.adminPermissions || []).join(', ')}`,
+          severity: 'warning',
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+        },
+        adminAuditPath
+      );
+
+      broadcastCreatorAppEvent('application_reviewed', {
+        decision: 'admin_team_updated',
+        user: result.user,
+        creatorProfile: result.creatorProfile,
+        userId: result.user.id
+      });
+
+      return res.status(result.promotedExisting ? 200 : 201).json({
+        success: true,
+        promotedExisting: result.promotedExisting,
+        user: result.user,
+        creatorProfile: result.creatorProfile
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add administrator';
       return res.status(500).json({ success: false, error: msg });
     }
   });
@@ -2143,6 +2561,16 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     try {
       const { userId } = req.params;
       const body = req.body || {};
+      if (
+        (body.adminPermissionLevel !== undefined || body.adminPermissions !== undefined || body.role === 'admin' || body.role === 'moderator') &&
+        auth.actor.role !== 'admin'
+      ) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Only administrators can assign administrative roles.' });
+      }
+      if (body.adminPermissionLevel === 'super_admin' && auth.actor.adminPermissionLevel !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Only Super Admin can assign Super Admin permissions.' });
+      }
+
       const result = creatorAppStore.adminUpdateUserAccountOnServer(
         userId,
         { id: auth.actor.id, name: auth.actor.name, role: auth.actor.role },
@@ -2158,6 +2586,26 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
       if (!result.ok) {
         return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      // Keep admin_users.json synchronized if demoted or updated
+      const adminUsers = readAdminUsers(adminUsersPath);
+      const adminIdx = adminUsers.findIndex(
+        u => u.id === result.user.id || u.email.toLowerCase() === result.user.email.toLowerCase()
+      );
+      if (adminIdx >= 0) {
+        if (result.user.role !== 'admin' && result.user.role !== 'moderator') {
+          adminUsers.splice(adminIdx, 1);
+          writeAdminUsers(adminUsers, adminUsersPath);
+        } else {
+          adminUsers[adminIdx] = {
+            ...adminUsers[adminIdx],
+            role: result.user.role,
+            adminPermissionLevel: result.user.adminPermissionLevel || 'admin',
+            adminPermissions: result.user.adminPermissions
+          };
+          writeAdminUsers(adminUsers, adminUsersPath);
+        }
       }
 
       const reqSupabase = getRequestSupabaseClient(req);
@@ -2177,7 +2625,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       }
 
       broadcastCreatorAppEvent('application_reviewed', {
-        decision: result.user.role === 'creator' ? 'approved' : 'updated',
+        decision: result.user.role === 'creator' || result.user.role === 'admin' ? 'approved' : 'updated',
         user: result.user,
         creatorProfile: result.creatorProfile,
         userId: result.user.id
@@ -2798,10 +3246,16 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       const postData = (post && typeof post === 'object' ? post : rest) as Partial<Post>;
       const taxonomyDb = readTaxonomyDB(taxonomyDbPath);
       const serverSession = actorId ? creatorAppStore.getUserSessionState({ userId: actorId }) : undefined;
+      const serverRole = serverSession?.user?.role;
       const effectiveApprovedCreator =
         Boolean(isApprovedCreator) ||
         actorRole === 'creator' ||
-        Boolean(serverSession?.found && serverSession.user?.role === 'creator' && serverSession.user.creatorApprovalStatus === 'approved');
+        actorRole === 'admin' ||
+        actorRole === 'moderator' ||
+        (Boolean(serverSession?.found) &&
+          (serverRole === 'admin' ||
+            serverRole === 'moderator' ||
+            (serverRole === 'creator' && serverSession?.user?.creatorApprovalStatus === 'approved')));
 
       const result = postStore.createPost({
         actorId,
@@ -3237,7 +3691,18 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         videoCountry
       } = req.body || {};
 
-      if (!actorId || (!isApprovedCreator && actorRole !== 'creator' && actorRole !== 'admin')) {
+      const serverSession = actorId ? creatorAppStore.getUserSessionState({ userId: actorId }) : undefined;
+      const serverRole = serverSession?.user?.role;
+      const isAuthorizedCreator =
+        Boolean(isApprovedCreator) ||
+        actorRole === 'creator' ||
+        actorRole === 'admin' ||
+        actorRole === 'moderator' ||
+        serverRole === 'admin' ||
+        serverRole === 'moderator' ||
+        (serverRole === 'creator' && serverSession?.user?.creatorApprovalStatus === 'approved');
+
+      if (!actorId || !isAuthorizedCreator) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Only approved creators can publish and tag post categories and video country.'

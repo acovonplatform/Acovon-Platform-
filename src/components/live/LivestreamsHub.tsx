@@ -36,12 +36,15 @@ export const LivestreamsHub: React.FC<LivestreamsHubProps> = ({
     currentUser,
     isAuthenticated,
     activeRole,
+    isCurrentUserApprovedCreator,
     canUserAccessLivestream,
     canUserAccessReplay,
     purchaseLivestreamRecording
   } = useApp();
 
-  const isCreator = isAuthenticated && (currentUser.role === 'creator' || activeRole === 'creator');
+  const isCreator =
+    isAuthenticated &&
+    (isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator');
 
   const [replayTabFilter, setReplayTabFilter] = useState<'all_replays' | 'my_purchased'>('all_replays');
   const [hubFeedback, setHubFeedback] = useState<string>('');

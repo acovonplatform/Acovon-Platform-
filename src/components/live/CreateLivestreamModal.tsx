@@ -30,15 +30,23 @@ export const CreateLivestreamModal: React.FC = () => {
     createLivestream,
     currentUser,
     activeRole,
+    isCurrentUserApprovedCreator,
     creators
   } = useApp();
 
-  const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator =
+    isCurrentUserApprovedCreator ||
+    currentUser.role === 'creator' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'moderator' ||
+    activeRole === 'creator';
   if (!isCreateLiveModalOpen || !isCreator) return null;
 
-  const currentCreator: CreatorProfile | undefined = (currentUser.role === 'creator'
-    ? (currentUser as CreatorProfile)
-    : (creators.find(c => c.id === currentUser.id) || creators[0])) as CreatorProfile | undefined;
+  const currentCreator: CreatorProfile | undefined = (
+    creators.find(c => c.id === currentUser.id) ||
+    (currentUser as CreatorProfile) ||
+    creators[0]
+  ) as CreatorProfile | undefined;
 
   // Form State
   const [title, setTitle] = useState('');

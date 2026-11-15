@@ -31,6 +31,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   const {
     currentUser,
     activeRole,
+    isCurrentUserApprovedCreator,
     creators,
     isCreatorVerifiedBadgeActive,
     notifications,
@@ -48,7 +49,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const isCreator = currentUser.role === 'creator' || activeRole === 'creator';
+  const isCreator = isCurrentUserApprovedCreator || currentUser.role === 'creator' || activeRole === 'creator';
   const isAdminOrMod =
     activeRole === 'admin' ||
     activeRole === 'moderator' ||

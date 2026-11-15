@@ -15,7 +15,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const { registerAccount, authenticateAccount } = useApp();
+  const { registerAccount, authenticateAccount, adminLogin } = useApp();
 
   const [mode, setMode] = useState<'register' | 'login' | 'forgot_password'>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -176,6 +176,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     });
 
     if (signInError) {
+      // Allow admins added via Admin Control Center (whose credentials live on the ACOVON server) to log in here too
+      const adminAttempt = await adminLogin(email.trim(), password);
+      if (adminAttempt.success) {
+        window.history.pushState({}, '', '/');
+        onSuccess();
+        onClose();
+        return;
+      }
       setError(signInError.message);
       return;
     }
