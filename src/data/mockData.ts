@@ -394,3 +394,98 @@ export const INITIAL_RECOMMENDATION_FEEDBACK: RecommendationFeedbackRecord[] = [
 export const INITIAL_PLATFORM_ANNOUNCEMENTS: PlatformAnnouncement[] = [];
 
 export const INITIAL_ANNOUNCEMENT_RECIPIENTS: AnnouncementRecipientRecord[] = [];
+
+const REMOVED_DEMO_IDS = new Set([
+  'creator_chloe',
+  'user_chloe',
+  'creator_chloe_dupond',
+  'creator_chloe_dupont',
+  'chloe_dupond',
+  'chloe_dupont',
+  'creator_dante',
+  'user_dante',
+  'creator_dante_moretti',
+  'dante_moretti'
+]);
+
+const REMOVED_DEMO_NAMES = new Set([
+  'chloe dupond',
+  'chloe dupont',
+  'chloé dupond',
+  'chloé dupont',
+  'dante moretti'
+]);
+
+const REMOVED_DEMO_USERNAMES = new Set([
+  'chloe_dupond',
+  'chloedupond',
+  'chloe.dupond',
+  'chloe_dupont',
+  'chloedupont',
+  'chloe.dupont',
+  'creator_chloe',
+  'dante_moretti',
+  'dantemoretti',
+  'dante.moretti',
+  'creator_dante'
+]);
+
+const REMOVED_DEMO_EMAIL_PREFIXES = [
+  'chloe.dupond',
+  'chloe_dupond',
+  'chloedupond',
+  'chloe.dupont',
+  'chloe_dupont',
+  'chloedupont',
+  'dante.moretti',
+  'dante_moretti',
+  'dantemoretti'
+];
+
+export function isRemovedDemoAccount(record?: Record<string, any> | null): boolean {
+  if (!record || typeof record !== 'object') return false;
+
+  const candidateIds = [record.id, record.userId, record.creatorId, record.uid];
+  for (const rawId of candidateIds) {
+    const idLower = String(rawId || '').trim().toLowerCase();
+    if (idLower && REMOVED_DEMO_IDS.has(idLower)) return true;
+  }
+
+  const candidateNames = [
+    record.name,
+    record.creatorName,
+    record.full_legal_name,
+    record.displayName,
+    record.applicationData?.displayName
+  ];
+  for (const rawName of candidateNames) {
+    const nameNorm = String(rawName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+    if (nameNorm && REMOVED_DEMO_NAMES.has(nameNorm)) return true;
+  }
+
+  const candidateUsernames = [record.username, record.creatorUsername];
+  for (const rawUser of candidateUsernames) {
+    const userNorm = String(rawUser || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^@+/, '');
+    if (userNorm && REMOVED_DEMO_USERNAMES.has(userNorm)) return true;
+  }
+
+  const emailLower = String(record.email || '').trim().toLowerCase();
+  if (emailLower) {
+    const localPart = emailLower.split('@')[0] || '';
+    if (REMOVED_DEMO_EMAIL_PREFIXES.some(prefix => localPart === prefix || localPart.startsWith(`${prefix}_`))) {
+      return true;
+    }
+    if (emailLower === 'chloe@acovon.com' || emailLower === 'dante@acovon.com') {
+      return true;
+    }
+  }
+
+  return false;
+}
+

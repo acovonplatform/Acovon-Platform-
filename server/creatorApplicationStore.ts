@@ -12,7 +12,7 @@ import {
   User,
   UserRole
 } from '../src/types';
-import { PLATFORM_ADMIN_ACCOUNTS } from '../src/data/mockData';
+import { isRemovedDemoAccount, PLATFORM_ADMIN_ACCOUNTS } from '../src/data/mockData';
 
 export interface CreatorApplicationsDB {
   users: Record<string, User>;
@@ -269,26 +269,85 @@ export class AuthoritativeCreatorApplicationStore {
           const deletedUserIds = Array.isArray(parsed.deletedUserIds)
             ? Array.from(new Set(parsed.deletedUserIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
             : [];
-          const deletedSet = new Set(deletedUserIds);
+          const deletedSet = new Set(deletedUserIds.map(id => id.toLowerCase()));
           const rawUsers = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
           const cleanUsers: Record<string, User> = {};
+          let purgedRemovedDemo = false;
+
           for (const [k, u] of Object.entries(rawUsers)) {
-            if (!u || !u.id || deletedSet.has(u.id) || deletedSet.has(k)) continue;
+            if (!u || !u.id) continue;
+            const uEmail = normalizeEmail(u.email);
+            if (
+              deletedSet.has(u.id.toLowerCase()) ||
+              deletedSet.has(k.toLowerCase()) ||
+              (uEmail && deletedSet.has(uEmail))
+            ) {
+              continue;
+            }
+            if (isRemovedDemoAccount(u) || isRemovedDemoAccount({ id: k })) {
+              purgedRemovedDemo = true;
+              deletedSet.add(u.id.toLowerCase());
+              deletedSet.add(k.toLowerCase());
+              if (uEmail) deletedSet.add(uEmail);
+              continue;
+            }
             cleanUsers[k] = u;
           }
-          return {
+
+          const cleanCreators = Array.isArray(parsed.creators)
+            ? parsed.creators.filter(c => {
+                if (!c || !c.id) return false;
+                const cEmail = normalizeEmail(c.email);
+                if (deletedSet.has(c.id.toLowerCase()) || (cEmail && deletedSet.has(cEmail))) return false;
+                if (isRemovedDemoAccount(c)) {
+                  purgedRemovedDemo = true;
+                  deletedSet.add(c.id.toLowerCase());
+                  if (cEmail) deletedSet.add(cEmail);
+                  return false;
+                }
+                return true;
+              })
+            : [];
+
+          const cleanApplications = Array.isArray(parsed.applications)
+            ? parsed.applications.filter(a => {
+                if (!a) return false;
+                const aEmail = normalizeEmail(a.email);
+                if (
+                  deletedSet.has(String(a.userId || '').toLowerCase()) ||
+                  (aEmail && deletedSet.has(aEmail))
+                ) {
+                  return false;
+                }
+                if (isRemovedDemoAccount(a)) {
+                  purgedRemovedDemo = true;
+                  if (a.userId) deletedSet.add(String(a.userId).toLowerCase());
+                  if (aEmail) deletedSet.add(aEmail);
+                  return false;
+                }
+                return true;
+              })
+            : [];
+
+          const cleanNotifications = Array.isArray(parsed.notifications)
+            ? parsed.notifications.filter(
+                n => n && !deletedSet.has(String(n.userId || '').toLowerCase())
+              )
+            : [];
+
+          const cleanedDb: CreatorApplicationsDB = {
             users: cleanUsers,
-            creators: Array.isArray(parsed.creators)
-              ? parsed.creators.filter(c => c && c.id && !deletedSet.has(c.id))
-              : [],
-            applications: Array.isArray(parsed.applications)
-              ? parsed.applications.filter(a => a && !deletedSet.has(a.userId))
-              : [],
-            notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
+            creators: cleanCreators,
+            applications: cleanApplications,
+            notifications: cleanNotifications,
             auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-            deletedUserIds,
+            deletedUserIds: Array.from(deletedSet),
             updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString()
           };
+          if (purgedRemovedDemo) {
+            this.writeDB(cleanedDb);
+          }
+          return cleanedDb;
         }
       }
     } catch (err) {
@@ -1061,6 +1120,16 @@ export class AuthoritativeCreatorApplicationStore {
     const db = this.readDB();
     const rawApp = input.application;
     const cleanEmail = normalizeEmail(rawApp.email || input.user?.email);
+    const deletedSet = new Set((db.deletedUserIds || []).map(id => id.toLowerCase()));
+
+    if (
+      isRemovedDemoAccount(rawApp) ||
+      isRemovedDemoAccount(input.user) ||
+      (rawApp.userId && deletedSet.has(String(rawApp.userId).toLowerCase())) ||
+      (cleanEmail && deletedSet.has(cleanEmail))
+    ) {
+      return { recovered: false, application: rawApp };
+    }
 
     const existingByIdOrUser = db.applications.find(
       a =>
@@ -1127,10 +1196,21 @@ export class AuthoritativeCreatorApplicationStore {
     const db = this.readDB();
     let recoveredCount = 0;
 
+    const deletedSet = new Set((db.deletedUserIds || []).map(id => id.toLowerCase()));
+
     if (payload.users && typeof payload.users === 'object') {
       for (const [key, candidate] of Object.entries(payload.users)) {
         if (!candidate || typeof candidate !== 'object' || !candidate.id) continue;
         const cleanEmail = normalizeEmail(candidate.email);
+        if (
+          isRemovedDemoAccount(candidate) ||
+          isRemovedDemoAccount({ id: key }) ||
+          deletedSet.has(key.toLowerCase()) ||
+          deletedSet.has(String(candidate.id).toLowerCase()) ||
+          (cleanEmail && deletedSet.has(cleanEmail))
+        ) {
+          continue;
+        }
         const existing = this.findUserEntry(db, { userId: candidate.id, email: cleanEmail });
         if (!existing) {
           db.users[key] = deepClone(candidate);
@@ -1142,6 +1222,13 @@ export class AuthoritativeCreatorApplicationStore {
       for (const raw of payload.applications) {
         if (!raw || !raw.id || !raw.userId) continue;
         const cleanEmail = normalizeEmail(raw.email);
+        if (
+          isRemovedDemoAccount(raw) ||
+          deletedSet.has(String(raw.userId).toLowerCase()) ||
+          (cleanEmail && deletedSet.has(cleanEmail))
+        ) {
+          continue;
+        }
         const existsById = db.applications.some(a => a.id === raw.id);
         if (existsById) continue;
 
@@ -1216,12 +1303,21 @@ export class AuthoritativeCreatorApplicationStore {
     const db = this.readDB();
     let merged = 0;
 
+    const deletedSet = new Set((db.deletedUserIds || []).map(id => id.toLowerCase()));
+
     for (const row of rows) {
       const id = String(row.id || '').trim();
       const userId = String(row.user_id || row.userId || '').trim();
       if (!id || !userId) continue;
 
       const email = normalizeEmail(row.email);
+      if (
+        isRemovedDemoAccount(row) ||
+        deletedSet.has(userId.toLowerCase()) ||
+        (email && deletedSet.has(email))
+      ) {
+        continue;
+      }
       const status = (row.status || 'pending') as CreatorVerification['status'];
       const submittedAt = row.submitted_at
         ? String(row.submitted_at).replace('T', ' ').slice(0, 16)

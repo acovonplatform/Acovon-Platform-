@@ -48,7 +48,8 @@ import {
 } from './src/types';
 import {
   INITIAL_VERIFICATION_SETTINGS,
-  PLATFORM_ADMIN_ACCOUNTS
+  PLATFORM_ADMIN_ACCOUNTS,
+  isRemovedDemoAccount
 } from './src/data/mockData';
 
 const ADMIN_SETUP_FILE = path.join(DATA_DIR, 'admin_setup.json');
@@ -2384,7 +2385,11 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
       const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(d => d.toLowerCase()));
       const cleanId = String(id || '').trim();
-      if ((cleanId && deletedSet.has(cleanId.toLowerCase())) || deletedSet.has(cleanEmail)) {
+      if (
+        (cleanId && deletedSet.has(cleanId.toLowerCase())) ||
+        deletedSet.has(cleanEmail) ||
+        isRemovedDemoAccount({ id: cleanId, name, username, email: cleanEmail })
+      ) {
         return res.status(403).json({
           success: false,
           deleted: true,

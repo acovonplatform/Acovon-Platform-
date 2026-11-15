@@ -119,6 +119,7 @@ import {
   MOCK_GIFTS,
   INITIAL_COMMISSION_SETTINGS,
   INITIAL_PLATFORM_CONFIG,
+  isRemovedDemoAccount,
   INITIAL_VIDEO_PROCESSING_CONFIG,
   INITIAL_VERIFICATION_SETTINGS,
   INITIAL_RECOMMENDATION_CONFIG
@@ -146,7 +147,11 @@ const DEMO_USER_IDS = new Set([
   'fan_lucas',
   'fan_banned_1',
   'creator_newbie',
-  'creator_applicant_2'
+  'creator_applicant_2',
+  'user_chloe',
+  'user_dante',
+  'chloe_dupond',
+  'dante_moretti'
 ]);
 
 const DEMO_CREATOR_IDS = new Set([
@@ -157,6 +162,9 @@ const DEMO_CREATOR_IDS = new Set([
   'creator_maya',
   'creator_leo',
   'creator_chloe',
+  'creator_chloe_dupond',
+  'creator_dante',
+  'creator_dante_moretti',
   'creator_alex',
   'creator_zara',
   'creator_david'
@@ -173,9 +181,9 @@ const isDemoAssetUrl = (url?: unknown): boolean => {
 function runOneTimeDemoCachePurge(): void {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   try {
-    if (localStorage.getItem('acovon_prod_demo_purge_v1') === 'done') return;
+    const alreadyPurgedV2 = localStorage.getItem('acovon_prod_demo_purge_v2') === 'done';
 
-    // 1. Clean acovon_users_v2
+    // Always strip explicitly removed demo accounts (e.g. Chloe Dupond, Dante Moretti) from cached storage
     const usersRaw = localStorage.getItem('acovon_users_v2');
     if (usersRaw) {
       const parsed = JSON.parse(usersRaw);
@@ -183,7 +191,9 @@ function runOneTimeDemoCachePurge(): void {
         const cleanedUsers: Record<string, any> = {};
         for (const [k, u] of Object.entries<any>(parsed)) {
           if (!u || typeof u !== 'object') continue;
-          if (DEMO_USER_IDS.has(k) || DEMO_USER_IDS.has(u.id)) continue;
+          if (DEMO_USER_IDS.has(k) || DEMO_USER_IDS.has(u.id) || isRemovedDemoAccount(u) || isRemovedDemoAccount({ id: k })) {
+            continue;
+          }
           const cleanAvatar = isDemoAssetUrl(u.avatar) ? '' : (u.avatar || '');
           const isAdmin = u.role === 'admin' || u.role === 'moderator';
           cleanedUsers[k] = {
@@ -196,14 +206,13 @@ function runOneTimeDemoCachePurge(): void {
       }
     }
 
-    // 2. Clean current user if it was the demo fan Jordan Cross
     const currRaw = localStorage.getItem('acovon_current_user');
     if (currRaw) {
       const curr = JSON.parse(currRaw);
-      if (curr && (DEMO_USER_IDS.has(curr.id) || DEMO_CREATOR_IDS.has(curr.id))) {
+      if (curr && (DEMO_USER_IDS.has(curr.id) || DEMO_CREATOR_IDS.has(curr.id) || isRemovedDemoAccount(curr))) {
         localStorage.setItem('acovon_current_user', JSON.stringify(GUEST_USER));
         localStorage.setItem('acovon_is_authenticated', 'false');
-      } else if (curr && typeof curr === 'object') {
+      } else if (!alreadyPurgedV2 && curr && typeof curr === 'object') {
         localStorage.setItem(
           'acovon_current_user',
           JSON.stringify({
@@ -214,13 +223,12 @@ function runOneTimeDemoCachePurge(): void {
       }
     }
 
-    // 3. Clean creators cache
     const creatorsRaw = localStorage.getItem('acovon_creators');
     if (creatorsRaw) {
       const parsed = JSON.parse(creatorsRaw);
       if (Array.isArray(parsed)) {
         const kept = parsed
-          .filter((c: any) => c && !DEMO_CREATOR_IDS.has(c.id))
+          .filter((c: any) => c && !DEMO_CREATOR_IDS.has(c.id) && !isRemovedDemoAccount(c))
           .map((c: any) => ({
             ...c,
             avatar: isDemoAssetUrl(c.avatar) ? '' : (c.avatar || ''),
@@ -230,14 +238,18 @@ function runOneTimeDemoCachePurge(): void {
       }
     }
 
-    // 4. Clean posts cache (preserve real user-uploaded posts such as postitem_*)
     const postsRaw = localStorage.getItem('acovon_posts');
     if (postsRaw) {
       const parsed = JSON.parse(postsRaw);
       if (Array.isArray(parsed)) {
         const kept = parsed.filter((p: any) => {
           if (!p || !p.id) return false;
-          if (p.isDemo === true || String(p.id).startsWith('demo_') || DEMO_CREATOR_IDS.has(p.creatorId)) {
+          if (
+            p.isDemo === true ||
+            String(p.id).startsWith('demo_') ||
+            DEMO_CREATOR_IDS.has(p.creatorId) ||
+            isRemovedDemoAccount(p)
+          ) {
             return false;
           }
           if (Array.isArray(p.media) && p.media.some((m: any) => isDemoAssetUrl(m?.url))) {
@@ -249,25 +261,28 @@ function runOneTimeDemoCachePurge(): void {
       }
     }
 
-    // 5. Clean statuses cache
     const statusesRaw = localStorage.getItem('acovon_statuses');
     if (statusesRaw) {
       const parsed = JSON.parse(statusesRaw);
       if (Array.isArray(parsed)) {
         const kept = parsed.filter(
-          (s: any) => s && !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId) && !isDemoAssetUrl(s.mediaUrl)
+          (s: any) =>
+            s &&
+            !s.isDemo &&
+            !DEMO_CREATOR_IDS.has(s.creatorId) &&
+            !isRemovedDemoAccount(s) &&
+            !isDemoAssetUrl(s.mediaUrl)
         );
         localStorage.setItem('acovon_statuses', JSON.stringify(kept));
       }
     }
 
-    // 6. Clean verifications cache (keep real applications such as wiztans & wuluxe)
     const verifRaw = localStorage.getItem('acovon_verifications_v2');
     if (verifRaw) {
       const parsed = JSON.parse(verifRaw);
       if (Array.isArray(parsed)) {
         const kept = parsed
-          .filter((v: any) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId))
+          .filter((v: any) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId) && !isRemovedDemoAccount(v))
           .map((v: any) => ({
             ...v,
             avatar: isDemoAssetUrl(v.avatar) ? '' : (v.avatar || ''),
@@ -278,24 +293,25 @@ function runOneTimeDemoCachePurge(): void {
       }
     }
 
-    // 7. Reset sample-only local caches
-    for (const key of [
-      'acovon_video_media_records',
-      'acovon_video_processing_jobs',
-      'acovon_creator_verification_records',
-      'acovon_verification_transactions',
-      'acovon_verification_audit_logs',
-      'acovon_fan_interest_profiles',
-      'acovon_engagement_events',
-      'acovon_recommendation_feedback',
-      'acovon_platform_announcements_v1',
-      'acovon_announcement_recipients_v1',
-      'acovon_audit_logs'
-    ]) {
-      localStorage.removeItem(key);
+    if (!alreadyPurgedV2) {
+      for (const key of [
+        'acovon_video_media_records',
+        'acovon_video_processing_jobs',
+        'acovon_creator_verification_records',
+        'acovon_verification_transactions',
+        'acovon_verification_audit_logs',
+        'acovon_fan_interest_profiles',
+        'acovon_engagement_events',
+        'acovon_recommendation_feedback',
+        'acovon_platform_announcements_v1',
+        'acovon_announcement_recipients_v1',
+        'acovon_audit_logs'
+      ]) {
+        localStorage.removeItem(key);
+      }
+      localStorage.setItem('acovon_prod_demo_purge_v1', 'done');
+      localStorage.setItem('acovon_prod_demo_purge_v2', 'done');
     }
-
-    localStorage.setItem('acovon_prod_demo_purge_v1', 'done');
   } catch {
     // ignore storage errors
   }
@@ -1366,7 +1382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     Object.entries(rawMap || {}).forEach(([key, val]) => {
       if (!val || typeof val !== 'object') return;
-      if (DEMO_USER_IDS.has(key) || DEMO_USER_IDS.has(String(val.id || ''))) return;
+      if (DEMO_USER_IDS.has(key) || DEMO_USER_IDS.has(String(val.id || '')) || isRemovedDemoAccount(val) || isRemovedDemoAccount({ id: key })) return;
       if (
         deletedSet.has(key.toLowerCase()) ||
         deletedSet.has(String(val.id || '').trim().toLowerCase()) ||
@@ -1424,7 +1440,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const uid = String(row.uid || row.id || '');
             const email = String(row.email || '').toLowerCase();
             if (!uid) return;
-            if (isDeletedUserIdentifier({ id: uid, email })) return;
+            if (isDeletedUserIdentifier({ id: uid, email }) || isRemovedDemoAccount(row)) return;
             const rowRole = ((row.role as UserRole) || 'fan');
             const isCreatorRow = rowRole === 'creator';
             const isAdminRow = rowRole === 'admin' || rowRole === 'moderator';
@@ -1763,7 +1779,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed
-            .filter((item): item is CreatorProfile => Boolean(item && typeof item === 'object' && item.id && !DEMO_CREATOR_IDS.has(item.id)))
+            .filter((item): item is CreatorProfile => Boolean(item && typeof item === 'object' && item.id && !DEMO_CREATOR_IDS.has(item.id) && !isRemovedDemoAccount(item)))
             .map(item => {
               const parsedBalance = Number(item.walletBalance);
               return {
@@ -1803,7 +1819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isDemoAssetUrl(u);
 
     return rawPosts
-      .filter(p => p && !p.isDemo && !String(p.id).startsWith('demo_') && !DEMO_CREATOR_IDS.has(p.creatorId))
+      .filter(p => p && !p.isDemo && !String(p.id).startsWith('demo_') && !DEMO_CREATOR_IDS.has(p.creatorId) && !isRemovedDemoAccount(p))
       .map(p => {
         if (!Array.isArray(p.media)) return p;
         const cleanedMedia = p.media.map(m => {
@@ -1883,7 +1899,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. Merge existing non-demo local posts preserving order and deduplicating by ID
       for (const p of prev) {
         if (!p || !p.id || byId.has(p.id)) continue;
-        if (p.isDemo || String(p.id).startsWith('demo_') || DEMO_CREATOR_IDS.has(p.creatorId)) continue;
+        if (p.isDemo || String(p.id).startsWith('demo_') || DEMO_CREATOR_IDS.has(p.creatorId) || isRemovedDemoAccount(p)) continue;
         const override = updatedMap[p.id];
         const isDel = deletedIds.includes(p.id) || Boolean(override?.isDeletedByCreator);
         if (override) {
@@ -1959,7 +1975,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(parsed) && parsed.length > 0) {
           const nowMs = Date.now();
           return parsed.filter(
-            (s: CreatorStatus) => s && !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId) && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
+            (s: CreatorStatus) => s && !s.isDemo && !DEMO_CREATOR_IDS.has(s.creatorId) && !isRemovedDemoAccount(s) && !s.isArchived && new Date(s.expiresAt).getTime() > nowMs
           );
         }
       }
@@ -2011,7 +2027,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((v: CreatorVerification) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId));
+          return parsed.filter((v: CreatorVerification) => v && !DEMO_VERIF_IDS.has(v.id) && !DEMO_USER_IDS.has(v.userId) && !isRemovedDemoAccount(v));
         }
       }
     } catch {
@@ -2031,7 +2047,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Ensure any user record with creatorApplicationStatus === 'pending' has a corresponding entry in verifications
   useEffect(() => {
     const pendingUsers = Object.values(users).filter(
-      u => u.creatorApplicationStatus === 'pending' || u.creatorApprovalStatus === 'pending'
+      u => !isRemovedDemoAccount(u) && (u.creatorApplicationStatus === 'pending' || u.creatorApprovalStatus === 'pending')
     );
     if (pendingUsers.length === 0) return;
 
@@ -6014,6 +6030,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const filteredApps = payload.applications.filter(
         a =>
           a &&
+          !isRemovedDemoAccount(a) &&
           !deletedSet.has(String(a.userId || '').trim().toLowerCase()) &&
           !deletedSet.has(String(a.email || '').trim().toLowerCase())
       );
@@ -6030,6 +6047,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         Object.entries(prev).forEach(([k, u]) => {
           if (
             u &&
+            !isRemovedDemoAccount(u) &&
+            !isRemovedDemoAccount({ id: k }) &&
             !deletedSet.has(k.toLowerCase()) &&
             !deletedSet.has(String(u.id || '').trim().toLowerCase()) &&
             !deletedSet.has(String(u.email || '').trim().toLowerCase())
@@ -6040,6 +6059,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         Object.entries(payload.users || {}).forEach(([k, serverU]) => {
           if (!serverU || !serverU.id) return;
           if (
+            isRemovedDemoAccount(serverU) ||
+            isRemovedDemoAccount({ id: k }) ||
             deletedSet.has(k.toLowerCase()) ||
             deletedSet.has(String(serverU.id).trim().toLowerCase()) ||
             deletedSet.has(String(serverU.email || '').trim().toLowerCase())
@@ -6060,12 +6081,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCreators(prev => {
         const next = prev.filter(
           c =>
+            !isRemovedDemoAccount(c) &&
             !deletedSet.has(String(c.id || '').trim().toLowerCase()) &&
             !deletedSet.has(String(c.email || '').trim().toLowerCase())
         );
         payload.creators!.forEach(sc => {
           if (
             !sc ||
+            isRemovedDemoAccount(sc) ||
             deletedSet.has(String(sc.id || '').trim().toLowerCase()) ||
             deletedSet.has(String(sc.email || '').trim().toLowerCase())
           ) {
@@ -6112,7 +6135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supaAccessToken = '';
       }
 
-      let combinedApplications = [...verifications];
+      let combinedApplications = verifications.filter(v => v && !isRemovedDemoAccount(v));
       let clientSupaStatus: { available?: boolean; error?: string; code?: string } = {};
       if (opts?.reconcile) {
         const clientSupa = await fetchAllSupabaseCreatorApplicationsWithStatus();
@@ -6125,12 +6148,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const existingIds = new Set(combinedApplications.map(v => v.id));
           clientSupa.rows.forEach(row => {
             const mapped = mapSupabaseRowToVerification(row);
-            if (!existingIds.has(mapped.id)) {
+            if (!existingIds.has(mapped.id) && !isRemovedDemoAccount(mapped)) {
               existingIds.add(mapped.id);
               combinedApplications.push(mapped);
             }
           });
         }
+      }
+
+      const cleanUsersForReconcile: Record<string, User> = {};
+      if (opts?.reconcile) {
+        Object.entries(users).forEach(([k, u]) => {
+          if (u && !isRemovedDemoAccount(u) && !isRemovedDemoAccount({ id: k })) {
+            cleanUsersForReconcile[k] = u;
+          }
+        });
       }
 
       const endpoint = opts?.reconcile
@@ -6147,7 +6179,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await fetch(endpoint, {
         method: opts?.reconcile ? 'POST' : 'GET',
         headers,
-        body: opts?.reconcile ? JSON.stringify({ applications: combinedApplications, users }) : undefined
+        body: opts?.reconcile
+          ? JSON.stringify({ applications: combinedApplications, users: cleanUsersForReconcile })
+          : undefined
       });
       const parsed = await safeReadJsonResponse(res);
       const data = parsed.data || {};
