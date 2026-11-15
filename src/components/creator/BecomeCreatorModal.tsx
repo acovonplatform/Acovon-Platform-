@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AcovonLogoIcon } from '../common/AcovonLogoIcon';
 import { 
@@ -16,7 +16,6 @@ import {
   DollarSign,
   UserCheck
 } from 'lucide-react';
-import { OFFICIAL_CATEGORIES, CategoryItem } from '../../data/officialCategories';
 
 interface BecomeCreatorModalProps {
   onClose: () => void;
@@ -32,12 +31,18 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
     applyToBecomeCreator, 
     userPendingVerification,
     isCurrentUserApprovedCreator,
-    verifications
+    verifications,
+    activeCategories
   } = useApp();
 
   const [step, setStep] = useState<1 | 2>(1);
   const [displayName, setDisplayName] = useState(currentUser.name || '');
-  const [category, setCategory] = useState('Amateur');
+  const [category, setCategory] = useState(activeCategories[0]?.name || '');
+  useEffect(() => {
+    if (activeCategories.length > 0 && !activeCategories.some(c => c.name === category)) {
+      setCategory(activeCategories[0].name);
+    }
+  }, [activeCategories, category]);
   const [bio, setBio] = useState('');
   const [socialLinks, setSocialLinks] = useState('');
   const [monthlyTierPrice, setMonthlyTierPrice] = useState(14.99);
@@ -344,7 +349,7 @@ export const BecomeCreatorModal: React.FC<BecomeCreatorModalProps> = ({
                       onChange={(e) => setCategory(e.target.value)}
                       className="w-full bg-[#18181c] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                     >
-                      {OFFICIAL_CATEGORIES.map((cat: CategoryItem) => (
+                      {activeCategories.map(cat => (
                         <option key={cat.id} value={cat.name}>{cat.name}</option>
                       ))}
                     </select>

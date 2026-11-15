@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PostVisibility, MediaAsset, VideoResolution, VideoCodec } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import {
   uploadUserFileToSupabase,
@@ -126,7 +125,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const [visibility, setVisibility] = useState<PostVisibility>('public');
   const [ppvPrice, setPpvPrice] = useState<number>(9.99);
   const [previewDuration, setPreviewDuration] = useState<10 | 15 | 30>(15);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['Fashion & Luxury']);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    activeCategories[0]?.name ? [activeCategories[0].name] : []
+  );
   const [categorySearch, setCategorySearch] = useState('');
   const [selectedVideoCountry, setSelectedVideoCountry] = useState<string>(
     currentCreatorProfile?.country || currentUser.country || 'United States'
@@ -149,10 +150,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
   const [backgroundQueuedNotice, setBackgroundQueuedNotice] = useState(false);
 
   // Filterable categories list from centralized activeCategories database (case-insensitive unique)
-  const rawCategories =
-    activeCategories && activeCategories.length > 0
-      ? activeCategories.map(c => c.name)
-      : CATEGORIES.filter(c => c !== 'All Categories');
+  const rawCategories = (activeCategories || []).map(c => c.name);
   const availableCategories = (() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -165,6 +163,14 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ onClose }) => 
     }
     return out;
   })();
+  useEffect(() => {
+    if (availableCategories.length === 0) return;
+    setSelectedCategories(prev => {
+      const valid = prev.filter(c => availableCategories.includes(c));
+      if (valid.length > 0) return valid;
+      return [availableCategories[0]];
+    });
+  }, [activeCategories]);
   const filteredCategories = availableCategories.filter(c => 
     c.toLowerCase().includes(categorySearch.toLowerCase())
   );

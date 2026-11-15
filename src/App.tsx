@@ -45,7 +45,6 @@ import { FullScreenPhotoModal } from './components/feed/FullScreenPhotoModal';
 import { FanProfileModal } from './components/profile/FanProfileModal';
 import { StatusViewerModal } from './components/status/StatusViewerModal';
 import { ImportantAnnouncementPopupModal } from './components/common/AnnouncementExperience';
-import { GlobalDomTranslator } from './components/common/GlobalDomTranslator';
 import { supabase } from './supabaseClient.js';
 import { Post } from './types';
 import { X, Shield, Lock, FileText, Coins } from 'lucide-react';
@@ -160,7 +159,7 @@ function AppContent() {
       const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
       const isAdminRoute = pathname.startsWith('/admin') || ['admin-panel', 'admin-login', 'admin-setup', 'admin-access-denied'].includes(currentTab);
 
-      if (data.session) {
+      if (data.session || isAuthenticated) {
         if (!isAdminRoute && pathname === '/login') {
           window.history.replaceState({}, '', '/');
         }
@@ -980,7 +979,6 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <GlobalDomTranslator />
       <AppContent />
     </AppProvider>
   );

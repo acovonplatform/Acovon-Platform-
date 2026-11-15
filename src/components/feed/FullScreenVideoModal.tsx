@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, VideoResolution } from '../../types';
-import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { VerifiedBadge } from '../common/VerifiedBadge';
 import {
   X,
@@ -559,14 +559,11 @@ export const FullScreenVideoModal: React.FC<FullScreenVideoModalProps> = ({
                 onTouchStart={resetControlsTimer}
                 className="max-w-3xl"
               >
-                <TranslateContentButton
+                <CollapsibleDescriptionText
                   text={currentPost.content}
-                  contentType="video"
-                  contentRef={`video_viewer_${currentPost.id}`}
-                  renderPrimaryText
-                  collapsible
                   compact
                   linkify
+                  resetKey={currentPost.id}
                   variant="overlay"
                   maxExpandedHeightClass="max-h-[24dvh] overflow-y-auto"
                   textClassName="text-xs sm:text-sm text-neutral-100 leading-relaxed drop-shadow"

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, PostVisibility } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { matchesCategoryIdentifier, matchesCountryIdentifier } from '../../data/globalTaxonomy';
 import {
   Search,
@@ -90,10 +89,8 @@ export const MyPostsManagementSection: React.FC<MyPostsManagementSectionProps> =
       out.push(trimmed);
     };
     (activeCategories || []).forEach(c => addUnique(c.name));
-    (platformConfig?.contentCategories || []).forEach(c => addUnique(c));
-    CATEGORIES.forEach(c => addUnique(c));
     return out;
-  }, [activeCategories, platformConfig?.contentCategories]);
+  }, [activeCategories]);
 
   // All non-deleted posts owned by the logged-in creator
   const creatorOwnedPosts = useMemo(() => {

@@ -14,7 +14,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onNavigate,
   isKeyboardOpen = false
 }) => {
-  const { currentUser, isAuthenticated, isCurrentUserApprovedCreator, livestreams, messages, t } = useApp();
+  const { currentUser, isAuthenticated, isCurrentUserApprovedCreator, livestreams, messages } = useApp();
   const navRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -52,11 +52,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   const navItems = !isAuthenticated
     ? [
-        { id: 'feed', label: t('nav.feed', 'Feed'), icon: Home },
-        { id: 'explore', label: t('nav.explore', 'Explore'), icon: Compass },
+        { id: 'feed', label: 'Feed', icon: Home },
+        { id: 'explore', label: 'Explore', icon: Compass },
         {
           id: 'live',
-          label: t('nav.live', 'Live'),
+          label: 'Live',
           icon: Radio,
           badge: liveCount > 0 ? liveCount : undefined,
           badgeColor: 'bg-red-600 text-white animate-pulse'
@@ -64,41 +64,41 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       ]
     : isCreator
     ? [
-        { id: 'feed', label: t('nav.feed', 'Feed'), icon: Home },
-        { id: 'explore', label: t('nav.explore', 'Explore'), icon: Compass },
+        { id: 'feed', label: 'Feed', icon: Home },
+        { id: 'explore', label: 'Explore', icon: Compass },
         {
           id: 'live',
-          label: t('nav.live', 'Live'),
+          label: 'Live',
           icon: Radio,
           badge: liveCount > 0 ? liveCount : undefined,
           badgeColor: 'bg-red-600 text-white animate-pulse'
         },
         {
           id: 'messages',
-          label: t('nav.messages', 'Messages'),
+          label: 'Messages',
           icon: MessageSquare,
           badge: unreadMessageCount > 0 ? unreadMessageCount : undefined,
           badgeColor: 'bg-[#d4af37] text-black font-bold'
         },
         {
           id: 'creator-studio',
-          label: t('nav.studio_short', 'Studio'),
+          label: 'Studio',
           icon: LayoutDashboard
         }
       ]
     : [
-        { id: 'feed', label: t('nav.feed', 'Feed'), icon: Home },
-        { id: 'explore', label: t('nav.explore', 'Explore'), icon: Compass },
+        { id: 'feed', label: 'Feed', icon: Home },
+        { id: 'explore', label: 'Explore', icon: Compass },
         {
           id: 'live',
-          label: t('nav.live', 'Live'),
+          label: 'Live',
           icon: Radio,
           badge: liveCount > 0 ? liveCount : undefined,
           badgeColor: 'bg-red-600 text-white animate-pulse'
         },
         {
           id: 'messages',
-          label: t('nav.messages', 'Messages'),
+          label: 'Messages',
           icon: MessageSquare,
           badge: unreadMessageCount > 0 ? unreadMessageCount : undefined,
           badgeColor: 'bg-[#d4af37] text-black font-bold'

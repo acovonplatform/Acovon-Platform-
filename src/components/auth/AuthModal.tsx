@@ -15,7 +15,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const { registerAccount, authenticateAccount, adminLogin } = useApp();
+  const { registerAccount, adminLogin, completePlatformLogin } = useApp();
 
   const [mode, setMode] = useState<'register' | 'login' | 'forgot_password'>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -44,6 +44,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [requiresEmailVerification, setRequiresEmailVerification] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const switchMode = (nextMode: 'register' | 'login' | 'forgot_password') => {
     setMode(nextMode);
@@ -169,56 +170,47 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // 2) Sign In with Supabase Auth
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password
-    });
+    // 2) Sign In with Supabase Auth, or fall back to server Admin Login
+    setIsSubmitting(true);
+    try {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password
+      });
 
-    if (signInError) {
-      // Allow admins added via Admin Control Center (whose credentials live on the ACOVON server) to log in here too
-      const adminAttempt = await adminLogin(email.trim(), password);
-      if (adminAttempt.success) {
-        window.history.pushState({}, '', '/');
-        onSuccess();
-        onClose();
+      if (signInError) {
+        // Allow admins added via Admin Control Center / setup (whose credentials live on the ACOVON server) to log in here too
+        const adminAttempt = await adminLogin(email.trim(), password);
+        if (adminAttempt.success) {
+          window.history.pushState({}, '', '/');
+          onSuccess();
+          onClose();
+          return;
+        }
+        setError(signInError.message);
         return;
       }
-      setError(signInError.message);
-      return;
-    }
 
-    // Only redirect when a real session exists after login
-    if (!signInData.session) {
-      setError('Could not establish an active login session. Please try again.');
-      return;
-    }
+      // Only redirect when a real session exists after login
+      if (!signInData.session) {
+        setError('Could not establish an active login session. Please try again.');
+        return;
+      }
 
-    // Ensure authenticated Supabase user is loaded into app session
-    const localAuth = authenticateAccount(email, password, signInData.user?.id);
-    if (!localAuth.success && signInData.user) {
-      const fallbackUsername = (signInData.user.email?.split('@')[0] || 'member')
-        .toLowerCase()
-        .replace(/[^a-z0-9_.-]/g, '_');
-      registerAccount({
-        id: signInData.user.id,
-        fullName: signInData.user.user_metadata?.full_legal_name || fullName.trim() || fallbackUsername,
-        username:
-          signInData.user.user_metadata?.username ||
-          username.trim() ||
-          `${fallbackUsername}_${signInData.user.id.slice(0, 4)}`,
-        email: signInData.user.email || email.trim(),
-        password,
-        confirmPassword: password,
-        is18PlusConfirmed: true,
-        autoLogin: true
-      });
-    }
+      // Resolve authoritative role (Admin / Moderator / Creator / Fan) & issue adminToken before closing modal
+      const loginResult = await completePlatformLogin(signInData.session, password);
+      if (!loginResult.success) {
+        setError(loginResult.error || 'Unable to verify your ACOVON account. Please try again.');
+        return;
+      }
 
-    // 3) Redirect user to the Home page ("/")
-    window.history.pushState({}, '', '/');
-    onSuccess();
-    onClose();
+      // 3) Redirect user to the Home page ("/")
+      window.history.pushState({}, '', '/');
+      onSuccess();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -416,9 +408,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer mt-2"
+            disabled={isSubmitting}
+            className="w-full py-2.5 bg-[#d4af37] hover:bg-[#e5c07b] text-black font-semibold text-xs rounded-xl shadow-lg shadow-[#d4af37]/20 transition-all cursor-pointer mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {mode === 'register'
+            {isSubmitting
+              ? 'Signing In...'
+              : mode === 'register'
               ? 'Create Account'
               : mode === 'login'
               ? 'Log In'

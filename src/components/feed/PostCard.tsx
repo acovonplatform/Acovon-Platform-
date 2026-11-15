@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Post, VideoResolution, RecommendedPostResult, EngagementSurface } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
 import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   Heart, 
@@ -984,15 +983,11 @@ export const PostCard: React.FC<PostCardProps> = ({
       {(post.content?.trim() || hasPostMetaDetails) && (
         <div className="px-3.5 sm:px-5 pt-2.5 sm:pt-3 pb-2.5">
           {post.content?.trim() ? (
-            <TranslateContentButton
+            <CollapsibleDescriptionText
               text={post.content}
-              contentType="post"
-              contentRef={`post_${post.id}`}
-              renderPrimaryText
-              collapsible
               compact
               linkify
-              hideTranslateAction
+              resetKey={post.id}
               hasExtraContent={hasPostMetaDetails}
               onExpandedChange={setIsDescriptionExpanded}
               textClassName="text-neutral-200 text-sm sm:text-base leading-relaxed"
@@ -1738,14 +1733,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                   <span>· Creator</span>
                 </span>
               </div>
-              <TranslateContentButton
-                text="Thank you everyone for tuning into this release! Drop your questions below."
-                contentType="comment"
-                contentRef={`comment_pinned_${post.id}`}
-                renderPrimaryText
-                textClassName="text-neutral-300"
-                compact
-              />
+              <p data-ugc="true" className="text-neutral-300 leading-relaxed whitespace-pre-line break-words">
+                Thank you everyone for tuning into this release! Drop your questions below.
+              </p>
             </div>
             {localComments.map((comment, i) => {
               const colonIdx = comment.indexOf(': ');
@@ -1760,14 +1750,9 @@ export const PostCard: React.FC<PostCardProps> = ({
                       <VerifiedBadge creatorId={authorName} size="xs" />
                     </div>
                   )}
-                  <TranslateContentButton
-                    text={commentBody}
-                    contentType="comment"
-                    contentRef={`comment_${post.id}_${i}`}
-                    renderPrimaryText
-                    textClassName="text-neutral-200"
-                    compact
-                  />
+                  <p data-ugc="true" className="text-neutral-200 leading-relaxed whitespace-pre-line break-words">
+                    {commentBody}
+                  </p>
                 </div>
               );
             })}

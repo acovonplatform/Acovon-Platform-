@@ -24,19 +24,10 @@ import {
   Sun,
   Moon,
   Monitor,
-  Globe,
-  Languages,
-  Search,
-  Check,
   Upload,
   Camera
 } from 'lucide-react';
 import { CreatorProfile } from '../../types';
-import {
-  formatLocalizedDate,
-  formatLocalizedNumber,
-  formatLocalizedCurrency
-} from '../../data/i18nData';
 import {
   uploadUserFileToSupabase,
   deleteSupabaseFileByPath
@@ -632,11 +623,9 @@ export const PurchaseHistoryModal: React.FC<{ onClose: () => void }> = ({ onClos
 
 export const SettingsModal: React.FC<{
   onClose: () => void;
-  initialTab?: 'language' | 'personalization' | 'general';
-}> = ({ onClose, initialTab = 'language' }) => {
+  initialTab?: 'personalization' | 'general';
+}> = ({ onClose, initialTab = 'personalization' }) => {
   const {
-    currentUser,
-    isAuthenticated,
     creators,
     fanInterestProfiles,
     activeRecommendationFanId,
@@ -649,71 +638,19 @@ export const SettingsModal: React.FC<{
     resolvedColorMode,
     setAppearanceMode,
     activeBrandingTheme,
-    supportedLanguages,
-    activeLanguageCode,
-    activeLanguageMeta,
-    languagePreferenceMode,
-    detectedDeviceLanguage,
-    simulatedBrowserLocale,
-    setSimulatedBrowserLocale,
-    setUserLanguagePreference,
-    preferredTranslationLanguage,
-    preferredTranslationLanguageMeta,
-    platformTranslationEnabled,
-    setPreferredTranslationLanguage,
-    setPlatformTranslationEnabled,
-    saveUserTranslationSettings
+    activeCategories
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'language' | 'personalization' | 'general'>(initialTab);
-  const [translationLangSearch, setTranslationLangSearch] = useState('');
-  const [appLanguageSearch, setAppLanguageSearch] = useState('');
-  const [showAppLanguageSection, setShowAppLanguageSection] = useState(false);
+  const [activeTab, setActiveTab] = useState<'personalization' | 'general'>(initialTab);
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [twoFactor, setTwoFactor] = useState(true);
   const [currency, setCurrency] = useState('USD ($)');
   const [saved, setSaved] = useState(false);
   const [resetSuccessToast, setResetSuccessToast] = useState(false);
 
-  const enabledLanguages = supportedLanguages.filter(l => l.enabled);
+  const allInterestCategories = (activeCategories || []).map(c => c.name);
 
-  const filteredTranslationLanguages = enabledLanguages.filter(lang => {
-    const q = translationLangSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      lang.nativeName.toLowerCase().includes(q) ||
-      lang.englishName.toLowerCase().includes(q) ||
-      lang.code.toLowerCase().includes(q) ||
-      lang.regionLabel.toLowerCase().includes(q)
-    );
-  });
-
-  const filteredAppLanguages = enabledLanguages.filter(lang => {
-    const q = appLanguageSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      lang.nativeName.toLowerCase().includes(q) ||
-      lang.englishName.toLowerCase().includes(q) ||
-      lang.code.toLowerCase().includes(q) ||
-      lang.regionLabel.toLowerCase().includes(q)
-    );
-  });
-
-  const allInterestCategories = [
-    'Fitness & Bodybuilding',
-    'Photography & Cinematography',
-    'Culinary Arts & Gourmet',
-    'Tech & Software Development',
-    'Fashion & Luxury'
-  ];
-
-  const handleSaveChanges = async () => {
-    await saveUserTranslationSettings({
-      preferredTranslationLanguage,
-      platformTranslationEnabled,
-      appLanguage: activeLanguageCode,
-      appLanguageMode: languagePreferenceMode
-    });
+  const handleSaveChanges = () => {
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -728,10 +665,10 @@ export const SettingsModal: React.FC<{
             <SettingsIcon className="w-5 h-5 text-[#d4af37] shrink-0" />
             <div className="min-w-0">
               <h3 className="font-brand text-base sm:text-lg font-bold text-white truncate">
-                Settings — Language &amp; Translation
+                Settings
               </h3>
-              <p className="text-[11px] text-neutral-400 truncate" data-no-translate="true">
-                Profile → Settings → Language &amp; Translation
+              <p className="text-[11px] text-neutral-400 truncate">
+                Personalization &amp; Account Preferences
               </p>
             </div>
           </div>
@@ -740,20 +677,8 @@ export const SettingsModal: React.FC<{
           </button>
         </div>
 
-        {/* Settings Sub-Tabs (Language & Translation, Feed Personalization, Security & Preferences) */}
+        {/* Settings Sub-Tabs (Personalization, Preferences) */}
         <div className="flex items-center gap-1.5 p-1 bg-[#18181c] border border-[#27272a] rounded-xl text-xs shrink-0 overflow-x-auto no-scrollbar">
-          <button
-            type="button"
-            onClick={() => setActiveTab('language')}
-            className={`flex-1 min-w-max py-2 px-3 rounded-lg font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'language'
-                ? 'bg-[#d4af37] text-black font-bold'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            <Languages className="w-3.5 h-3.5 shrink-0" />
-            <span data-no-translate="true">Language &amp; Translation</span>
-          </button>
           <button
             type="button"
             onClick={() => setActiveTab('personalization')}
@@ -781,371 +706,7 @@ export const SettingsModal: React.FC<{
         </div>
 
         <div className="flex-1 overflow-y-auto pr-1 space-y-4 text-xs">
-          {activeTab === 'language' ? (
-            <>
-              {/* Current Active Values Summary Card */}
-              <div
-                data-no-translate="true"
-                className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2.5"
-              >
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#d4af37] font-semibold">
-                    Profile → Settings → Language &amp; Translation
-                  </span>
-                  <span className="text-[10px] text-neutral-400">
-                    {isAuthenticated
-                      ? `Synced to account @${currentUser.username}`
-                      : 'Guest Session Preference (Temporary)'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="p-2.5 rounded-xl bg-[#121215] border border-[#27272a] space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Platform Translation</div>
-                    <div className="font-bold flex items-center gap-1.5">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          platformTranslationEnabled ? 'bg-emerald-400' : 'bg-neutral-500'
-                        }`}
-                      />
-                      <span
-                        className={
-                          platformTranslationEnabled ? 'text-emerald-400' : 'text-neutral-200'
-                        }
-                      >
-                        {platformTranslationEnabled ? 'Enabled (ON)' : 'Disabled (OFF)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-[#121215] border border-[#27272a] space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Preferred Translation Language</div>
-                    <div className="font-bold text-[#fce7b0] truncate">
-                      {preferredTranslationLanguageMeta.englishName} ({preferredTranslationLanguageMeta.nativeName})
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-[#121215] border border-[#27272a] space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">App Interface Language</div>
-                    <div className="font-bold text-white truncate">
-                      {activeLanguageMeta.englishName} ({activeLanguageMeta.nativeName})
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 1. PLATFORM TRANSLATION ENABLE / DISABLE (DEFAULT: DISABLED) */}
-              <div
-                data-no-translate="true"
-                className={`p-4 rounded-xl border transition-all space-y-3 ${
-                  platformTranslationEnabled
-                    ? 'bg-[#181b18] border-emerald-500/40'
-                    : 'bg-[#18181c] border-[#d4af37]/40'
-                }`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Languages className="w-4 h-4 text-[#d4af37]" />
-                      <span className="text-sm font-bold text-white">Platform Translation</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold uppercase ${
-                          platformTranslationEnabled
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                            : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
-                        }`}
-                      >
-                        {platformTranslationEnabled ? 'Enabled' : 'Disabled (Default)'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-300 leading-relaxed">
-                      {platformTranslationEnabled
-                        ? `Automatic translation is ON. Posts, video/photo descriptions, comments, creator bios, status updates, announcements, and received messages are automatically translated into ${preferredTranslationLanguageMeta.englishName} (${preferredTranslationLanguageMeta.nativeName}) with a Show Original option.`
-                        : 'Automatic translation is OFF (Default). All posts, video captions, comments, creator biographies, status updates, announcements, and messages are displayed in their original language. You can still translate individual items manually using the Translate button.'}
-                    </p>
-                  </div>
-
-                  {/* Two-State Toggle Buttons: Disabled / Enabled */}
-                  <div className="flex items-center bg-[#111115] p-1 rounded-xl border border-[#27272a] shrink-0 self-start sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => setPlatformTranslationEnabled(false)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        !platformTranslationEnabled
-                          ? 'bg-[#d4af37] text-black shadow-sm'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      Disabled
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPlatformTranslationEnabled(true)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        platformTranslationEnabled
-                          ? 'bg-emerald-500 text-black shadow-sm'
-                          : 'text-neutral-400 hover:text-white'
-                      }`}
-                    >
-                      Enabled
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-400">
-                  <span>
-                    Takes effect immediately across Feed, Profiles, Comments, Status, Announcements &amp; Messages without refresh.
-                  </span>
-                  <span className="text-[#fce7b0] font-medium">
-                    Original creator content is never overwritten.
-                  </span>
-                </div>
-              </div>
-
-              {/* 2. PREFERRED TRANSLATION LANGUAGE (SEARCHABLE 19-LANGUAGE DROPDOWN / SELECTOR) */}
-              <div
-                data-no-translate="true"
-                className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-[#d4af37]" />
-                      <span>Preferred Translation Language</span>
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-0.5">
-                      Target language used when you click <strong>Translate</strong> manually or when <strong>Platform Translation</strong> is enabled. Independent of App Interface Language.
-                    </p>
-                  </div>
-                  <div className="px-2.5 py-1 rounded-lg bg-[#121215] border border-[#d4af37]/40 text-[#fce7b0] font-semibold text-xs shrink-0 self-start sm:self-center">
-                    {preferredTranslationLanguageMeta.englishName} · {preferredTranslationLanguageMeta.nativeName}
-                  </div>
-                </div>
-
-                {/* Searchable Input for Preferred Translation Language */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={translationLangSearch}
-                    onChange={e => setTranslationLangSearch(e.target.value)}
-                    placeholder="Search 19 supported translation languages (English, Arabic, French, Spanish, Urdu...)"
-                    className="w-full bg-[#121215] border border-[#27272a] focus:border-[#d4af37] rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                {/* 19-Language Selectable Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
-                  {filteredTranslationLanguages.map(lang => {
-                    const isSelected = preferredTranslationLanguage === lang.code;
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => setPreferredTranslationLanguage(lang.code)}
-                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-[#d4af37]/15 border-[#d4af37] text-white'
-                            : 'bg-[#121215] border-[#25252e] hover:border-[#383842] text-neutral-300'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="font-bold text-xs text-white flex items-center gap-1.5">
-                            <span>{lang.englishName}</span>
-                            <span className="text-neutral-400 font-normal">({lang.nativeName})</span>
-                            {lang.dir === 'rtl' && (
-                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#d4af37]/20 text-[#fce7b0]">
-                                RTL
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-neutral-500 truncate">
-                            {lang.regionLabel} · {lang.code}
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-[#d4af37] shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 3. APP LANGUAGE (INDEPENDENT INTERFACE LANGUAGE) */}
-              <div className="p-4 bg-[#18181c] border border-[#27272a] rounded-xl space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-2" data-no-translate="true">
-                      <span>App Language (Interface &amp; Navigation Only)</span>
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-0.5" data-no-translate="true">
-                      Changes the language of ACOVON menus, buttons, and navigation. Never enables Platform Translation or alters your Preferred Translation Language.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAppLanguageSection(prev => !prev)}
-                    className="px-3 py-1.5 rounded-xl bg-[#121215] hover:bg-[#1d1d24] border border-[#27272a] text-xs font-semibold text-[#fce7b0] cursor-pointer shrink-0"
-                    data-no-translate="true"
-                  >
-                    {showAppLanguageSection
-                      ? 'Hide App Language'
-                      : `Change (${activeLanguageMeta.englishName})`}
-                  </button>
-                </div>
-
-                {showAppLanguageSection && (
-                  <div className="space-y-3 pt-2 border-t border-[#27272a]">
-                    {/* 3 Language Preference Modes: Automatic, Manual, English */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setUserLanguagePreference('automatic')}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
-                          languagePreferenceMode === 'automatic'
-                            ? 'bg-[#d4af37] text-black border-[#d4af37] font-bold'
-                            : 'bg-[#121215] text-neutral-300 hover:text-white border-[#27272a]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold">Automatic</span>
-                          {languagePreferenceMode === 'automatic' && <Check className="w-3.5 h-3.5" />}
-                        </div>
-                        <div className={`text-[10px] leading-snug ${languagePreferenceMode === 'automatic' ? 'text-black/80' : 'text-neutral-400'}`}>
-                          Follow device language ({detectedDeviceLanguage.matchedLanguageCode.toUpperCase()})
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setUserLanguagePreference('manual', activeLanguageCode)}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
-                          languagePreferenceMode === 'manual'
-                            ? 'bg-[#d4af37] text-black border-[#d4af37] font-bold'
-                            : 'bg-[#121215] text-neutral-300 hover:text-white border-[#27272a]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold">Manual</span>
-                          {languagePreferenceMode === 'manual' && <Check className="w-3.5 h-3.5" />}
-                        </div>
-                        <div className={`text-[10px] leading-snug ${languagePreferenceMode === 'manual' ? 'text-black/80' : 'text-neutral-400'}`}>
-                          Use selected App Language
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setUserLanguagePreference('english', 'en')}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
-                          languagePreferenceMode === 'english'
-                            ? 'bg-[#d4af37] text-black border-[#d4af37] font-bold'
-                            : 'bg-[#121215] text-neutral-300 hover:text-white border-[#27272a]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold" data-no-translate="true">English</span>
-                          {languagePreferenceMode === 'english' && <Check className="w-3.5 h-3.5" />}
-                        </div>
-                        <div className={`text-[10px] leading-snug ${languagePreferenceMode === 'english' ? 'text-black/80' : 'text-neutral-400'}`}>
-                          Lock UI to English (LTR)
-                        </div>
-                      </button>
-                    </div>
-
-                    {/* Search Box for App Language */}
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={appLanguageSearch}
-                        onChange={(e) => setAppLanguageSearch(e.target.value)}
-                        placeholder="Search interface languages..."
-                        className="w-full bg-[#121215] border border-[#27272a] focus:border-[#d4af37] rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none"
-                      />
-                    </div>
-
-                    {/* App Language Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
-                      {filteredAppLanguages.map(lang => {
-                        const isSelected = activeLanguageCode === lang.code;
-                        return (
-                          <button
-                            key={lang.code}
-                            type="button"
-                            onClick={() => setUserLanguagePreference('manual', lang.code)}
-                            className={`p-2 rounded-xl border text-left flex items-center justify-between gap-2 cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-[#d4af37]/15 border-[#d4af37] text-white'
-                                : 'bg-[#121215] border-[#25252e] hover:border-[#383842] text-neutral-300'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div className="font-bold text-xs text-white flex items-center gap-1.5">
-                                <span data-no-translate="true">{lang.nativeName}</span>
-                                <span className="text-[10px] text-neutral-400" data-no-translate="true">
-                                  ({lang.englishName})
-                                </span>
-                              </div>
-                            </div>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-[#d4af37] shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Device Locale Test & Regional Formatting Preview */}
-                    <div className="pt-2 border-t border-[#27272a] space-y-2">
-                      <div className="flex flex-wrap gap-1.5" data-no-translate="true">
-                        {[
-                          { label: 'Real Browser Default', locale: '' },
-                          { label: 'Phone: Arabic (ar-SA)', locale: 'ar-SA' },
-                          { label: 'Phone: French (fr-FR)', locale: 'fr-FR' },
-                          { label: 'Phone: Spanish (es-ES)', locale: 'es-ES' }
-                        ].map(preset => (
-                          <button
-                            key={preset.label}
-                            type="button"
-                            onClick={() => {
-                              setSimulatedBrowserLocale(preset.locale);
-                              setUserLanguagePreference('automatic');
-                            }}
-                            className={`px-2 py-1 rounded-lg border text-[10px] font-medium cursor-pointer transition-colors ${
-                              simulatedBrowserLocale === preset.locale && languagePreferenceMode === 'automatic'
-                                ? 'bg-[#d4af37] text-black border-[#d4af37] font-bold'
-                                : 'bg-[#121215] text-neutral-300 border-[#27272a] hover:text-white'
-                            }`}
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 text-[10px]">
-                        <div className="p-2 rounded-lg bg-[#121215] border border-[#25252e]">
-                          <div className="text-neutral-400">Localized Date</div>
-                          <div className="font-semibold text-white mt-0.5" data-no-translate="true">
-                            {formatLocalizedDate(new Date(), activeLanguageMeta.localeTag)}
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-lg bg-[#121215] border border-[#25252e]">
-                          <div className="text-neutral-400">Number Format</div>
-                          <div className="font-semibold text-white mt-0.5" data-no-translate="true">
-                            {formatLocalizedNumber(148250.75, activeLanguageMeta.localeTag)}
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-lg bg-[#121215] border border-[#25252e]">
-                          <div className="text-neutral-400">Payment Currency</div>
-                          <div className="font-semibold text-[#fce7b0] mt-0.5" data-no-translate="true">
-                            {formatLocalizedCurrency(29.99, activeLanguageMeta.localeTag, 'USD')}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : activeTab === 'personalization' ? (
+          {activeTab === 'personalization' ? (
             <>
               {/* Active Fan Persona Selector */}
               <div className="p-3.5 bg-[#18181c] border border-[#27272a] rounded-xl space-y-2">
@@ -1378,10 +939,10 @@ export const SettingsModal: React.FC<{
             {saved ? (
               <span className="text-emerald-400 font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Language &amp; Translation preferences saved to your account!</span>
+                <span>Preferences saved to your account!</span>
               </span>
             ) : (
-              <span>Changes apply immediately and sync across your sessions.</span>
+              <span>Changes apply immediately to your session.</span>
             )}
           </div>
           <div className="flex items-center gap-2">

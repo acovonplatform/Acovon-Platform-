@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PlatformAnnouncement } from '../../types';
 import { sanitizeAnnouncementHtml } from '../admin/AdminAnnouncementManagementSection';
-import { TranslateContentButton } from './TranslateContentButton';
 import {
   Megaphone,
   Sparkles,
@@ -162,23 +161,14 @@ export const RoleTargetedAnnouncementBanners: React.FC<
                     )}
                   </div>
 
-                  <TranslateContentButton
-                    text={ann.title}
-                    contentType="announcement"
-                    contentRef={`ann_title_${ann.id}`}
-                    renderPrimaryText
-                    textClassName="text-xs sm:text-sm font-bold text-white leading-snug"
-                    compact
-                  />
-                  <TranslateContentButton
-                    text={ann.summary}
-                    contentType="announcement"
-                    contentRef={`ann_summary_${ann.id}`}
-                    renderPrimaryText
-                    textClassName="text-xs text-neutral-300 mt-0.5 leading-relaxed"
-                    compact
-                    className="mt-1"
-                  />
+                  <h4 className="text-xs sm:text-sm font-bold text-white leading-snug">
+                    {ann.title}
+                  </h4>
+                  {ann.summary && (
+                    <p className="text-xs text-neutral-300 mt-1 leading-relaxed">
+                      {ann.summary}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -345,14 +335,9 @@ export const ImportantAnnouncementPopupModal: React.FC<AnnouncementActionProps> 
             )}
           </div>
 
-          <TranslateContentButton
-            text={activePopupAnnouncement.title}
-            contentType="announcement"
-            contentRef={`ann_popup_title_${activePopupAnnouncement.id}`}
-            renderPrimaryText
-            textClassName="text-base font-bold font-brand text-white leading-snug"
-            compact
-          />
+          <h3 className="text-base font-bold font-brand text-white leading-snug">
+            {activePopupAnnouncement.title}
+          </h3>
 
           <div
             className="text-neutral-300 space-y-2 leading-relaxed max-h-60 overflow-y-auto pr-1"
@@ -361,12 +346,11 @@ export const ImportantAnnouncementPopupModal: React.FC<AnnouncementActionProps> 
             }}
           />
 
-          <TranslateContentButton
-            text={activePopupAnnouncement.summary}
-            contentType="announcement"
-            contentRef={`ann_popup_summary_${activePopupAnnouncement.id}`}
-            compact
-          />
+          {activePopupAnnouncement.summary && (
+            <p className="text-xs text-neutral-400 leading-relaxed">
+              {activePopupAnnouncement.summary}
+            </p>
+          )}
 
           <div className="pt-4 border-t border-[#252530] flex flex-wrap items-center justify-between gap-2.5">
             {activePopupAnnouncement.cta.enabled && activePopupAnnouncement.cta.label ? (
@@ -720,14 +704,9 @@ export const AnnouncementCenterModal: React.FC<
                       </span>
                     </div>
 
-                    <TranslateContentButton
-                      text={activeAnnouncement.title}
-                      contentType="announcement"
-                      contentRef={`ann_center_title_${activeAnnouncement.id}`}
-                      renderPrimaryText
-                      textClassName="text-lg font-bold font-brand text-white leading-snug"
-                      compact
-                    />
+                    <h3 className="text-lg font-bold font-brand text-white leading-snug">
+                      {activeAnnouncement.title}
+                    </h3>
 
                     <div
                       className="p-4 rounded-2xl bg-[#16161e] border border-[#262632] text-neutral-200 space-y-2.5 leading-relaxed text-xs"
@@ -736,12 +715,11 @@ export const AnnouncementCenterModal: React.FC<
                       }}
                     />
 
-                    <TranslateContentButton
-                      text={activeAnnouncement.summary}
-                      contentType="announcement"
-                      contentRef={`ann_center_summary_${activeAnnouncement.id}`}
-                      compact
-                    />
+                    {activeAnnouncement.summary && (
+                      <p className="text-xs text-neutral-400 leading-relaxed">
+                        {activeAnnouncement.summary}
+                      </p>
+                    )}
 
                     <div className="pt-4 border-t border-[#252530] flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">

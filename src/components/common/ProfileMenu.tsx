@@ -22,7 +22,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Globe,
   FolderLock
 } from 'lucide-react';
 
@@ -65,19 +64,11 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
     logoutUser,
     appearanceMode,
     resolvedColorMode,
-    setAppearanceMode,
-    activeLanguageMeta,
-    supportedLanguages,
-    activeLanguageCode,
-    setUserLanguagePreference,
-    platformTranslationEnabled,
-    setPlatformTranslationEnabled,
-    preferredTranslationLanguageMeta
+    setAppearanceMode
   } = useApp();
   const isCreator = isCurrentUserApprovedCreator;
   const [isOpen, setIsOpen] = useState(false);
   const [showPersonaSubmenu, setShowPersonaSubmenu] = useState(false);
-  const [showLanguageSubmenu, setShowLanguageSubmenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -362,76 +353,6 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
                 <span>Settings</span>
               </div>
             </button>
-
-            {/* Language & Translation in Profile Menu */}
-            <button
-              type="button"
-              onClick={() => setShowLanguageSubmenu(prev => !prev)}
-              className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:text-white hover:bg-[#1a1a20] rounded-lg transition-colors flex items-center justify-between cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <Globe className="w-4 h-4 text-[#d4af37]" />
-                <span data-no-translate="true">Language &amp; Translation</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-                    platformTranslationEnabled
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                  }`}
-                  data-no-translate="true"
-                >
-                  {platformTranslationEnabled ? 'ON' : 'OFF'}
-                </span>
-                <ChevronRight
-                  className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${
-                    showLanguageSubmenu ? 'rotate-90' : ''
-                  }`}
-                />
-              </div>
-            </button>
-
-            {showLanguageSubmenu && (
-              <div className="p-2 space-y-2 bg-[#16161b] rounded-xl border border-[#27272a] my-1">
-                {/* Quick Platform Translation Toggle (Default Disabled) */}
-                <div className="p-2 rounded-lg bg-[#121216] border border-[#26262f] space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[11px] font-bold text-white">Platform Translation</div>
-                      <div className="text-[10px] text-neutral-400" data-no-translate="true">
-                        Target: {preferredTranslationLanguageMeta.englishName}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPlatformTranslationEnabled(!platformTranslationEnabled)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
-                        platformTranslationEnabled
-                          ? 'bg-emerald-500 text-black'
-                          : 'bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700'
-                      }`}
-                      data-no-translate="true"
-                    >
-                      {platformTranslationEnabled ? 'Enabled' : 'Disabled'}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOpen(false);
-                    setShowLanguageSubmenu(false);
-                    onOpenSettings();
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-[#fce7b0] bg-[#1a1810] hover:bg-[#242116] border border-[#d4af37]/30 flex items-center justify-between cursor-pointer"
-                >
-                  <span>Language &amp; Translation Settings</span>
-                  <ChevronRight className="w-3 h-3 text-[#d4af37]" />
-                </button>
-              </div>
-            )}
 
             <button
               onClick={() => {

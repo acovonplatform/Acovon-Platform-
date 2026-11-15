@@ -1082,6 +1082,39 @@ export class AuthoritativePostStore {
     };
   }
 
+  deletePostsByCreator(creatorId: string): string[] {
+    if (!creatorId) return [];
+    const db = this.readPostsDB();
+    const deletedIds = new Set<string>(db.deletedPostIds);
+    const removedHere: string[] = [];
+
+    for (const [pid, post] of Object.entries(db.createdPosts)) {
+      if (post && post.creatorId === creatorId) {
+        delete db.createdPosts[pid];
+        deletedIds.add(pid);
+        removedHere.push(pid);
+      }
+    }
+    for (const [pid, post] of Object.entries(db.updatedPosts)) {
+      if (post && post.creatorId === creatorId) {
+        delete db.updatedPosts[pid];
+        deletedIds.add(pid);
+        removedHere.push(pid);
+      }
+    }
+    for (const [pid, post] of Object.entries(db.archivedPostsForPurchasers)) {
+      if (post && post.creatorId === creatorId) {
+        delete db.archivedPostsForPurchasers[pid];
+      }
+    }
+
+    db.deletedPostIds = Array.from(deletedIds);
+    if (removedHere.length > 0) {
+      this.writePostsDB(db);
+    }
+    return removedHere;
+  }
+
   auditPostIntegrity(): PostAuditReport {
     const db = this.readPostsDB();
     const revDb = this.readRevisionsDB();

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, MediaAsset } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   X, 
   ZoomIn, 
@@ -441,14 +441,11 @@ export const FullScreenPhotoModal: React.FC<FullScreenPhotoModalProps> = ({
             onClick={e => e.stopPropagation()}
             className="max-w-4xl mx-auto mb-2.5"
           >
-            <TranslateContentButton
+            <CollapsibleDescriptionText
               text={currentPost.content}
-              contentType="post"
-              contentRef={`photo_viewer_${currentPost.id}`}
-              renderPrimaryText
-              collapsible
               compact
               linkify
+              resetKey={currentPost.id}
               variant="overlay"
               maxExpandedHeightClass="max-h-[24dvh] overflow-y-auto"
               textClassName="text-xs sm:text-sm text-neutral-200 leading-relaxed"

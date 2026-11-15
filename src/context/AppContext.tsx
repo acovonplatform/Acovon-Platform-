@@ -88,7 +88,6 @@ import {
   BrandingHistoryRecord,
   CategoryRecord,
   CountryRecord,
-  UserTranslationPreferences,
   CreatorApplicationAuditRecord
 } from '../types';
 import {
@@ -103,8 +102,6 @@ import {
   applyThemeToDocument
 } from '../data/brandingThemes';
 import { getLocalSampleThumbnails } from '../utils/videoFrameExtractor';
-import { INITIAL_SUPPORTED_LANGUAGES, INITIAL_TRANSLATION_RECORDS, EXTENDED_UI_PHRASE_DICTIONARY, detectSupportedBrowserLanguage, detectTextLanguage, translateAndCacheUGC, SupportedLanguageCode, LanguagePreferenceMode, LanguageMetadata, TranslationKeyRecord } from '../data/i18nData';
-import { PLATFORM_WIDE_PHRASE_TRANSLATIONS } from '../data/i18nExtendedPhrases';
 import {
   logoutFromSupabase,
   syncUserPreferencesToSupabase,
@@ -502,8 +499,19 @@ interface AppContextType {
       isVerified?: boolean;
       adminPermissionLevel?: AdminPermissionLevel;
       adminPermissions?: string[];
+      bypassApproval?: boolean;
     }
   ) => { success: boolean; error?: string };
+  adminForceConvertToCreator: (userId: string) => Promise<{
+    success: boolean;
+    user?: User;
+    creatorProfile?: CreatorProfile;
+    error?: string;
+  }>;
+  adminDeleteUserAccount: (userId: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   adminAddOrPromoteAdmin: (input: {
     email: string;
     name?: string;
@@ -922,68 +930,15 @@ interface AppContextType {
     user?: User | CreatorProfile;
     error?: string;
   };
-
-  // Multilingual Platform & Independent Content Translation System (19 Languages + RTL/LTR + Admin i18n Management)
-  supportedLanguages: LanguageMetadata[];
-  activeLanguageCode: SupportedLanguageCode;
-  activeLanguageMeta: LanguageMetadata;
-  languagePreferenceMode: LanguagePreferenceMode;
-  manualSelectedLanguageCode: SupportedLanguageCode;
-  detectedDeviceLanguage: {
-    detectedRawLocale: string;
-    matchedLanguageCode: SupportedLanguageCode;
-    isSupportedDirectMatch: boolean;
-  };
-  simulatedBrowserLocale: string;
-  setSimulatedBrowserLocale: (locale: string) => void;
-  setUserLanguagePreference: (
-    mode: LanguagePreferenceMode,
-    manualCode?: SupportedLanguageCode
-  ) => void;
-  // Independent User Content Translation Settings (Default: Platform Translation DISABLED)
-  preferredTranslationLanguage: SupportedLanguageCode;
-  preferredTranslationLanguageMeta: LanguageMetadata;
-  platformTranslationEnabled: boolean;
-  setPreferredTranslationLanguage: (langCode: SupportedLanguageCode) => void;
-  setPlatformTranslationEnabled: (enabled: boolean) => void;
-  saveUserTranslationSettings: (input: {
-    preferredTranslationLanguage?: SupportedLanguageCode;
-    platformTranslationEnabled?: boolean;
-    appLanguage?: SupportedLanguageCode;
-    appLanguageMode?: LanguagePreferenceMode;
-  }) => Promise<{ success: boolean }>;
-  translateContentItem: (params: {
-    contentRef?: string;
-    text: string;
-    targetLang?: SupportedLanguageCode;
-    sourceLang?: SupportedLanguageCode;
-  }) => {
-    translatedText: string;
-    detectedSourceLang: SupportedLanguageCode;
-    detectedSourceEnglishName: string;
-    detectedSourceNativeName: string;
-    targetLang: SupportedLanguageCode;
-    targetLangEnglishName: string;
-    targetLangNativeName: string;
-    targetDir: 'ltr' | 'rtl';
-    cacheKey: string;
-  };
-  t: (keyOrPhrase: string, fallbackText?: string) => string;
-  translatePhrase: (englishPhrase: string) => string;
-  translationRecords: TranslationKeyRecord[];
-  adminToggleLanguageEnabled: (code: SupportedLanguageCode) => { success: boolean; error?: string };
-  adminUpdateTranslationEntry: (
-    key: string,
-    langCode: SupportedLanguageCode,
-    newValue: string
-  ) => { success: boolean; error?: string };
-  adminAddTranslationKey: (input: {
-    key: string;
-    category: TranslationKeyRecord['category'];
-    englishText: string;
-    initialTranslations?: Partial<Record<SupportedLanguageCode, string>>;
-  }) => { success: boolean; error?: string };
-  adminPublishTranslations: (notes?: string) => { success: boolean; error?: string };
+  completePlatformLogin: (
+    session: { user?: any; access_token?: string } | null,
+    passwordInput?: string
+  ) => Promise<{
+    success: boolean;
+    detectedRole?: UserRole;
+    user?: User | CreatorProfile;
+    error?: string;
+  }>;
 
   // Global Categories & Countries Discovery System
   categories: CategoryRecord[];
@@ -1017,14 +972,32 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication State verified against real Supabase session
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const hasPersistedAdminSession = (): boolean => {
+    try {
+      const token = localStorage.getItem('acovon_admin_token');
+      const authFlag = localStorage.getItem('acovon_is_authenticated');
+      const savedUserStr = localStorage.getItem('acovon_current_user');
+      if (!token || authFlag !== 'true' || !savedUserStr) return false;
+      const parsed = JSON.parse(savedUserStr);
+      return Boolean(
+        parsed &&
+          (parsed.role === 'admin' ||
+            parsed.role === 'moderator' ||
+            parsed.adminPermissionLevel)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // Authentication State verified against real Supabase session or active persisted admin session
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => hasPersistedAdminSession());
 
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
-      const hasSession = Boolean(data.session);
+      const hasSession = Boolean(data.session) || hasPersistedAdminSession();
       setIsAuthenticated(hasSession);
       try {
         localStorage.setItem('acovon_is_authenticated', hasSession ? 'true' : 'false');
@@ -1033,9 +1006,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      const hasSession = Boolean(session);
+      const hasSession =
+        event === 'SIGNED_OUT' ? false : Boolean(session) || hasPersistedAdminSession();
       setIsAuthenticated(hasSession);
       try {
         localStorage.setItem('acovon_is_authenticated', hasSession ? 'true' : 'false');
@@ -1333,12 +1307,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const normalizeUsersMap = (rawMap: Record<string, any>): Record<string, User> => {
+  const [deletedUserIds, setDeletedUserIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('acovon_deleted_user_ids_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const deletedUserIdsRef = useRef<string[]>(deletedUserIds);
+  useEffect(() => {
+    deletedUserIdsRef.current = deletedUserIds;
+    try {
+      localStorage.setItem('acovon_deleted_user_ids_v1', JSON.stringify(deletedUserIds));
+    } catch {
+      // ignore
+    }
+  }, [deletedUserIds]);
+
+  const isDeletedUserIdentifier = (
+    val?: { id?: string; email?: string } | string,
+    deletedList: string[] = deletedUserIdsRef.current
+  ): boolean => {
+    if (deletedList.length === 0) return false;
+    const set = new Set(deletedList.map(x => String(x || '').trim().toLowerCase()));
+    if (typeof val === 'string') {
+      return set.has(val.trim().toLowerCase());
+    }
+    if (!val) return false;
+    const idLower = String(val.id || '').trim().toLowerCase();
+    const emailLower = String(val.email || '').trim().toLowerCase();
+    return Boolean((idLower && set.has(idLower)) || (emailLower && set.has(emailLower)));
+  };
+
+  const normalizeUsersMap = (
+    rawMap: Record<string, any>,
+    deletedList: string[] = deletedUserIds
+  ): Record<string, User> => {
+    const deletedSet = new Set(deletedList.map(id => String(id || '').trim().toLowerCase()));
     const adminById = new Map(Object.values(PLATFORM_ADMIN_ACCOUNTS).map(u => [u.id, u]));
-    const result: Record<string, User> = { ...PLATFORM_ADMIN_ACCOUNTS };
+    const result: Record<string, User> = {};
+    Object.entries(PLATFORM_ADMIN_ACCOUNTS).forEach(([k, adminU]) => {
+      if (
+        !deletedSet.has(k.toLowerCase()) &&
+        !deletedSet.has(adminU.id.toLowerCase()) &&
+        !deletedSet.has(adminU.email.toLowerCase())
+      ) {
+        result[k] = adminU;
+      }
+    });
     Object.entries(rawMap || {}).forEach(([key, val]) => {
       if (!val || typeof val !== 'object') return;
       if (DEMO_USER_IDS.has(key) || DEMO_USER_IDS.has(String(val.id || ''))) return;
+      if (
+        deletedSet.has(key.toLowerCase()) ||
+        deletedSet.has(String(val.id || '').trim().toLowerCase()) ||
+        deletedSet.has(String(val.email || '').trim().toLowerCase())
+      ) {
+        return;
+      }
       const fallback = PLATFORM_ADMIN_ACCOUNTS[key] || (val.id ? adminById.get(String(val.id)) : undefined);
       const normalized = normalizeUserRecord(val, fallback);
       if (normalized) {
@@ -1354,13 +1388,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          return normalizeUsersMap(parsed);
+          return normalizeUsersMap(parsed, deletedUserIds);
         }
       }
     } catch {
       // fallback
     }
-    return { ...PLATFORM_ADMIN_ACCOUNTS };
+    return normalizeUsersMap({}, deletedUserIds);
   });
 
   const usersRef = useRef<Record<string, User>>(users);
@@ -1389,6 +1423,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const uid = String(row.uid || row.id || '');
             const email = String(row.email || '').toLowerCase();
             if (!uid) return;
+            if (isDeletedUserIdentifier({ id: uid, email })) return;
             const rowRole = ((row.role as UserRole) || 'fan');
             const isCreatorRow = rowRole === 'creator';
             const isAdminRow = rowRole === 'admin' || rowRole === 'moderator';
@@ -1642,8 +1677,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             authUser.role === 'admin' ||
             authUser.role === 'moderator' ||
             Boolean(authUser.adminPermissionLevel);
-          if (!preserveAdminSession) {
+          let currentStoredEmail = '';
+          try {
+            const raw = localStorage.getItem('acovon_current_user');
+            if (raw) currentStoredEmail = String(JSON.parse(raw)?.email || '').trim().toLowerCase();
+          } catch {
+            // ignore
+          }
+          const isSameAdminUser = !currentStoredEmail || currentStoredEmail === email;
+          if (!preserveAdminSession || (isAuthUserAdmin && isSameAdminUser)) {
             setIsAuthenticated(true);
+            try {
+              localStorage.setItem('acovon_is_authenticated', 'true');
+            } catch {
+              // ignore
+            }
             if (isAuthUserAdmin) {
               const effectiveAdminRole: UserRole =
                 authUser.role === 'moderator' ? 'moderator' : 'admin';
@@ -1659,24 +1707,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (data.adminToken) {
                 refreshCreatorApplications({ reconcile: true, token: String(data.adminToken) }).catch(() => {});
               }
-            } else if (authUser.role === 'creator') {
-              setCurrentUser(data.creatorProfile || authUser);
-              setActiveRole('creator');
-            } else {
-              setCurrentUser(prev => {
-                const prevEmail = String(prev?.email || '').trim().toLowerCase();
-                if (
-                  !prevEmail ||
-                  prevEmail === email ||
-                  prev?.id === 'user_fan_1' ||
-                  prev?.id === 'guest_visitor' ||
-                  prev?.id === authUser.id
-                ) {
-                  return authUser;
-                }
-                return prev;
-              });
-              setActiveRole(authUser.role || 'fan');
+            } else if (!preserveAdminSession) {
+              if (authUser.role === 'creator') {
+                setCurrentUser(data.creatorProfile || authUser);
+                setActiveRole('creator');
+              } else {
+                setCurrentUser(prev => {
+                  const prevEmail = String(prev?.email || '').trim().toLowerCase();
+                  if (
+                    !prevEmail ||
+                    prevEmail === email ||
+                    prev?.id === 'user_fan_1' ||
+                    prev?.id === 'guest_visitor' ||
+                    prev?.id === authUser.id
+                  ) {
+                    return authUser;
+                  }
+                  return prev;
+                });
+                setActiveRole(authUser.role || 'fan');
+              }
             }
           }
         })
@@ -1704,469 +1754,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sub.subscription.unsubscribe();
     };
   }, []);
-
-  // ============================================================================
-  // MULTILINGUAL PLATFORM & AUTOMATIC LANGUAGE DETECTION STATE
-  // ============================================================================
-  const [supportedLanguages, setSupportedLanguages] = useState<LanguageMetadata[]>(() => {
-    try {
-      const saved = localStorage.getItem('acovon_supported_languages_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 19) return parsed;
-      }
-    } catch {
-      // fallback
-    }
-    return INITIAL_SUPPORTED_LANGUAGES;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('acovon_supported_languages_v1', JSON.stringify(supportedLanguages));
-    } catch {
-      // ignore
-    }
-  }, [supportedLanguages]);
-
-  const [translationRecords, setTranslationRecords] = useState<TranslationKeyRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('acovon_translation_records_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // fallback
-    }
-    return INITIAL_TRANSLATION_RECORDS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('acovon_translation_records_v1', JSON.stringify(translationRecords));
-    } catch {
-      // ignore
-    }
-  }, [translationRecords]);
-
-  // Optional simulated device/browser locale (allows testing automatic phone language detection)
-  const [simulatedBrowserLocale, setSimulatedBrowserLocaleState] = useState<string>(() => {
-    try {
-      return localStorage.getItem('acovon_simulated_browser_locale') || '';
-    } catch {
-      return '';
-    }
-  });
-
-  const setSimulatedBrowserLocale = (locale: string) => {
-    setSimulatedBrowserLocaleState(locale);
-    try {
-      if (locale) {
-        localStorage.setItem('acovon_simulated_browser_locale', locale);
-      } else {
-        localStorage.removeItem('acovon_simulated_browser_locale');
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  // Account-linked & Guest Independent Language & Translation Preferences Map
-  // CRITICAL REQUIREMENT: platform_translation_enabled MUST be false by default for every new user,
-  // existing user without an explicit saved preference, and guest session.
-  const [userTranslationSettingsMap, setUserTranslationSettingsMap] = useState<
-    Record<string, UserTranslationPreferences>
-  >(() => {
-    try {
-      const saved = localStorage.getItem('acovon_user_translation_prefs_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          const sanitized: Record<string, UserTranslationPreferences> = {};
-          for (const [uid, rawRec] of Object.entries(parsed)) {
-            if (uid && rawRec && typeof rawRec === 'object') {
-              const r = rawRec as Partial<UserTranslationPreferences>;
-              sanitized[uid] = {
-                userId: uid,
-                preferred_translation_language: r.preferred_translation_language || 'en',
-                // Never interpret a missing or non-explicit value as enabled
-                platform_translation_enabled:
-                  r.explicitly_saved === true && r.platform_translation_enabled === true
-                    ? true
-                    : false,
-                app_language: r.app_language || 'en',
-                app_language_mode: r.app_language_mode || 'manual',
-                explicitly_saved: Boolean(r.explicitly_saved),
-                updated_at: r.updated_at || new Date().toISOString()
-              };
-            }
-          }
-          return sanitized;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return {};
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'acovon_user_translation_prefs_v2',
-        JSON.stringify(userTranslationSettingsMap)
-      );
-    } catch {
-      // ignore
-    }
-  }, [userTranslationSettingsMap]);
-
-  // Hydrate per-user translation settings from backend on mount
-  useEffect(() => {
-    let active = true;
-    fetch('/api/translation/settings')
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        if (!active || !data?.success || !data.settingsByUser) return;
-        setUserTranslationSettingsMap(prev => {
-          const merged = { ...prev };
-          for (const [uid, rec] of Object.entries(
-            data.settingsByUser as Record<string, UserTranslationPreferences>
-          )) {
-            if (uid && rec) {
-              merged[uid] = {
-                userId: uid,
-                preferred_translation_language: rec.preferred_translation_language || 'en',
-                platform_translation_enabled:
-                  rec.explicitly_saved === true && rec.platform_translation_enabled === true
-                    ? true
-                    : false,
-                app_language: rec.app_language || 'en',
-                app_language_mode: rec.app_language_mode || 'manual',
-                explicitly_saved: Boolean(rec.explicitly_saved),
-                updated_at: rec.updated_at || new Date().toISOString()
-              };
-            }
-          }
-          return merged;
-        });
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const detectedDeviceLanguage = detectSupportedBrowserLanguage(
-    simulatedBrowserLocale || undefined,
-    supportedLanguages
-  );
-
-  // Resolve current user's or guest's independent settings slot
-  const activeAccountLangSlot = isAuthenticated && currentUser?.id ? currentUser.id : '__guest__';
-  const savedSlotSettings: UserTranslationPreferences = userTranslationSettingsMap[
-    activeAccountLangSlot
-  ] || {
-    userId: activeAccountLangSlot,
-    preferred_translation_language:
-      (currentUser?.preferred_translation_language as SupportedLanguageCode) || 'en',
-    // Strictly false unless explicitly saved as true for this specific user
-    platform_translation_enabled: false,
-    app_language: (currentUser?.app_language as SupportedLanguageCode) || 'en',
-    app_language_mode: currentUser?.languagePreferenceMode || 'manual',
-    explicitly_saved: false,
-    updated_at: new Date().toISOString()
-  };
-
-  const languagePreferenceMode: LanguagePreferenceMode =
-    savedSlotSettings.app_language_mode || 'manual';
-  const manualSelectedLanguageCode: SupportedLanguageCode =
-    (savedSlotSettings.app_language as SupportedLanguageCode) || 'en';
-
-  // Compute effective active App Language (interface language) with English fallback
-  const rawResolvedLangCode: SupportedLanguageCode =
-    languagePreferenceMode === 'english'
-      ? 'en'
-      : languagePreferenceMode === 'manual'
-      ? manualSelectedLanguageCode
-      : detectedDeviceLanguage.matchedLanguageCode;
-
-  const matchedEnabledMeta = supportedLanguages.find(
-    l => l.code === rawResolvedLangCode && l.enabled
-  );
-  const englishFallbackMeta =
-    supportedLanguages.find(l => l.code === 'en') || INITIAL_SUPPORTED_LANGUAGES[0];
-
-  const activeLanguageMeta: LanguageMetadata = matchedEnabledMeta || englishFallbackMeta;
-  const activeLanguageCode: SupportedLanguageCode = activeLanguageMeta.code;
-
-  // Independent Preferred Translation Language & Platform Translation Toggle State
-  const rawPreferredTranslationCode =
-    (savedSlotSettings.preferred_translation_language as SupportedLanguageCode) || 'en';
-  const preferredTranslationLanguageMeta: LanguageMetadata =
-    supportedLanguages.find(l => l.code === rawPreferredTranslationCode) || englishFallbackMeta;
-  const preferredTranslationLanguage: SupportedLanguageCode =
-    preferredTranslationLanguageMeta.code;
-
-  // CRITICAL: Default is strictly false; only true if explicitly saved as true for this user/guest
-  const platformTranslationEnabled: boolean =
-    savedSlotSettings.explicitly_saved === true &&
-    savedSlotSettings.platform_translation_enabled === true;
-
-  // Apply dynamic LTR / RTL direction & lang attribute to document root for App Language
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    root.lang = activeLanguageMeta.code;
-    root.dir = activeLanguageMeta.dir;
-    root.setAttribute('data-lang', activeLanguageMeta.code);
-    root.setAttribute('data-dir', activeLanguageMeta.dir);
-  }, [activeLanguageMeta]);
-
-  const persistUserTranslationRecord = (
-    slotId: string,
-    nextRecord: UserTranslationPreferences
-  ) => {
-    setUserTranslationSettingsMap(prev => ({
-      ...prev,
-      [slotId]: nextRecord
-    }));
-
-    // Persist to backend API independently per user ID
-    fetch(`/api/translation/settings/${encodeURIComponent(slotId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        preferred_translation_language: nextRecord.preferred_translation_language,
-        platform_translation_enabled: nextRecord.platform_translation_enabled === true,
-        app_language: nextRecord.app_language,
-        app_language_mode: nextRecord.app_language_mode
-      })
-    }).catch(() => {});
-
-    // Also update currentUser & users map if authenticated
-    if (isAuthenticated && currentUser?.id && slotId === currentUser.id) {
-      const updatedUser: User | CreatorProfile = {
-        ...currentUser,
-        preferred_translation_language: nextRecord.preferred_translation_language,
-        platform_translation_enabled: nextRecord.platform_translation_enabled === true,
-        app_language: nextRecord.app_language,
-        preferredLanguageCode: nextRecord.app_language,
-        languagePreferenceMode: nextRecord.app_language_mode
-      };
-      setCurrentUser(updatedUser);
-      try {
-        localStorage.setItem('acovon_current_user', JSON.stringify(updatedUser));
-      } catch {
-        // ignore
-      }
-      setUsers(prev => {
-        if (!prev[currentUser.id]) return prev;
-        const nextUsers = {
-          ...prev,
-          [currentUser.id]: {
-            ...prev[currentUser.id],
-            preferred_translation_language: nextRecord.preferred_translation_language,
-            platform_translation_enabled: nextRecord.platform_translation_enabled === true,
-            app_language: nextRecord.app_language,
-            preferredLanguageCode: nextRecord.app_language,
-            languagePreferenceMode: nextRecord.app_language_mode
-          }
-        };
-        try {
-          localStorage.setItem('acovon_users_v2', JSON.stringify(nextUsers));
-        } catch {
-          // ignore
-        }
-        return nextUsers;
-      });
-    }
-  };
-
-  // App Language setter — strictly independent from Preferred Translation Language & Platform Translation!
-  const setUserLanguagePreference = (
-    mode: LanguagePreferenceMode,
-    manualCode?: SupportedLanguageCode
-  ) => {
-    const nextAppLang: SupportedLanguageCode =
-      mode === 'english'
-        ? 'en'
-        : mode === 'automatic'
-        ? detectedDeviceLanguage.matchedLanguageCode
-        : manualCode || manualSelectedLanguageCode || 'en';
-
-    const nextRecord: UserTranslationPreferences = {
-      userId: activeAccountLangSlot,
-      preferred_translation_language: preferredTranslationLanguage,
-      platform_translation_enabled: platformTranslationEnabled,
-      app_language: nextAppLang,
-      app_language_mode: mode,
-      explicitly_saved: true,
-      updated_at: new Date().toISOString()
-    };
-
-    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
-  };
-
-  // Preferred Translation Language setter — strictly independent from App Language and does NOT auto-enable Platform Translation
-  const setPreferredTranslationLanguage = (langCode: SupportedLanguageCode) => {
-    const validMeta =
-      supportedLanguages.find(l => l.code === langCode) || englishFallbackMeta;
-
-    const nextRecord: UserTranslationPreferences = {
-      userId: activeAccountLangSlot,
-      preferred_translation_language: validMeta.code,
-      platform_translation_enabled: platformTranslationEnabled,
-      app_language: activeLanguageCode,
-      app_language_mode: languagePreferenceMode,
-      explicitly_saved: true,
-      updated_at: new Date().toISOString()
-    };
-
-    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
-  };
-
-  // Platform Translation Enable/Disable setter — takes effect immediately across all supported content
-  const setPlatformTranslationEnabled = (enabled: boolean) => {
-    const nextRecord: UserTranslationPreferences = {
-      userId: activeAccountLangSlot,
-      preferred_translation_language: preferredTranslationLanguage,
-      platform_translation_enabled: Boolean(enabled === true),
-      app_language: activeLanguageCode,
-      app_language_mode: languagePreferenceMode,
-      explicitly_saved: true,
-      updated_at: new Date().toISOString()
-    };
-
-    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
-  };
-
-  const saveUserTranslationSettings = async (input: {
-    preferredTranslationLanguage?: SupportedLanguageCode;
-    platformTranslationEnabled?: boolean;
-    appLanguage?: SupportedLanguageCode;
-    appLanguageMode?: LanguagePreferenceMode;
-  }): Promise<{ success: boolean }> => {
-    const nextPrefLang = input.preferredTranslationLanguage || preferredTranslationLanguage;
-    const nextEnabled =
-      typeof input.platformTranslationEnabled === 'boolean'
-        ? input.platformTranslationEnabled
-        : platformTranslationEnabled;
-    const nextAppMode = input.appLanguageMode || languagePreferenceMode;
-    const nextAppLang =
-      nextAppMode === 'english'
-        ? 'en'
-        : nextAppMode === 'automatic'
-        ? detectedDeviceLanguage.matchedLanguageCode
-        : input.appLanguage || activeLanguageCode;
-
-    const nextRecord: UserTranslationPreferences = {
-      userId: activeAccountLangSlot,
-      preferred_translation_language: nextPrefLang,
-      platform_translation_enabled: Boolean(nextEnabled === true),
-      app_language: nextAppLang,
-      app_language_mode: nextAppMode,
-      explicitly_saved: true,
-      updated_at: new Date().toISOString()
-    };
-
-    persistUserTranslationRecord(activeAccountLangSlot, nextRecord);
-    return { success: true };
-  };
-
-  const translateContentItem = React.useCallback(
-    (params: {
-      contentRef?: string;
-      text: string;
-      targetLang?: SupportedLanguageCode;
-      sourceLang?: SupportedLanguageCode;
-    }) => {
-      const targetCode = params.targetLang || preferredTranslationLanguage;
-      const result = translateAndCacheUGC({
-        contentRef: params.contentRef,
-        text: params.text,
-        targetLang: targetCode,
-        sourceLang: params.sourceLang
-      });
-
-      // Asynchronously warm backend translation cache without blocking UI rendering
-      if (params.text && params.text.trim()) {
-        fetch('/api/translation/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contentRef: params.contentRef,
-            text: params.text,
-            sourceLang: result.detectedSourceLang,
-            targetLang: result.targetLang
-          })
-        }).catch(() => {});
-      }
-
-      return result;
-    },
-    [preferredTranslationLanguage]
-  );
-
-  // Build fast lookup maps for t() and translatePhrase()
-  const keyLookupMap = React.useMemo(() => {
-    const byKey = new Map<string, TranslationKeyRecord>();
-    const byEnglishPhrase = new Map<string, Record<SupportedLanguageCode, string>>();
-    translationRecords.forEach(rec => {
-      byKey.set(rec.key, rec);
-      byEnglishPhrase.set(rec.englishText.trim(), rec.translations);
-    });
-    return { byKey, byEnglishPhrase };
-  }, [translationRecords]);
-
-  const translatePhrase = React.useCallback(
-    (englishPhrase: string): string => {
-      if (!englishPhrase || activeLanguageCode === 'en') return englishPhrase;
-      const trimmed = englishPhrase.trim();
-      if (!trimmed) return englishPhrase;
-
-      // 1. Check Admin-managed translation records by exact English text
-      const fromRecords = keyLookupMap.byEnglishPhrase.get(trimmed);
-      if (fromRecords && fromRecords[activeLanguageCode]) {
-        return englishPhrase.replace(trimmed, fromRecords[activeLanguageCode]);
-      }
-
-      // 2. Check Extended UI Phrase Dictionary
-      const fromExtended = EXTENDED_UI_PHRASE_DICTIONARY[trimmed]?.[activeLanguageCode];
-      if (fromExtended) {
-        return englishPhrase.replace(trimmed, fromExtended);
-      }
-
-      // 3. Check Platform-Wide Phrase Translations
-      const fromPlatform = PLATFORM_WIDE_PHRASE_TRANSLATIONS[trimmed]?.[activeLanguageCode];
-      if (fromPlatform) {
-        return englishPhrase.replace(trimmed, fromPlatform);
-      }
-
-      return englishPhrase;
-    },
-    [activeLanguageCode, keyLookupMap]
-  );
-
-  const t = React.useCallback(
-    (keyOrPhrase: string, fallbackText?: string): string => {
-      const record = keyLookupMap.byKey.get(keyOrPhrase);
-      if (record) {
-        const translated = record.translations[activeLanguageCode];
-        if (translated && translated.trim().length > 0) {
-          return translated;
-        }
-        // Fallback to English if missing in selected language
-        return record.englishText || fallbackText || keyOrPhrase;
-      }
-
-      // Try phrase translation if passed a literal string
-      const sourceText = fallbackText || keyOrPhrase;
-      return translatePhrase(sourceText);
-    },
-    [activeLanguageCode, keyLookupMap, translatePhrase]
-  );
 
   const [creators, setCreators] = useState<CreatorProfile[]>(() => {
     try {
@@ -3714,6 +3301,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return true;
     }
 
+    // Explicit Admin Creator approval / force-conversion on userRecord takes precedence over stale cached applications
+    const approvalStatus = userRecord?.creatorApprovalStatus || userRecord?.creatorApplicationStatus;
+    if (userRecord?.role === 'creator' && approvalStatus === 'approved') {
+      return true;
+    }
+
     // Latest application status takes precedence if pending/info_requested/rejected
     if (
       latestVerif?.status === 'pending' ||
@@ -3727,8 +3320,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return true;
     }
 
-    // Check explicit approval status on userRecord
-    const approvalStatus = userRecord?.creatorApprovalStatus || userRecord?.creatorApplicationStatus;
     if (approvalStatus === 'pending' || approvalStatus === 'rejected') {
       return false;
     }
@@ -3754,6 +3345,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!currentUser?.id) return;
     const cleanEmail = String(currentUser.email || '').trim().toLowerCase();
+    if (isDeletedUserIdentifier({ id: currentUser.id, email: cleanEmail })) {
+      return;
+    }
     const userEntry = findUserEntryByKeyOrId(currentUser.id, cleanEmail);
     const userRecord = userEntry?.user;
     const creatorRecord = creators.find(
@@ -3785,6 +3379,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           creatorApprovalStatus: 'approved',
           isVerified: true
         });
+      }
+      return;
+    }
+
+    const userApprovalStatus = userRecord?.creatorApprovalStatus || userRecord?.creatorApplicationStatus;
+    if (userRecord?.role === 'creator' && userApprovalStatus === 'approved') {
+      if (activeRole !== 'creator' || currentUser.role !== 'creator' || currentUser.creatorApprovalStatus !== 'approved') {
+        setActiveRole('creator');
+        setCurrentUser(
+          creatorRecord || {
+            ...userRecord,
+            role: 'creator',
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true
+          }
+        );
       }
       return;
     }
@@ -3858,9 +3469,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(target);
     } else if (role === 'admin') {
       const targetAdmin =
-        (specificCreatorId && (findUserEntryByKeyOrId(specificCreatorId)?.user)) ||
+        (specificCreatorId && findUserEntryByKeyOrId(specificCreatorId)?.user) ||
         users.admin_root ||
-        PLATFORM_ADMIN_ACCOUNTS.admin_root;
+        Object.values(users).find(u => u.role === 'admin' && !isDeletedUserIdentifier(u)) ||
+        (!isDeletedUserIdentifier(PLATFORM_ADMIN_ACCOUNTS.admin_root)
+          ? PLATFORM_ADMIN_ACCOUNTS.admin_root
+          : undefined);
+      if (!targetAdmin || isDeletedUserIdentifier(targetAdmin)) return;
       setActiveRole('admin');
       setCurrentUser(targetAdmin);
       const existingToken = getStoredAdminToken();
@@ -3887,7 +3502,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .catch(() => {});
       }
     } else if (role === 'moderator') {
-      const targetMod = users.moderator_clara || PLATFORM_ADMIN_ACCOUNTS.moderator_clara;
+      const targetMod =
+        users.moderator_clara ||
+        Object.values(users).find(u => u.role === 'moderator' && !isDeletedUserIdentifier(u)) ||
+        (!isDeletedUserIdentifier(PLATFORM_ADMIN_ACCOUNTS.moderator_clara)
+          ? PLATFORM_ADMIN_ACCOUNTS.moderator_clara
+          : undefined);
+      if (!targetMod || isDeletedUserIdentifier(targetMod)) return;
       setActiveRole('moderator');
       setCurrentUser(targetMod);
       const existingToken = getStoredAdminToken();
@@ -3987,22 +3608,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return next;
       });
-      fetch('/api/users/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: updatedExisting.id,
-          name: updatedExisting.name,
-          username: updatedExisting.username,
-          email: updatedExisting.email,
-          avatar: updatedExisting.avatar,
-          dateJoined: updatedExisting.dateJoined,
-          country: updatedExisting.country,
-          is18PlusConfirmed: true
+      supabase.auth
+        .getSession()
+        .then(({ data: sData }) => {
+          const token = sData?.session?.access_token || '';
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['x-supabase-access-token'] = token;
+          return fetch('/api/users/sync', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              id: updatedExisting.id,
+              name: updatedExisting.name,
+              username: updatedExisting.username,
+              email: updatedExisting.email,
+              avatar: updatedExisting.avatar,
+              dateJoined: updatedExisting.dateJoined,
+              country: updatedExisting.country,
+              is18PlusConfirmed: true
+            })
+          });
         })
-      }).catch(() => {});
+        .then(r => r.json())
+        .then(state => {
+          if (!state?.success || !state.user) return;
+          const srvUser = state.user as User;
+          setUsers(prev => ({
+            ...prev,
+            [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+          }));
+          if (state.adminToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', String(state.adminToken));
+            } catch {
+              // ignore
+            }
+          }
+          if (input.autoLogin !== false) {
+            if (srvUser.role === 'admin' || srvUser.role === 'moderator' || srvUser.adminPermissionLevel) {
+              const adminRole: UserRole = srvUser.role === 'moderator' ? 'moderator' : 'admin';
+              setCurrentUser({
+                ...srvUser,
+                role: adminRole,
+                creatorApplicationStatus: 'approved',
+                creatorApprovalStatus: 'approved',
+                isVerified: true
+              });
+              setActiveRole(adminRole);
+              if (state.adminToken) {
+                refreshCreatorApplications({ reconcile: true, token: String(state.adminToken) }).catch(() => {});
+              }
+            } else if (srvUser.role === 'creator') {
+              setCurrentUser(state.creatorProfile || srvUser);
+              setActiveRole('creator');
+            }
+          }
+        })
+        .catch(() => {});
       if (input.autoLogin !== false) {
-        setCurrentUser(updatedExisting);
+        const isLocalAdmin =
+          updatedExisting.role === 'admin' ||
+          updatedExisting.role === 'moderator' ||
+          Boolean(updatedExisting.adminPermissionLevel);
+        setCurrentUser(
+          isLocalAdmin
+            ? {
+                ...updatedExisting,
+                creatorApplicationStatus: 'approved',
+                creatorApprovalStatus: 'approved',
+                isVerified: true
+              }
+            : updatedExisting
+        );
         setActiveRole(updatedExisting.role);
         setIsAuthenticated(true);
       }
@@ -4022,7 +3699,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newUserId = input.id || `user_fan_${Date.now()}`;
 
     // All new registrations automatically receive the default Fan role
-    // CRITICAL REQUIREMENT: Platform Translation MUST be disabled (false) by default for every new user
     const newUser: User = {
       id: newUserId,
       name: fullName,
@@ -4040,39 +3716,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dateJoined: nowDate,
       lastLoginAt: nowTimestamp,
       updatedAt: nowTimestamp,
-      country: 'United States',
-      preferred_translation_language: 'en',
-      platform_translation_enabled: false,
-      app_language: 'en',
-      preferredLanguageCode: 'en',
-      languagePreferenceMode: 'manual'
+      country: 'United States'
     };
-
-    const initialTranslationRecord: UserTranslationPreferences = {
-      userId: newUserId,
-      preferred_translation_language: 'en',
-      platform_translation_enabled: false,
-      app_language: 'en',
-      app_language_mode: 'manual',
-      explicitly_saved: false,
-      updated_at: new Date().toISOString()
-    };
-
-    setUserTranslationSettingsMap(prev => ({
-      ...prev,
-      [newUserId]: initialTranslationRecord
-    }));
-
-    fetch(`/api/translation/settings/${encodeURIComponent(newUserId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        preferred_translation_language: 'en',
-        platform_translation_enabled: false,
-        app_language: 'en',
-        app_language_mode: 'manual'
-      })
-    }).catch(() => {});
 
     setUsers(prev => {
       const next = {
@@ -4252,8 +3897,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // Verify password if passwordHash is set on the user record
-    if (matchedUser?.passwordHash && matchedUser.passwordHash !== passwordInput) {
+    // Verify password if passwordHash is set on the user record (unless already verified by Supabase Auth)
+    if (!supabaseUserId && matchedUser?.passwordHash && matchedUser.passwordHash !== passwordInput) {
       return {
         success: false,
         error: 'Incorrect email or password. Please try again.'
@@ -4311,16 +3956,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (latestUserVerif?.status === 'approved' ? 'approved' : undefined) ||
         (matchedCreator ? 'approved' : 'not_applied');
 
+      const forceConvertedCreator =
+        matchedUser?.role === 'creator' &&
+        (matchedUser?.creatorApprovalStatus === 'approved' ||
+          matchedUser?.creatorApplicationStatus === 'approved');
+
       const hasPendingOrRejectedVerif =
-        latestUserVerif?.status === 'pending' ||
-        latestUserVerif?.status === 'info_requested' ||
-        latestUserVerif?.status === 'rejected';
+        !forceConvertedCreator &&
+        (latestUserVerif?.status === 'pending' ||
+          latestUserVerif?.status === 'info_requested' ||
+          latestUserVerif?.status === 'rejected');
 
       const isApprovedCreator =
-        !hasPendingOrRejectedVerif &&
-        (latestUserVerif?.status === 'approved' ||
-          (approvalStatus === 'approved' && Boolean(matchedCreator || matchedUser?.role === 'creator')) ||
-          (matchedUser?.role === 'creator' && Boolean(matchedCreator)));
+        forceConvertedCreator ||
+        (!hasPendingOrRejectedVerif &&
+          (latestUserVerif?.status === 'approved' ||
+            (approvalStatus === 'approved' && Boolean(matchedCreator || matchedUser?.role === 'creator')) ||
+            (matchedUser?.role === 'creator' && Boolean(matchedCreator))));
 
       if (isApprovedCreator) {
         detectedRole = 'creator';
@@ -4389,11 +4041,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAuthenticated(true);
 
     if (detectedRole === 'admin' || detectedRole === 'moderator') {
-      fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: sessionAccount.email, password: passwordInput })
-      })
+      supabase.auth
+        .getSession()
+        .then(({ data: sData }) => {
+          const supaToken = sData?.session?.access_token || '';
+          const loginHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (supaToken) loginHeaders['x-supabase-access-token'] = supaToken;
+          return fetch('/api/admin/login', {
+            method: 'POST',
+            headers: loginHeaders,
+            body: JSON.stringify({ email: sessionAccount.email, password: passwordInput })
+          });
+        })
         .then(async r => {
           const d = await r.json().catch(() => ({}));
           if (r.ok && d?.success && d.adminToken) {
@@ -4557,6 +4216,233 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  // Awaited official platform login handler for Supabase Auth sessions:
+  // resolves authoritative Admin/Creator/Fan role from backend & Supabase before closing AuthModal.
+  const completePlatformLogin = async (
+    session: { user?: any; access_token?: string } | null,
+    passwordInput = ''
+  ): Promise<{
+    success: boolean;
+    detectedRole?: UserRole;
+    user?: User | CreatorProfile;
+    error?: string;
+  }> => {
+    const supaUser = session?.user;
+    const accessToken = String(session?.access_token || '').trim();
+    const email = String(supaUser?.email || '').trim().toLowerCase();
+    if (!supaUser || !email) {
+      return { success: false, error: 'Could not establish an active login session. Please try again.' };
+    }
+
+    const uid = String(supaUser.id || `user_fan_${Date.now()}`);
+    const metaName = String(
+      supaUser.user_metadata?.full_legal_name ||
+        supaUser.user_metadata?.full_name ||
+        email.split('@')[0] ||
+        'Member'
+    ).trim();
+    const rawUsername = String(
+      supaUser.user_metadata?.username || email.split('@')[0] || `user_${uid.slice(0, 5)}`
+    )
+      .trim()
+      .replace(/^@+/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_.-]/g, '_')
+      .slice(0, 30);
+    const cleanUsername = rawUsername.length >= 3 ? rawUsername : `${rawUsername || 'member'}_user`;
+    const nowDate = supaUser.created_at
+      ? String(supaUser.created_at).split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['x-supabase-access-token'] = accessToken;
+      }
+
+      const res = await fetch('/api/users/sync', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          id: uid,
+          name: metaName,
+          username: cleanUsername,
+          email,
+          dateJoined: nowDate,
+          is18PlusConfirmed: true
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 403 && data?.deleted) {
+        await supabase.auth.signOut().catch(() => {});
+        return { success: false, error: data.error || 'This account has been permanently removed.' };
+      }
+
+      if (res.ok && data?.success && data.user) {
+        const srvUser = data.user as User;
+        if (
+          srvUser.accountStatus === 'banned' ||
+          srvUser.accountStatus === 'disabled'
+        ) {
+          await supabase.auth.signOut().catch(() => {});
+          return {
+            success: false,
+            error: `This account has been ${srvUser.accountStatus} by ACOVON Trust & Safety.${
+              srvUser.statusReason ? ` Reason: ${srvUser.statusReason}` : ''
+            }`
+          };
+        }
+
+        setUsers(prev => ({
+          ...prev,
+          [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+        }));
+
+        if (data.creatorProfile) {
+          setCreators(prev => {
+            const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = data.creatorProfile;
+              return next;
+            }
+            return [data.creatorProfile, ...prev];
+          });
+        }
+        if (data.latestApplication) {
+          setVerifications(prev => [
+            data.latestApplication,
+            ...prev.filter(v => v.id !== data.latestApplication.id)
+          ]);
+        }
+        if (Array.isArray(data.notifications) && data.notifications.length > 0) {
+          setNotifications(prev => {
+            const map = new Map(prev.map(n => [n.eventKey || n.id, n]));
+            data.notifications.forEach((n: AppNotification) => {
+              map.set(n.eventKey || n.id, n);
+            });
+            return Array.from(map.values());
+          });
+        }
+
+        const isServerAdmin =
+          srvUser.role === 'admin' ||
+          srvUser.role === 'moderator' ||
+          Boolean(srvUser.adminPermissionLevel);
+
+        if (isServerAdmin) {
+          let issuedToken = data.adminToken ? String(data.adminToken) : '';
+          let finalAdminUser: User = srvUser;
+
+          if (!issuedToken) {
+            try {
+              const adminLoginRes = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ email, password: passwordInput || 'supabase_session' })
+              });
+              const adminLoginData = await adminLoginRes.json().catch(() => ({}));
+              if (adminLoginRes.ok && adminLoginData?.success && adminLoginData.adminToken) {
+                issuedToken = String(adminLoginData.adminToken);
+                if (adminLoginData.user) {
+                  finalAdminUser = { ...finalAdminUser, ...adminLoginData.user };
+                }
+                if (adminLoginData.creatorProfile) {
+                  setCreators(prev => {
+                    const idx = prev.findIndex(c => c.id === adminLoginData.creatorProfile.id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = adminLoginData.creatorProfile;
+                      return next;
+                    }
+                    return [adminLoginData.creatorProfile, ...prev];
+                  });
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          if (issuedToken) {
+            try {
+              localStorage.setItem('acovon_admin_token', issuedToken);
+            } catch {
+              // ignore
+            }
+          }
+
+          const effectiveAdminRole: UserRole =
+            finalAdminUser.role === 'moderator' ? 'moderator' : 'admin';
+          const resolvedAdminAccount: User = {
+            ...finalAdminUser,
+            role: effectiveAdminRole,
+            creatorApplicationStatus: 'approved',
+            creatorApprovalStatus: 'approved',
+            isVerified: true
+          };
+
+          setUsers(prev => ({
+            ...prev,
+            [resolvedAdminAccount.id]: { ...(prev[resolvedAdminAccount.id] || {}), ...resolvedAdminAccount }
+          }));
+          setCurrentUser(resolvedAdminAccount);
+          setActiveRole(effectiveAdminRole);
+          setIsAuthenticated(true);
+          try {
+            localStorage.setItem('acovon_current_user', JSON.stringify(resolvedAdminAccount));
+            localStorage.setItem('acovon_is_authenticated', 'true');
+          } catch {
+            // ignore
+          }
+          if (issuedToken) {
+            refreshCreatorApplications({ reconcile: true, token: issuedToken }).catch(() => {});
+          }
+          return { success: true, detectedRole: effectiveAdminRole, user: resolvedAdminAccount };
+        }
+
+        const effectiveSessionAccount: User | CreatorProfile =
+          srvUser.role === 'creator' && data.creatorProfile ? data.creatorProfile : srvUser;
+        const effectiveRole: UserRole = srvUser.role === 'creator' ? 'creator' : 'fan';
+        setCurrentUser(effectiveSessionAccount);
+        setActiveRole(effectiveRole);
+        setIsAuthenticated(true);
+        try {
+          localStorage.setItem('acovon_current_user', JSON.stringify(effectiveSessionAccount));
+          localStorage.setItem('acovon_is_authenticated', 'true');
+        } catch {
+          // ignore
+        }
+        return { success: true, detectedRole: effectiveRole, user: effectiveSessionAccount };
+      }
+    } catch {
+      // Fall back to local lookup if backend temporarily unavailable
+    }
+
+    const localAuth = authenticateAccount(email, passwordInput || 'supabase_session', uid);
+    if (localAuth.success) {
+      return localAuth;
+    }
+
+    const registered = registerAccount({
+      id: uid,
+      fullName: metaName,
+      username: cleanUsername,
+      email,
+      password: passwordInput || 'supabase_session',
+      confirmPassword: passwordInput || 'supabase_session',
+      is18PlusConfirmed: true,
+      autoLogin: true
+    });
+    return {
+      success: registered.success,
+      detectedRole: registered.user?.role,
+      user: registered.user,
+      error: registered.error
+    };
+  };
+
   const logoutUser = () => {
     logoutFromSupabase().catch(() => {});
     try {
@@ -4570,17 +4456,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(GUEST_USER);
   };
 
-  // Sync appearance and language preferences to Supabase when authenticated
+  // Sync appearance preferences to Supabase when authenticated
   useEffect(() => {
     if (isAuthenticated && currentUser?.id && currentUser.id !== 'guest_visitor') {
       syncUserPreferencesToSupabase({
         uid: currentUser.id,
         appearancePreference: appearanceMode,
-        preferredLanguage: activeLanguageCode,
-        languageMode: languagePreferenceMode
+        preferredLanguage: 'en',
+        languageMode: 'manual'
       }).catch(() => {});
     }
-  }, [isAuthenticated, currentUser?.id, appearanceMode, activeLanguageCode, languagePreferenceMode]);
+  }, [isAuthenticated, currentUser?.id, appearanceMode]);
 
   // Follow System state (persisted per user)
   const [following, setFollowing] = useState<string[]>(() => {
@@ -6103,20 +5989,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auditLogs?: CreatorApplicationAuditRecord[];
     adminNotifications?: AppNotification[];
     recoveredCount?: number;
+    deletedUserIds?: string[];
   }) => {
+    const nextDeletedList = Array.isArray(payload.deletedUserIds)
+      ? Array.from(new Set([...deletedUserIdsRef.current, ...payload.deletedUserIds]))
+      : deletedUserIdsRef.current;
+
+    if (Array.isArray(payload.deletedUserIds)) {
+      setDeletedUserIds(nextDeletedList);
+    }
+
+    const deletedSet = new Set(nextDeletedList.map(id => String(id || '').trim().toLowerCase()));
+
     if (Array.isArray(payload.applications)) {
-      setVerifications(payload.applications);
+      const filteredApps = payload.applications.filter(
+        a =>
+          a &&
+          !deletedSet.has(String(a.userId || '').trim().toLowerCase()) &&
+          !deletedSet.has(String(a.email || '').trim().toLowerCase())
+      );
+      setVerifications(filteredApps);
       try {
-        localStorage.setItem('acovon_verifications_v2', JSON.stringify(payload.applications));
+        localStorage.setItem('acovon_verifications_v2', JSON.stringify(filteredApps));
       } catch {
         // ignore
       }
     }
     if (payload.users && typeof payload.users === 'object') {
       setUsers(prev => {
-        const merged = { ...prev };
+        const merged: Record<string, User> = {};
+        Object.entries(prev).forEach(([k, u]) => {
+          if (
+            u &&
+            !deletedSet.has(k.toLowerCase()) &&
+            !deletedSet.has(String(u.id || '').trim().toLowerCase()) &&
+            !deletedSet.has(String(u.email || '').trim().toLowerCase())
+          ) {
+            merged[k] = u;
+          }
+        });
         Object.entries(payload.users || {}).forEach(([k, serverU]) => {
           if (!serverU || !serverU.id) return;
+          if (
+            deletedSet.has(k.toLowerCase()) ||
+            deletedSet.has(String(serverU.id).trim().toLowerCase()) ||
+            deletedSet.has(String(serverU.email || '').trim().toLowerCase())
+          ) {
+            return;
+          }
           const existing = merged[k] || Object.values(merged).find(u => u.id === serverU.id);
           merged[k] = {
             ...(existing || {}),
@@ -6127,10 +6047,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return merged;
       });
     }
-    if (Array.isArray(payload.creators) && payload.creators.length > 0) {
+    if (Array.isArray(payload.creators)) {
       setCreators(prev => {
-        const next = [...prev];
+        const next = prev.filter(
+          c =>
+            !deletedSet.has(String(c.id || '').trim().toLowerCase()) &&
+            !deletedSet.has(String(c.email || '').trim().toLowerCase())
+        );
         payload.creators!.forEach(sc => {
+          if (
+            !sc ||
+            deletedSet.has(String(sc.id || '').trim().toLowerCase()) ||
+            deletedSet.has(String(sc.email || '').trim().toLowerCase())
+          ) {
+            return;
+          }
           const idx = next.findIndex(c => c.id === sc.id);
           if (idx >= 0) next[idx] = { ...next[idx], ...sc };
           else next.unshift(sc);
@@ -6239,7 +6170,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             mergeServerApplicationsSnapshot({
               users: usersMap,
-              creators: Array.isArray(usersData.creators) ? usersData.creators : undefined
+              creators: Array.isArray(usersData.creators) ? usersData.creators : undefined,
+              deletedUserIds: Array.isArray(usersData.deletedUserIds)
+                ? usersData.deletedUserIds
+                : undefined
             });
           }
         }
@@ -6289,13 +6223,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (supaAccessToken) {
           headers['x-supabase-access-token'] = supaAccessToken;
         }
+        if (adminToken) {
+          headers['Authorization'] = `Bearer ${adminToken}`;
+        }
 
         const res = await fetch(
           `/api/users/session-state?userId=${encodeURIComponent(currentUser.id)}&email=${encodeURIComponent(currentUser.email || '')}`,
           { headers }
         );
         const state = await res.json();
-        if (cancelled || !state?.success || !state.found || !state.user) return;
+        if (cancelled) return;
+        if (state?.deleted) {
+          setDeletedUserIds(prev =>
+            Array.from(new Set([...prev, currentUser.id, ...(currentEmail ? [currentEmail] : [])]))
+          );
+          logoutUser();
+          return;
+        }
+        if (!state?.success || !state.found || !state.user) return;
         const serverUser = state.user as User;
 
         setUsers(prev => ({
@@ -6500,6 +6445,130 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 payload.auditRecord,
                 ...prev.filter(a => a.id !== payload.auditRecord.id)
               ]);
+            }
+          } catch {
+            // ignore
+          }
+        });
+
+        evtSource.addEventListener('user_deleted', evt => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse((evt as MessageEvent).data);
+            const targetUid = String(payload?.userId || '').trim();
+            const targetEmail = String(payload?.email || '').trim().toLowerCase();
+            if (!targetUid && !targetEmail) return;
+            const deletedBatch = Array.isArray(payload?.deletedUserIds)
+              ? payload.deletedUserIds
+              : [targetUid, ...(targetEmail ? [targetEmail] : [])].filter(Boolean);
+            setDeletedUserIds(prev => Array.from(new Set([...prev, ...deletedBatch])));
+            setUsers(prev => {
+              const next: Record<string, User> = {};
+              Object.entries(prev).forEach(([k, u]) => {
+                if (
+                  u &&
+                  u.id !== targetUid &&
+                  k !== targetUid &&
+                  (!targetEmail || String(u.email || '').trim().toLowerCase() !== targetEmail)
+                ) {
+                  next[k] = u;
+                }
+              });
+              return next;
+            });
+            setCreators(prev =>
+              prev.filter(
+                c =>
+                  c.id !== targetUid &&
+                  (!targetEmail || String(c.email || '').trim().toLowerCase() !== targetEmail)
+              )
+            );
+            setVerifications(prev =>
+              prev.filter(
+                v =>
+                  v.userId !== targetUid &&
+                  (!targetEmail || String(v.email || '').trim().toLowerCase() !== targetEmail)
+              )
+            );
+            setPosts(prev => prev.filter(p => p.creatorId !== targetUid));
+            setStatuses(prev => prev.filter(s => s.creatorId !== targetUid));
+            setSubscriptions(prev =>
+              prev.filter(s => s.fanId !== targetUid && s.creatorId !== targetUid)
+            );
+            setNotifications(prev => prev.filter(n => n.userId !== targetUid));
+
+            const isSelfDeleted =
+              (targetUid && currentUser.id === targetUid) ||
+              (targetEmail && currentEmail === targetEmail);
+            if (isSelfDeleted) {
+              logoutUser();
+            }
+          } catch {
+            // ignore
+          }
+        });
+
+        evtSource.addEventListener('taxonomy_updated', evt => {
+          if (cancelled) return;
+          try {
+            const payload = JSON.parse((evt as MessageEvent).data);
+            const srvDeletedIds: string[] = Array.isArray(payload?.deletedCategoryIds)
+              ? payload.deletedCategoryIds.filter((id: unknown): id is string => typeof id === 'string')
+              : [];
+            const delSet = new Set(srvDeletedIds);
+            if (Array.isArray(payload?.deletedCategoryIds)) {
+              setDeletedCategoryIds(srvDeletedIds);
+            }
+            if (Array.isArray(payload?.categories)) {
+              const cleanedCats = dedupeCategoryRecords(
+                payload.categories.filter((c: CategoryRecord) => c && !delSet.has(c.id))
+              );
+              setCategories(cleanedCats);
+              const activeNames = cleanedCats.filter(c => c.is_active).map(c => c.name);
+              setPlatformConfig(prev => ({
+                ...prev,
+                contentCategories: activeNames
+              }));
+            }
+            if (Array.isArray(payload?.countries)) {
+              setCountries(payload.countries);
+            }
+            if (payload?.deletedCategoryId) {
+              const delId = String(payload.deletedCategoryId);
+              const delNameLower = payload?.deletedCategoryName
+                ? String(payload.deletedCategoryName).trim().toLowerCase()
+                : '';
+              setPosts(prev =>
+                prev.map(p => ({
+                  ...p,
+                  category_ids: (p.category_ids || []).filter(id => id !== delId),
+                  categories: (p.categories || []).filter(
+                    cn => !delNameLower || cn.trim().toLowerCase() !== delNameLower
+                  )
+                }))
+              );
+              if (delNameLower) {
+                setCreators(prev =>
+                  prev.map(c => ({
+                    ...c,
+                    categories: (c.categories || []).filter(
+                      cn => cn.trim().toLowerCase() !== delNameLower
+                    )
+                  }))
+                );
+                setFanInterestProfiles(prev => {
+                  const next = { ...prev };
+                  Object.entries(next).forEach(([fid, prof]) => {
+                    next[fid] = {
+                      ...prof,
+                      onboardingCategories: (prof.onboardingCategories || []).filter(
+                        cn => cn.trim().toLowerCase() !== delNameLower
+                      )
+                    };
+                  });
+                  return next;
+                });
+              }
             }
           } catch {
             // ignore
@@ -6921,6 +6990,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isVerified?: boolean;
       adminPermissionLevel?: AdminPermissionLevel;
       adminPermissions?: string[];
+      bypassApproval?: boolean;
     }
   ): { success: boolean; error?: string } => {
     if (updates.adminPermissionLevel === 'super_admin') {
@@ -6945,7 +7015,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updates.role === 'creator' ||
       updates.role === 'admin' ||
       updates.role === 'moderator' ||
-      updates.adminPermissionLevel !== undefined;
+      updates.adminPermissionLevel !== undefined ||
+      Boolean(updates.bypassApproval);
 
     const enrichedUpdates: Record<string, any> = {
       ...updates,
@@ -6981,6 +7052,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return next;
     });
+
+    if (grantsCreatorPrivileges) {
+      const targetEmail = String(matchedTargetUser?.email || '').trim().toLowerCase();
+      setVerifications(prev =>
+        prev.map(v => {
+          const matches =
+            v.userId === userId ||
+            (targetEmail && String(v.email || '').trim().toLowerCase() === targetEmail);
+          if (!matches || v.status === 'approved') return v;
+          return {
+            ...v,
+            status: 'approved',
+            reviewedBy: currentUser.name,
+            reviewedByAdminId: currentUser.id,
+            reviewedAt: nowStr,
+            notes: updates.bypassApproval
+              ? 'Force-converted to approved Creator by administrator (approval bypassed).'
+              : v.notes
+          };
+        })
+      );
+    }
 
     setCreators(prev => {
       const existingIdx = prev.findIndex(c => c.id === userId);
@@ -7084,13 +7177,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return [data.creatorProfile, ...prev];
             });
           }
+          if (Array.isArray(data.updatedApplications) && data.updatedApplications.length > 0) {
+            setVerifications(prev => {
+              const byId = new Map<string, CreatorVerification>(
+                data.updatedApplications.map((a: CreatorVerification) => [a.id, a])
+              );
+              const next = prev.map(v => byId.get(v.id) || v);
+              data.updatedApplications.forEach((a: CreatorVerification) => {
+                if (!next.some(v => v.id === a.id)) next.unshift(a);
+              });
+              return next;
+            });
+          }
+          if (data.notification) {
+            setNotifications(prev => {
+              const key = data.notification.eventKey || data.notification.id;
+              if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+              return [data.notification, ...prev];
+            });
+          }
+          if (data.auditRecord) {
+            setCreatorApplicationAuditLogs(prev => [
+              data.auditRecord,
+              ...prev.filter(a => a.id !== data.auditRecord.id)
+            ]);
+          }
         })
         .catch(() => {});
     }
 
     logAdminAction({
       category: updates.adminPermissionLevel ? 'permission_change' : 'user_account',
-      action: updates.accountStatus
+      action: updates.bypassApproval
+        ? 'Force-Converted User to Approved Creator (Bypassed Approval)'
+        : updates.accountStatus
         ? `Changed Account Status to ${updates.accountStatus.toUpperCase()}`
         : updates.adminPermissionLevel
         ? `Updated Admin Permission Level to ${updates.adminPermissionLevel.toUpperCase()}`
@@ -7105,6 +7225,227 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return { success: true };
+  };
+
+  const adminForceConvertToCreator = async (userId: string): Promise<{
+    success: boolean;
+    user?: User;
+    creatorProfile?: CreatorProfile;
+    error?: string;
+  }> => {
+    if (!hasAdminPermission(['super_admin', 'admin', 'moderator'])) {
+      return {
+        success: false,
+        error: 'Unauthorized: Insufficient privileges to convert users to Creators.'
+      };
+    }
+
+    const adminToken = getStoredAdminToken();
+    if (!adminToken) {
+      return {
+        success: false,
+        error: 'Administrator session token unavailable. Please sign in again via /admin/login.'
+      };
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({
+          role: 'creator',
+          bypassApproval: true,
+          statusReason: `Force-converted to Creator automatically by ${currentUser.name}`
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data.user) {
+        return {
+          success: false,
+          error: data?.error || 'Could not force-convert user to Creator.'
+        };
+      }
+
+      const srvUser = data.user as User;
+      setUsers(prev => ({
+        ...prev,
+        [srvUser.id]: { ...(prev[srvUser.id] || {}), ...srvUser }
+      }));
+
+      if (data.creatorProfile) {
+        setCreators(prev => {
+          const idx = prev.findIndex(c => c.id === data.creatorProfile.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = data.creatorProfile;
+            return next;
+          }
+          return [data.creatorProfile, ...prev];
+        });
+      }
+
+      if (Array.isArray(data.updatedApplications) && data.updatedApplications.length > 0) {
+        setVerifications(prev => {
+          const byId = new Map<string, CreatorVerification>(
+            data.updatedApplications.map((a: CreatorVerification) => [a.id, a])
+          );
+          const next = prev.map(v => byId.get(v.id) || v);
+          data.updatedApplications.forEach((a: CreatorVerification) => {
+            if (!next.some(v => v.id === a.id)) next.unshift(a);
+          });
+          return next;
+        });
+      }
+
+      if (data.notification) {
+        setNotifications(prev => {
+          const key = data.notification.eventKey || data.notification.id;
+          if (prev.some(n => (n.eventKey || n.id) === key)) return prev;
+          return [data.notification, ...prev];
+        });
+      }
+
+      if (data.auditRecord) {
+        setCreatorApplicationAuditLogs(prev => [
+          data.auditRecord,
+          ...prev.filter(a => a.id !== data.auditRecord.id)
+        ]);
+      }
+
+      logAdminAction({
+        category: 'user_account',
+        action: 'Force-Converted User to Creator (Approval Bypassed)',
+        targetType: 'User',
+        targetId: srvUser.id,
+        targetLabel: `${srvUser.name} (@${srvUser.username})`,
+        details: `Admin ${currentUser.name} converted ${srvUser.email} into an active approved Creator automatically.`,
+        severity: 'warning'
+      });
+
+      return {
+        success: true,
+        user: srvUser,
+        creatorProfile: data.creatorProfile
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error force-converting user to Creator.';
+      return { success: false, error: msg };
+    }
+  };
+
+  const adminDeleteUserAccount = async (userId: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (!hasAdminPermission(['super_admin', 'admin'])) {
+      return {
+        success: false,
+        error: 'Unauthorized: Requires Super Admin or General Admin permissions to delete accounts.'
+      };
+    }
+
+    if (userId === currentUser.id) {
+      return {
+        success: false,
+        error: 'Administrators cannot delete their own currently signed-in account.'
+      };
+    }
+
+    const adminToken = getStoredAdminToken();
+    if (!adminToken) {
+      return {
+        success: false,
+        error: 'Administrator session token unavailable. Please sign in again via /admin/login.'
+      };
+    }
+
+    const targetEntry = findUserEntryByKeyOrId(userId);
+    const targetUser = targetEntry?.user;
+    const targetLabel = targetUser
+      ? `${targetUser.name} (${targetUser.email})`
+      : userId;
+
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${adminToken}`
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        return {
+          success: false,
+          error: data?.error || 'Could not delete user account.'
+        };
+      }
+
+      const deletedUid = String(data.deletedUserId || userId);
+      const deletedEmail = String(data.deletedEmail || targetUser?.email || '')
+        .trim()
+        .toLowerCase();
+      const deletedIdsFromServer: string[] = Array.isArray(data.deletedUserIds)
+        ? data.deletedUserIds
+        : [deletedUid, ...(deletedEmail ? [deletedEmail] : [])];
+
+      setDeletedUserIds(prev => Array.from(new Set([...prev, ...deletedIdsFromServer])));
+
+      setUsers(prev => {
+        const next: Record<string, User> = {};
+        Object.entries(prev).forEach(([k, u]) => {
+          if (
+            u &&
+            k !== deletedUid &&
+            u.id !== deletedUid &&
+            (!deletedEmail || String(u.email || '').trim().toLowerCase() !== deletedEmail)
+          ) {
+            next[k] = u;
+          }
+        });
+        return next;
+      });
+
+      setCreators(prev =>
+        prev.filter(
+          c =>
+            c.id !== deletedUid &&
+            (!deletedEmail || String(c.email || '').trim().toLowerCase() !== deletedEmail)
+        )
+      );
+
+      setVerifications(prev =>
+        prev.filter(
+          v =>
+            v.userId !== deletedUid &&
+            (!deletedEmail || String(v.email || '').trim().toLowerCase() !== deletedEmail)
+        )
+      );
+
+      setPosts(prev => prev.filter(p => p.creatorId !== deletedUid));
+      setStatuses(prev => prev.filter(s => s.creatorId !== deletedUid));
+      setSubscriptions(prev =>
+        prev.filter(s => s.fanId !== deletedUid && s.creatorId !== deletedUid)
+      );
+      setNotifications(prev => prev.filter(n => n.userId !== deletedUid));
+
+      logAdminAction({
+        category: 'user_account',
+        action: 'Permanently Deleted Account',
+        targetType: 'User',
+        targetId: deletedUid,
+        targetLabel,
+        details: `Deleted account ${targetLabel} and purged associated creator profile, posts, statuses, subscriptions, and applications.`,
+        severity: 'critical'
+      });
+
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error deleting user account.';
+      return { success: false, error: msg };
+    }
   };
 
   const adminAddOrPromoteAdmin = async (input: {
@@ -13516,139 +13857,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ============================================================================
-  // ADMIN MULTILINGUAL & i18n MANAGEMENT ACTIONS
-  // ============================================================================
-  const adminToggleLanguageEnabled = (
-    code: SupportedLanguageCode
-  ): { success: boolean; error?: string } => {
-    if (activeRole !== 'admin' && activeRole !== 'moderator') {
-      return { success: false, error: 'Access Denied: Only authorized Administrators may manage platform languages.' };
-    }
-    if (code === 'en') {
-      return { success: false, error: 'English is the mandatory global fallback language and cannot be disabled.' };
-    }
-
-    const targetLang = supportedLanguages.find(l => l.code === code);
-    if (!targetLang) return { success: false, error: 'Language not found.' };
-
-    const nextEnabled = !targetLang.enabled;
-    setSupportedLanguages(prev =>
-      prev.map(l => (l.code === code ? { ...l, enabled: nextEnabled } : l))
-    );
-
-    logAdminAction({
-      category: 'platform_config',
-      action: `${nextEnabled ? 'Enabled' : 'Disabled'} Platform Language (${targetLang.englishName})`,
-      targetType: 'LanguageMetadata',
-      targetId: code,
-      targetLabel: `${targetLang.englishName} (${targetLang.nativeName})`,
-      details: `Admin ${currentUser.name} ${nextEnabled ? 'enabled' : 'disabled'} ${targetLang.englishName} (${code}) in platform localization settings.`,
-      severity: 'info'
-    });
-
-    return { success: true };
-  };
-
-  const adminUpdateTranslationEntry = (
-    key: string,
-    langCode: SupportedLanguageCode,
-    newValue: string
-  ): { success: boolean; error?: string } => {
-    if (activeRole !== 'admin' && activeRole !== 'moderator') {
-      return { success: false, error: 'Access Denied: Only authorized Administrators may edit platform translations.' };
-    }
-
-    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    setTranslationRecords(prev =>
-      prev.map(rec => {
-        if (rec.key !== key) return rec;
-        return {
-          ...rec,
-          englishText: langCode === 'en' ? newValue : rec.englishText,
-          translations: {
-            ...rec.translations,
-            [langCode]: newValue
-          },
-          updatedAt: nowStr,
-          updatedByAdmin: currentUser.name
-        };
-      })
-    );
-
-    return { success: true };
-  };
-
-  const adminAddTranslationKey = (input: {
-    key: string;
-    category: TranslationKeyRecord['category'];
-    englishText: string;
-    initialTranslations?: Partial<Record<SupportedLanguageCode, string>>;
-  }): { success: boolean; error?: string } => {
-    if (activeRole !== 'admin' && activeRole !== 'moderator') {
-      return { success: false, error: 'Access Denied: Only authorized Administrators may add translation keys.' };
-    }
-    const cleanKey = input.key.trim();
-    const cleanEn = input.englishText.trim();
-    if (!cleanKey || !cleanEn) {
-      return { success: false, error: 'Translation key and English fallback text are required.' };
-    }
-    if (translationRecords.some(r => r.key === cleanKey)) {
-      return { success: false, error: `Translation key "${cleanKey}" already exists.` };
-    }
-
-    const fullTranslations = {} as Record<SupportedLanguageCode, string>;
-    supportedLanguages.forEach(l => {
-      fullTranslations[l.code] =
-        l.code === 'en'
-          ? cleanEn
-          : input.initialTranslations?.[l.code] || '';
-    });
-
-    const newRecord: TranslationKeyRecord = {
-      key: cleanKey,
-      category: input.category,
-      englishText: cleanEn,
-      translations: fullTranslations,
-      updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      updatedByAdmin: currentUser.name
-    };
-
-    setTranslationRecords(prev => [newRecord, ...prev]);
-
-    logAdminAction({
-      category: 'platform_config',
-      action: 'Added New i18n Translation Key',
-      targetType: 'TranslationKeyRecord',
-      targetId: cleanKey,
-      targetLabel: cleanKey,
-      details: `Added translation key "${cleanKey}" (${input.category}) with English fallback "${cleanEn}".`,
-      severity: 'info'
-    });
-
-    return { success: true };
-  };
-
-  const adminPublishTranslations = (
-    notes?: string
-  ): { success: boolean; error?: string } => {
-    if (activeRole !== 'admin' && activeRole !== 'moderator') {
-      return { success: false, error: 'Access Denied: Only authorized Administrators may publish translation updates.' };
-    }
-
-    logAdminAction({
-      category: 'platform_config',
-      action: 'Published Global i18n Translation Updates',
-      targetType: 'i18n_dictionary',
-      targetId: 'global_i18n',
-      targetLabel: `ACOVON 19-Language Dictionary (${translationRecords.length} keys)`,
-      details: `Admin ${currentUser.name} published approved multilingual dictionary updates across ${supportedLanguages.filter(l => l.enabled).length} enabled languages.${notes ? ` Notes: ${notes}` : ''}`,
-      severity: 'info'
-    });
-
-    return { success: true };
-  };
-
-  // ============================================================================
   // GLOBAL CATEGORIES & COUNTRIES DISCOVERY DATABASE STATE & ACTIONS
   // ============================================================================
   const dedupeCategoryRecords = (list: CategoryRecord[]): CategoryRecord[] => {
@@ -13785,7 +13993,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDeletedCategoryIds(serverDeletedIds);
         }
         if (Array.isArray(data.categories)) {
-          setCategories(dedupeCategoryRecords(data.categories.filter((c: CategoryRecord) => c && !deletedSet.has(c.id))));
+          const syncedCats = dedupeCategoryRecords(
+            data.categories.filter((c: CategoryRecord) => c && !deletedSet.has(c.id))
+          );
+          setCategories(syncedCats);
+          setPlatformConfig(prev => ({
+            ...prev,
+            contentCategories: syncedCats.filter(c => c.is_active).map(c => c.name)
+          }));
         }
         if (Array.isArray(data.countries) && data.countries.length > 0) {
           setCountries(data.countries);
@@ -13940,9 +14155,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
+      const adminToken = getStoredAdminToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
       const res = await fetch('/api/admin/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           actorId: currentUser.id,
           actorName: currentUser.name,
@@ -13955,11 +14173,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: data?.error || 'Failed to add category.' };
       }
       if (Array.isArray(data.categories)) {
-        setCategories(dedupeCategoryRecords(data.categories));
+        const nextCats = dedupeCategoryRecords(data.categories);
+        setCategories(nextCats);
+        setPlatformConfig(prev => ({
+          ...prev,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
       } else if (data.category) {
-        setCategories(prev =>
-          dedupeCategoryRecords([...prev, data.category])
-        );
+        setCategories(prev => {
+          const nextCats = dedupeCategoryRecords([...prev, data.category]);
+          setPlatformConfig(pc => ({
+            ...pc,
+            contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+          }));
+          return nextCats;
+        });
       }
       return { success: true, category: data.category };
     } catch {
@@ -13976,9 +14204,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         display_order: input.display_order || categories.length + 1,
         created_at: new Date().toISOString().slice(0, 10)
       };
-      setCategories(prev =>
-        dedupeCategoryRecords([...prev, fallbackCat])
-      );
+      setCategories(prev => {
+        const nextCats = dedupeCategoryRecords([...prev, fallbackCat]);
+        setPlatformConfig(pc => ({
+          ...pc,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
+        return nextCats;
+      });
       return { success: true, category: fallbackCat };
     }
   };
@@ -13996,9 +14229,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
+      const adminToken = getStoredAdminToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
       const res = await fetch(`/api/admin/categories/${encodeURIComponent(categoryId)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           actorId: currentUser.id,
           actorName: currentUser.name,
@@ -14011,13 +14247,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: data?.error || 'Failed to update category.' };
       }
       if (Array.isArray(data.categories)) {
-        setCategories(dedupeCategoryRecords(data.categories));
+        const nextCats = dedupeCategoryRecords(data.categories);
+        setCategories(nextCats);
+        setPlatformConfig(prev => ({
+          ...prev,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
       } else if (data.category) {
-        setCategories(prev =>
-          dedupeCategoryRecords(
+        setCategories(prev => {
+          const nextCats = dedupeCategoryRecords(
             prev.map(c => (c.id === categoryId ? data.category : c))
-          )
-        );
+          );
+          setPlatformConfig(pc => ({
+            ...pc,
+            contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+          }));
+          return nextCats;
+        });
       }
 
       // If category name was renamed, update matching post category names in memory so UI stays in sync
@@ -14046,8 +14292,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, category: data.category };
     } catch {
       let updatedCat: CategoryRecord | undefined;
-      setCategories(prev =>
-        dedupeCategoryRecords(
+      setCategories(prev => {
+        const nextCats = dedupeCategoryRecords(
           prev.map(c => {
             if (c.id === categoryId) {
               updatedCat = { ...c, ...updates };
@@ -14055,8 +14301,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             return c;
           })
-        )
-      );
+        );
+        setPlatformConfig(pc => ({
+          ...pc,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
+        return nextCats;
+      });
       return { success: true, category: updatedCat };
     }
   };
@@ -14104,13 +14355,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           })
         );
+        setFanInterestProfiles(prev => {
+          const next = { ...prev };
+          Object.entries(next).forEach(([fid, prof]) => {
+            next[fid] = {
+              ...prof,
+              onboardingCategories: (prof.onboardingCategories || []).filter(
+                cn => cn.trim().toLowerCase() !== targetNameLower
+              )
+            };
+          });
+          return next;
+        });
       }
     };
 
     try {
+      const adminToken = getStoredAdminToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
       const res = await fetch(`/api/admin/categories/${encodeURIComponent(categoryId)}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           actorId: currentUser.id,
           actorName: currentUser.name,
@@ -14127,15 +14393,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDeletedCategoryIds(prev => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
       }
       if (Array.isArray(data.categories)) {
-        setCategories(dedupeCategoryRecords(data.categories));
+        const nextCats = dedupeCategoryRecords(data.categories);
+        setCategories(nextCats);
+        setPlatformConfig(prev => ({
+          ...prev,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
       } else {
-        setCategories(prev => prev.filter(c => c.id !== categoryId));
+        setCategories(prev => {
+          const nextCats = prev.filter(c => c.id !== categoryId);
+          setPlatformConfig(pc => ({
+            ...pc,
+            contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+          }));
+          return nextCats;
+        });
       }
       cleanupInMemoryReferences();
       return { success: true };
     } catch {
       setDeletedCategoryIds(prev => (prev.includes(categoryId) ? prev : [...prev, categoryId]));
-      setCategories(prev => prev.filter(c => c.id !== categoryId));
+      setCategories(prev => {
+        const nextCats = prev.filter(c => c.id !== categoryId);
+        setPlatformConfig(pc => ({
+          ...pc,
+          contentCategories: nextCats.filter(c => c.is_active).map(c => c.name)
+        }));
+        return nextCats;
+      });
       cleanupInMemoryReferences();
       return { success: true };
     }
@@ -14294,6 +14579,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         adminLogout,
         logAdminAction,
         adminUpdateUserAccount,
+        adminForceConvertToCreator,
+        adminDeleteUserAccount,
         adminAddOrPromoteAdmin,
         adminUpdateCreatorControl,
         adminModeratePost,
@@ -14446,29 +14733,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logoutUser,
         registerAccount,
         authenticateAccount,
-        supportedLanguages,
-        activeLanguageCode,
-        activeLanguageMeta,
-        languagePreferenceMode,
-        manualSelectedLanguageCode,
-        detectedDeviceLanguage,
-        simulatedBrowserLocale,
-        setSimulatedBrowserLocale,
-        setUserLanguagePreference,
-        preferredTranslationLanguage,
-        preferredTranslationLanguageMeta,
-        platformTranslationEnabled,
-        setPreferredTranslationLanguage,
-        setPlatformTranslationEnabled,
-        saveUserTranslationSettings,
-        translateContentItem,
-        t,
-        translatePhrase,
-        translationRecords,
-        adminToggleLanguageEnabled,
-        adminUpdateTranslationEntry,
-        adminAddTranslationKey,
-        adminPublishTranslations,
+        completePlatformLogin,
         categories,
         activeCategories,
         countries,

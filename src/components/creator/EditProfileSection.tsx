@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile } from '../../types';
-import { OFFICIAL_CATEGORIES } from '../../data/officialCategories';
 import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { 
   CheckCircle2, 
@@ -56,8 +55,7 @@ export const EditProfileSection: React.FC<EditProfileSectionProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const categoryOptions =
-    activeCategories && activeCategories.length > 0 ? activeCategories : OFFICIAL_CATEGORIES;
+  const categoryOptions = activeCategories || [];
 
   // Toggle category in multiselect
   const handleToggleCategory = (catName: string) => {

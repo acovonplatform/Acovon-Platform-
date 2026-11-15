@@ -20,6 +20,7 @@ export interface CreatorApplicationsDB {
   applications: CreatorVerification[];
   notifications: AppNotification[];
   auditLogs: CreatorApplicationAuditRecord[];
+  deletedUserIds?: string[];
   updatedAt: string;
 }
 
@@ -241,6 +242,7 @@ export class AuthoritativeCreatorApplicationStore {
         applications: [],
         notifications: [],
         auditLogs: [],
+        deletedUserIds: [],
         updatedAt: new Date().toISOString()
       };
     }
@@ -253,6 +255,7 @@ export class AuthoritativeCreatorApplicationStore {
       applications: [],
       notifications: [],
       auditLogs: [],
+      deletedUserIds: [],
       updatedAt: new Date().toISOString()
     };
   }
@@ -263,12 +266,27 @@ export class AuthoritativeCreatorApplicationStore {
         const raw = fs.readFileSync(this.dbFilePath, 'utf-8');
         const parsed = JSON.parse(raw) as Partial<CreatorApplicationsDB>;
         if (parsed && typeof parsed === 'object') {
+          const deletedUserIds = Array.isArray(parsed.deletedUserIds)
+            ? Array.from(new Set(parsed.deletedUserIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
+            : [];
+          const deletedSet = new Set(deletedUserIds);
+          const rawUsers = parsed.users && typeof parsed.users === 'object' ? parsed.users : {};
+          const cleanUsers: Record<string, User> = {};
+          for (const [k, u] of Object.entries(rawUsers)) {
+            if (!u || !u.id || deletedSet.has(u.id) || deletedSet.has(k)) continue;
+            cleanUsers[k] = u;
+          }
           return {
-            users: parsed.users && typeof parsed.users === 'object' ? parsed.users : {},
-            creators: Array.isArray(parsed.creators) ? parsed.creators : [],
-            applications: Array.isArray(parsed.applications) ? parsed.applications : [],
+            users: cleanUsers,
+            creators: Array.isArray(parsed.creators)
+              ? parsed.creators.filter(c => c && c.id && !deletedSet.has(c.id))
+              : [],
+            applications: Array.isArray(parsed.applications)
+              ? parsed.applications.filter(a => a && !deletedSet.has(a.userId))
+              : [],
             notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
             auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+            deletedUserIds,
             updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString()
           };
         }
@@ -279,6 +297,11 @@ export class AuthoritativeCreatorApplicationStore {
     const fresh = this.createInitialDB(true);
     this.writeDB(fresh);
     return fresh;
+  }
+
+  public getDeletedUserIds(): string[] {
+    const db = this.readDB();
+    return [...(db.deletedUserIds || [])];
   }
 
   private writeDB(db: CreatorApplicationsDB): void {
@@ -2018,9 +2041,17 @@ export class AuthoritativeCreatorApplicationStore {
       isVerified?: boolean;
       adminPermissionLevel?: User['adminPermissionLevel'];
       adminPermissions?: string[];
+      bypassApproval?: boolean;
     }
   ):
-    | { ok: true; user: User; creatorProfile?: CreatorProfile }
+    | {
+        ok: true;
+        user: User;
+        creatorProfile?: CreatorProfile;
+        updatedApplications?: CreatorVerification[];
+        notification?: AppNotification;
+        auditRecord?: CreatorApplicationAuditRecord;
+      }
     | ({ ok: false } & StoreHttpError) {
     if (adminActor.role !== 'admin' && adminActor.role !== 'moderator') {
       return { ok: false, statusCode: 403, error: 'Forbidden: Administrator role required.' };
@@ -2034,12 +2065,15 @@ export class AuthoritativeCreatorApplicationStore {
 
     const nowStr = formatShortTimestamp();
     const prevUser = entry.user;
+    const isBypassForceCreator = Boolean(updates.bypassApproval);
     const nextRole: UserRole =
       updates.role ||
       (updates.adminPermissionLevel === 'moderator'
         ? 'moderator'
         : updates.adminPermissionLevel
         ? 'admin'
+        : isBypassForceCreator
+        ? 'creator'
         : prevUser.role);
 
     const nextIsAdmin = nextRole === 'admin' || nextRole === 'moderator';
@@ -2058,16 +2092,18 @@ export class AuthoritativeCreatorApplicationStore {
           : getDefaultAdminPermissions(nextAdminLevel!))
       : undefined;
 
-    const grantCreatorStatus = nextRole === 'creator' || nextIsAdmin;
+    const grantCreatorStatus = nextRole === 'creator' || nextIsAdmin || isBypassForceCreator;
+    const { bypassApproval: _omitBypass, ...cleanFieldUpdates } = updates;
 
     const updatedUser: User = {
       ...prevUser,
-      ...updates,
+      ...cleanFieldUpdates,
       role: nextRole,
       adminPermissionLevel: nextAdminLevel,
       adminPermissions: nextAdminPermissions,
       ...(grantCreatorStatus
         ? {
+            accountStatus: updates.accountStatus || prevUser.accountStatus || 'active',
             creatorApplicationStatus: 'approved',
             creatorApprovalStatus: 'approved',
             isVerified: true,
@@ -2088,26 +2124,82 @@ export class AuthoritativeCreatorApplicationStore {
     db.users[entry.key] = updatedUser;
 
     let creatorProfile: CreatorProfile | undefined;
+    const updatedApplications: CreatorVerification[] = [];
+    let notification: AppNotification | undefined;
+    let auditRecord: CreatorApplicationAuditRecord | undefined;
     const cleanEmail = normalizeEmail(updatedUser.email);
 
     if (grantCreatorStatus) {
-      const matchingApp = db.applications.find(
-        a => a.userId === updatedUser.id || (cleanEmail && normalizeEmail(a.email) === cleanEmail)
-      );
-      if (matchingApp && matchingApp.status !== 'approved') {
-        const idx = db.applications.findIndex(a => a.id === matchingApp.id);
-        if (idx >= 0) {
-          db.applications[idx] = {
-            ...matchingApp,
+      let latestMatchedApp: CreatorVerification | undefined;
+      for (let i = 0; i < db.applications.length; i++) {
+        const appItem = db.applications[i];
+        const isMatch =
+          appItem.userId === updatedUser.id ||
+          (cleanEmail && normalizeEmail(appItem.email) === cleanEmail);
+        if (!isMatch) continue;
+        if (!latestMatchedApp) latestMatchedApp = appItem;
+        if (appItem.status !== 'approved') {
+          const prevStatus = appItem.status;
+          const approvedApp: CreatorVerification = {
+            ...appItem,
             status: 'approved',
             reviewedByAdminId: adminActor.id,
             reviewedByAdminName: adminActor.name,
             reviewedAt: nowStr,
+            notes: isBypassForceCreator
+              ? 'Force-converted to Creator by Administrator (Approval Bypassed)'
+              : appItem.notes || 'Upgraded to Creator by Administrator',
             updatedAt: nowStr
           };
+          db.applications[i] = approvedApp;
+          updatedApplications.push(this.enrichApplication(db, approvedApp));
+          latestMatchedApp = approvedApp;
+
+          auditRecord = this.addAuditRecord(db, {
+            applicationId: approvedApp.id,
+            applicantUserId: updatedUser.id,
+            applicantName: updatedUser.name,
+            applicantEmail: updatedUser.email,
+            adminId: adminActor.id,
+            adminName: adminActor.name,
+            adminRole: adminActor.role,
+            action: 'approved',
+            previousStatus: prevStatus,
+            newStatus: 'approved',
+            notes: approvedApp.notes || 'Force-converted to Creator by Administrator'
+          });
+        } else {
+          updatedApplications.push(this.enrichApplication(db, appItem));
         }
       }
-      creatorProfile = this.ensureCreatorProfile(db, updatedUser, matchingApp, adminActor);
+
+      creatorProfile = this.ensureCreatorProfile(db, updatedUser, latestMatchedApp, adminActor);
+      const cIdx = db.creators.findIndex(c => c.id === creatorProfile!.id);
+      if (cIdx >= 0) {
+        db.creators[cIdx] = {
+          ...db.creators[cIdx],
+          role: 'creator',
+          accountStatus: updatedUser.accountStatus || 'active',
+          creatorApplicationStatus: 'approved',
+          creatorApprovalStatus: 'approved',
+          isVerified: true,
+          updatedAt: nowStr
+        };
+        creatorProfile = db.creators[cIdx];
+      }
+
+      if (prevUser.role === 'fan' || isBypassForceCreator) {
+        notification = this.addNotification(db, {
+          userId: updatedUser.id,
+          type: 'verification',
+          title: 'Creator Account Activated',
+          message:
+            'An administrator has activated your ACOVON Creator account. You can now upload videos, publish posts, and start livestreams.',
+          linkUrl: '/creator-studio',
+          targetRole: 'creator',
+          eventKey: `creator_force_activated_${updatedUser.id}_${Date.now()}`
+        });
+      }
     } else {
       const creatorIdx = db.creators.findIndex(
         c => c.id === updatedUser.id || (cleanEmail && normalizeEmail(c.email) === cleanEmail)
@@ -2126,7 +2218,149 @@ export class AuthoritativeCreatorApplicationStore {
     return {
       ok: true,
       user: deepClone(updatedUser),
-      creatorProfile: creatorProfile ? deepClone(creatorProfile) : undefined
+      creatorProfile: creatorProfile ? deepClone(creatorProfile) : undefined,
+      updatedApplications,
+      notification,
+      auditRecord
+    };
+  }
+
+  public deleteUserAccountOnServer(
+    targetUserId: string,
+    adminActor: { id: string; name: string; email?: string; role: string; adminPermissionLevel?: string }
+  ):
+    | { ok: true; deletedUser: User; wasAdmin: boolean; deletedApplicationIds: string[] }
+    | ({ ok: false } & StoreHttpError) {
+    if (adminActor.role !== 'admin') {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'Forbidden: Only administrators can permanently delete user or admin accounts.'
+      };
+    }
+
+    const actorLevel = adminActor.adminPermissionLevel || 'admin';
+    if (actorLevel !== 'super_admin' && actorLevel !== 'admin') {
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'Forbidden: Requires Super Admin or General Admin permission to delete accounts.'
+      };
+    }
+
+    const db = this.readDB();
+    const entry = this.findUserEntry(db, { userId: targetUserId });
+    const creatorOnly = !entry ? this.findCreatorProfile(db, { userId: targetUserId }) : undefined;
+
+    if (!entry && !creatorOnly) {
+      return {
+        ok: false,
+        statusCode: 404,
+        error: `Account "${targetUserId}" not found or already deleted.`
+      };
+    }
+
+    const targetUser: User = entry
+      ? deepClone(entry.user)
+      : ({
+          ...deepClone(creatorOnly!),
+          role: 'creator'
+        } as User);
+
+    const targetEmail = normalizeEmail(targetUser.email);
+    const actorEmail = normalizeEmail(adminActor.email);
+    if (
+      targetUser.id === adminActor.id ||
+      targetUserId === adminActor.id ||
+      (targetEmail && actorEmail && targetEmail === actorEmail)
+    ) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: 'You cannot delete your own active administrator account while signed in.'
+      };
+    }
+
+    const wasAdmin =
+      targetUser.role === 'admin' ||
+      targetUser.role === 'moderator' ||
+      Boolean(targetUser.adminPermissionLevel);
+
+    if (targetUser.adminPermissionLevel === 'super_admin') {
+      if (actorLevel !== 'super_admin') {
+        return {
+          ok: false,
+          statusCode: 403,
+          error: 'Forbidden: Only a Super Admin can delete a Super Admin account.'
+        };
+      }
+      const remainingSuperAdmins = Object.values(db.users).filter(
+        u =>
+          u &&
+          u.id !== targetUser.id &&
+          u.role === 'admin' &&
+          u.adminPermissionLevel === 'super_admin' &&
+          u.accountStatus !== 'banned'
+      );
+      if (remainingSuperAdmins.length === 0) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: 'Cannot delete the last remaining Super Admin account on the platform.'
+        };
+      }
+    }
+
+    const deletedIdSet = new Set<string>(db.deletedUserIds || []);
+    deletedIdSet.add(targetUser.id);
+    if (entry?.key) deletedIdSet.add(entry.key);
+    if (targetUserId) deletedIdSet.add(targetUserId);
+
+    for (const [k, u] of Object.entries(db.users)) {
+      if (!u) continue;
+      if (
+        k === entry?.key ||
+        u.id === targetUser.id ||
+        u.id === targetUserId ||
+        (targetEmail && normalizeEmail(u.email) === targetEmail)
+      ) {
+        deletedIdSet.add(u.id);
+        deletedIdSet.add(k);
+        delete db.users[k];
+      }
+    }
+
+    db.creators = db.creators.filter(
+      c =>
+        c.id !== targetUser.id &&
+        c.id !== targetUserId &&
+        (!targetEmail || normalizeEmail(c.email) !== targetEmail)
+    );
+
+    const deletedApplicationIds: string[] = [];
+    db.applications = db.applications.filter(a => {
+      const match =
+        a.userId === targetUser.id ||
+        a.userId === targetUserId ||
+        (targetEmail && normalizeEmail(a.email) === targetEmail);
+      if (match) {
+        deletedApplicationIds.push(a.id);
+        return false;
+      }
+      return true;
+    });
+
+    db.notifications = db.notifications.filter(
+      n => n.userId !== targetUser.id && n.userId !== targetUserId
+    );
+    db.deletedUserIds = Array.from(deletedIdSet);
+
+    this.writeDB(db);
+    return {
+      ok: true,
+      deletedUser: targetUser,
+      wasAdmin,
+      deletedApplicationIds
     };
   }
 

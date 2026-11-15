@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PostVisibility, MediaAsset, PostRevision } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { uploadUserFileToSupabase } from '../../services/supabase';
 import {
@@ -104,7 +103,7 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
   onClose,
   onSave
 }) => {
-  const { platformConfig, activeCategories, getPostRevisions, restorePostRevision } = useApp();
+  const { activeCategories, getPostRevisions, restorePostRevision } = useApp();
   const firstMedia = post.media?.[0];
   const initialIsVideo = firstMedia?.type === 'video';
 
@@ -117,11 +116,7 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
   const [editingTagValue, setEditingTagValue] = useState<string>('');
 
   const availableCategories = (() => {
-    const raw = [
-      ...(activeCategories && activeCategories.length > 0 ? activeCategories.map(c => c.name) : []),
-      ...(platformConfig?.contentCategories || []),
-      ...CATEGORIES.filter(c => c !== 'All Categories')
-    ];
+    const raw = (activeCategories || []).map(c => c.name);
     const seen = new Set<string>();
     const out: string[] = [];
     for (const item of raw) {
@@ -136,8 +131,10 @@ const EditPostModalInner: React.FC<EditPostModalInnerProps> = ({
 
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     Array.isArray(post.categories) && post.categories.length > 0
-      ? Array.from(new Set(post.categories))
-      : [availableCategories[0] || 'Fashion & Luxury']
+      ? Array.from(new Set(post.categories)).filter(c => availableCategories.includes(c))
+      : availableCategories[0]
+      ? [availableCategories[0]]
+      : []
   );
   const [country, setCountry] = useState<string>(defaultCountry);
   const [visibility, setVisibility] = useState<PostVisibility>(post.visibility || 'public');

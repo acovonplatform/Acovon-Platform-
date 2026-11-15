@@ -35,12 +35,6 @@ import {
   resolveCountryRecord
 } from './src/data/globalTaxonomy';
 import {
-  INITIAL_SUPPORTED_LANGUAGES,
-  SupportedLanguageCode,
-  detectTextLanguage,
-  translateUserGeneratedText
-} from './src/data/i18nData';
-import {
   AdminPermissionLevel,
   CategoryRecord,
   CountryRecord,
@@ -48,7 +42,6 @@ import {
   PaidVerificationStatus,
   Post,
   UserRole,
-  UserTranslationPreferences,
   VerificationAuditLog,
   VerificationSettings,
   VerificationTransaction
@@ -64,8 +57,6 @@ const ADMIN_AUDIT_FILE = path.join(DATA_DIR, 'admin_audit_logs.json');
 const CREATOR_POSTS_FILE = path.join(DATA_DIR, 'creator_posts_overrides.json');
 const POST_AUDIT_FILE = path.join(DATA_DIR, 'post_audit_logs.json');
 const TAXONOMY_DB_FILE = path.join(DATA_DIR, 'taxonomy_db.json');
-const USER_TRANSLATION_SETTINGS_FILE = path.join(DATA_DIR, 'user_translation_settings.json');
-const TRANSLATION_CACHE_FILE = path.join(DATA_DIR, 'translation_cache.json');
 const GUEST_ANALYTICS_FILE = path.join(DATA_DIR, 'guest_analytics.json');
 const CREATOR_VERIFICATION_DB_FILE = path.join(DATA_DIR, 'creator_verification_db.json');
 const VIDEO_THUMBNAILS_DB_FILE = path.join(DATA_DIR, 'video_thumbnails_db.json');
@@ -507,99 +498,6 @@ function sanitizePostForGuestViewer(post: Post): Record<string, any> {
   };
 }
 
-const VALID_LANGUAGE_CODES = new Set<string>(INITIAL_SUPPORTED_LANGUAGES.map(l => l.code));
-
-function normalizeTranslationPreferenceRecord(
-  userId: string,
-  raw?: Partial<UserTranslationPreferences> | null
-): UserTranslationPreferences {
-  const prefLang =
-    raw?.preferred_translation_language && VALID_LANGUAGE_CODES.has(raw.preferred_translation_language)
-      ? raw.preferred_translation_language
-      : 'en';
-  const appLang =
-    raw?.app_language && VALID_LANGUAGE_CODES.has(raw.app_language)
-      ? raw.app_language
-      : 'en';
-  const appMode =
-    raw?.app_language_mode === 'automatic' ||
-    raw?.app_language_mode === 'manual' ||
-    raw?.app_language_mode === 'english'
-      ? raw.app_language_mode
-      : 'manual';
-
-  // CRITICAL RULE: platform_translation_enabled MUST be false unless explicitly saved as true
-  const explicitlyEnabled =
-    raw?.explicitly_saved === true && raw?.platform_translation_enabled === true;
-
-  return {
-    userId,
-    preferred_translation_language: prefLang,
-    platform_translation_enabled: explicitlyEnabled ? true : false,
-    app_language: appLang,
-    app_language_mode: appMode,
-    explicitly_saved: Boolean(raw?.explicitly_saved),
-    updated_at: raw?.updated_at || new Date().toISOString()
-  };
-}
-
-function readUserTranslationSettingsDB(): Record<string, UserTranslationPreferences> {
-  try {
-    if (fs.existsSync(USER_TRANSLATION_SETTINGS_FILE)) {
-      const raw = fs.readFileSync(USER_TRANSLATION_SETTINGS_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        const normalized: Record<string, UserTranslationPreferences> = {};
-        for (const [uid, rec] of Object.entries(parsed)) {
-          if (uid && rec && typeof rec === 'object') {
-            normalized[uid] = normalizeTranslationPreferenceRecord(
-              uid,
-              rec as Partial<UserTranslationPreferences>
-            );
-          }
-        }
-        return normalized;
-      }
-    }
-  } catch (err) {
-    console.error('Error reading user_translation_settings.json:', err);
-  }
-  return {};
-}
-
-function writeUserTranslationSettingsDB(db: Record<string, UserTranslationPreferences>): void {
-  fs.writeFileSync(USER_TRANSLATION_SETTINGS_FILE, JSON.stringify(db, null, 2), 'utf-8');
-}
-
-interface StoredTranslationCacheEntry {
-  cacheKey: string;
-  contentRef: string;
-  sourceLang: string;
-  targetLang: string;
-  originalTextHash: string;
-  translatedText: string;
-  cachedAt: string;
-}
-
-function readTranslationCacheDB(): Record<string, StoredTranslationCacheEntry> {
-  try {
-    if (fs.existsSync(TRANSLATION_CACHE_FILE)) {
-      const raw = fs.readFileSync(TRANSLATION_CACHE_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.error('Error reading translation_cache.json:', err);
-  }
-  return {};
-}
-
-function writeTranslationCacheDB(cache: Record<string, StoredTranslationCacheEntry>): void {
-  fs.writeFileSync(TRANSLATION_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
-}
-
 interface StoredTaxonomyDB {
   categories: CategoryRecord[];
   deletedCategoryIds?: string[];
@@ -896,7 +794,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       req.path.startsWith('/api/rtc') ||
       req.path.startsWith('/api/creators') ||
       req.path.startsWith('/api/wallet') ||
-      req.path.startsWith('/api/messages')
+      req.path.startsWith('/api/messages') ||
+      req.path.startsWith('/api/taxonomy') ||
+      req.path.startsWith('/api/admin')
     ) {
       if (req.path !== '/api/creator-applications/stream') {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
@@ -918,10 +818,11 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     payload: Record<string, any>
   ) => {
     const targetUserId = payload.userId ? String(payload.userId) : undefined;
+    const isGlobalBroadcast = event === 'taxonomy_updated' || event === 'user_deleted';
     const serialized = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
     for (const client of creatorAppSseClients) {
       try {
-        if (client.isAdmin || (targetUserId && client.userId === targetUserId)) {
+        if (isGlobalBroadcast || client.isAdmin || (targetUserId && client.userId === targetUserId)) {
           client.res.write(serialized);
         }
       } catch {
@@ -1033,11 +934,25 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   const fetchSupabaseUserRecord = async (
     req: express.Request | undefined,
     userId?: string
-  ): Promise<{ role?: string; account_status?: string } | null> => {
-    const cleanId = String(userId || '').trim();
-    if (!cleanId) return null;
+  ): Promise<{ uid?: string; role?: string; account_status?: string } | null> => {
+    let cleanId = String(userId || '').trim();
     const client = getRequestSupabaseClient(req);
     if (!client) return null;
+
+    if (!cleanId && supabase && req) {
+      const rawHeader = req.headers['x-supabase-access-token'];
+      const supaToken = typeof rawHeader === 'string' ? rawHeader.trim() : '';
+      if (supaToken && supaToken.split('.').length === 3) {
+        try {
+          const { data: authData } = await supabase.auth.getUser(supaToken);
+          if (authData?.user?.id) cleanId = authData.user.id;
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (!cleanId) return null;
+
     try {
       const { data, error } = await (client as any)
         .from('users')
@@ -1119,6 +1034,42 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       };
     }
 
+    // Check Supabase admin_setup table if local admin_setup.json has not been synced yet
+    const supaClient = getRequestSupabaseClient(req);
+    if (supaClient && (cleanEmail || cleanId)) {
+      try {
+        const { data: supaSetup } = await (supaClient as any)
+          .from('admin_setup')
+          .select('*')
+          .eq('id', 1)
+          .maybeSingle();
+        if (supaSetup && supaSetup.is_setup_completed) {
+          const setupEmail = String(supaSetup.admin_email || '').trim().toLowerCase();
+          const setupUid = String(supaSetup.admin_uid || '').trim();
+          if ((cleanEmail && setupEmail === cleanEmail) || (cleanId && setupUid === cleanId)) {
+            writeAdminSetup(
+              {
+                is_setup_completed: true,
+                completed_at: supaSetup.completed_at,
+                admin_uid: supaSetup.admin_uid,
+                admin_email: supaSetup.admin_email,
+                initialized_by: supaSetup.initialized_by || 'supabase_table'
+              },
+              adminSetupPath
+            );
+            return {
+              isAdmin: true,
+              role: 'admin',
+              adminPermissionLevel: 'super_admin',
+              adminPermissions: getDefaultAdminPermissions('super_admin')
+            };
+          }
+        }
+      } catch {
+        // ignore optional table error
+      }
+    }
+
     const remoteUser = remoteUserOverride !== undefined ? remoteUserOverride : await fetchSupabaseUserRecord(req, cleanId);
     if (remoteUser && (remoteUser.role === 'admin' || remoteUser.role === 'moderator')) {
       const level: AdminPermissionLevel = remoteUser.role === 'moderator' ? 'moderator' : 'admin';
@@ -1128,6 +1079,34 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         adminPermissionLevel: level,
         adminPermissions: getDefaultAdminPermissions(level)
       };
+    }
+
+    // Check server-managed Supabase Auth app_metadata.role claim on verified JWT
+    if (supabase && req) {
+      const rawHeader = req.headers['x-supabase-access-token'];
+      const supaToken = typeof rawHeader === 'string' ? rawHeader.trim() : '';
+      if (supaToken && supaToken.split('.').length === 3) {
+        try {
+          const { data: authData, error: authErr } = await supabase.auth.getUser(supaToken);
+          if (!authErr && authData?.user) {
+            const jwtEmail = String(authData.user.email || '').trim().toLowerCase();
+            const matchesCaller =
+              (cleanEmail && jwtEmail === cleanEmail) || (cleanId && authData.user.id === cleanId);
+            const appRole = String((authData.user.app_metadata as any)?.role || '').trim().toLowerCase();
+            if (matchesCaller && (appRole === 'admin' || appRole === 'moderator')) {
+              const level: AdminPermissionLevel = appRole === 'moderator' ? 'moderator' : 'admin';
+              return {
+                isAdmin: true,
+                role: appRole === 'moderator' ? 'moderator' : 'admin',
+                adminPermissionLevel: level,
+                adminPermissions: getDefaultAdminPermissions(level)
+              };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
 
     return { isAdmin: false };
@@ -1140,6 +1119,23 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   ): Promise<boolean> => {
     const rawHeader = req.headers['x-supabase-access-token'];
     const token = typeof rawHeader === 'string' ? rawHeader.trim() : '';
+    const targetEmail = String(expectedEmail || '').trim().toLowerCase();
+
+    // Also allow an already-verified signed admin bearer token for this same user
+    const bearer = extractBearerToken(req);
+    if (bearer) {
+      const verifiedAdmin = creatorAppStore.verifyAdminToken(bearer);
+      if (verifiedAdmin) {
+        const bearerEmail = String(verifiedAdmin.email || '').trim().toLowerCase();
+        if (
+          (expectedUserId && verifiedAdmin.id === expectedUserId) ||
+          (targetEmail && bearerEmail && targetEmail === bearerEmail)
+        ) {
+          return true;
+        }
+      }
+    }
+
     if (!supabase) {
       return true;
     }
@@ -1150,7 +1146,6 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       const { data, error } = await supabase.auth.getUser(token);
       if (error || !data?.user) return false;
       const supaEmail = String(data.user.email || '').trim().toLowerCase();
-      const targetEmail = String(expectedEmail || '').trim().toLowerCase();
       if (targetEmail && supaEmail && targetEmail === supaEmail) return true;
       if (expectedUserId && data.user.id === expectedUserId) return true;
       return false;
@@ -2009,7 +2004,10 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      const adminUsers = readAdminUsers(adminUsersPath);
+      const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(id => id.toLowerCase()));
+      const adminUsers = readAdminUsers(adminUsersPath).filter(
+        u => !deletedSet.has(u.id.toLowerCase()) && !deletedSet.has(u.email.toLowerCase())
+      );
       const hashedInput = hashPassword(password);
 
       // Check local registered admin accounts
@@ -2019,7 +2017,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
 
       // Also check standard & DB admin/moderator accounts
       if (!matchedAdmin) {
-        if (cleanEmail === 'admin@acovon.com' && password === 'acovon2025') {
+        if (
+          cleanEmail === 'admin@acovon.com' &&
+          password === 'acovon2025' &&
+          !deletedSet.has('user_admin_1') &&
+          !deletedSet.has('admin@acovon.com')
+        ) {
           matchedAdmin = {
             id: 'user_admin_1',
             name: 'Julian Sterling',
@@ -2039,7 +2042,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
           };
         } else {
           const db = creatorAppStore.readDB();
-          const allKnownUsers = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)];
+          const allKnownUsers = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)].filter(
+            u => u && !deletedSet.has(u.id.toLowerCase()) && (!u.email || !deletedSet.has(u.email.toLowerCase()))
+          );
           const candidateAdmin = allKnownUsers.find(
             u =>
               u &&
@@ -2055,6 +2060,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
               const level: AdminPermissionLevel =
                 candidateAdmin.adminPermissionLevel ||
                 (candidateAdmin.role === 'moderator' ? 'moderator' : 'super_admin');
+              if (candidateAdmin.accountStatus === 'banned' || candidateAdmin.accountStatus === 'suspended') {
+                return res.status(403).json({
+                  success: false,
+                  error: `Access Denied: Administrator account is ${candidateAdmin.accountStatus}.`
+                });
+              }
               matchedAdmin = {
                 id: candidateAdmin.id,
                 name: candidateAdmin.name,
@@ -2077,43 +2088,60 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         }
       }
 
-      // Fallback: authenticate via Supabase Auth if user is an authorized admin in DB / Supabase public.users
-      if (!matchedAdmin && supabase) {
+      // Fallback: authenticate via verified Supabase token header or Supabase Auth signInWithPassword
+      if (!matchedAdmin && supabase && !deletedSet.has(cleanEmail)) {
         try {
-          const { data: supaAuthData, error: supaAuthErr } = await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password
-          });
-          if (!supaAuthErr && supaAuthData?.user) {
+          let verifiedSupaUser: any = null;
+          let verifiedSupaToken = '';
+          const rawHeaderToken = req.headers['x-supabase-access-token'];
+          const headerSupaToken = typeof rawHeaderToken === 'string' ? rawHeaderToken.trim() : '';
+          if (headerSupaToken && headerSupaToken.split('.').length === 3) {
+            const { data: tokData, error: tokErr } = await supabase.auth.getUser(headerSupaToken);
+            if (!tokErr && tokData?.user && String(tokData.user.email || '').trim().toLowerCase() === cleanEmail) {
+              verifiedSupaUser = tokData.user;
+              verifiedSupaToken = headerSupaToken;
+            }
+          }
+          if (!verifiedSupaUser) {
+            const { data: supaAuthData, error: supaAuthErr } = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password
+            });
+            if (!supaAuthErr && supaAuthData?.user) {
+              verifiedSupaUser = supaAuthData.user;
+              verifiedSupaToken = supaAuthData.session?.access_token || '';
+            }
+          }
+          if (verifiedSupaUser && !deletedSet.has(String(verifiedSupaUser.id || '').toLowerCase())) {
             let remoteRoleRec: { role?: string; account_status?: string } | null = null;
-            if (supaAuthData.session?.access_token) {
+            if (verifiedSupaToken) {
               const authedClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
                 auth: { persistSession: false, autoRefreshToken: false },
-                global: { headers: { Authorization: `Bearer ${supaAuthData.session.access_token}` } }
+                global: { headers: { Authorization: `Bearer ${verifiedSupaToken}` } }
               });
               const { data: uRow } = await (authedClient as any)
                 .from('users')
                 .select('uid, role, account_status')
-                .eq('uid', supaAuthData.user.id)
+                .eq('uid', verifiedSupaUser.id)
                 .maybeSingle();
               if (uRow) remoteRoleRec = uRow;
             }
             const adminHint = await resolveAuthoritativeAdminRecord(
               req,
-              { userId: supaAuthData.user.id, email: cleanEmail },
+              { userId: verifiedSupaUser.id, email: cleanEmail },
               remoteRoleRec
             );
             if (adminHint.isAdmin) {
               const metaName =
-                supaAuthData.user.user_metadata?.full_legal_name ||
-                supaAuthData.user.user_metadata?.full_name ||
+                verifiedSupaUser.user_metadata?.full_legal_name ||
+                verifiedSupaUser.user_metadata?.full_name ||
                 cleanEmail.split('@')[0];
               const metaUsername =
-                supaAuthData.user.user_metadata?.username ||
+                verifiedSupaUser.user_metadata?.username ||
                 cleanEmail.split('@')[0];
               const level = adminHint.adminPermissionLevel || 'admin';
               matchedAdmin = {
-                id: supaAuthData.user.id,
+                id: verifiedSupaUser.id,
                 name: String(metaName),
                 username: String(metaUsername),
                 email: cleanEmail,
@@ -2123,7 +2151,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
                 isVerified: true,
                 is18PlusConfirmed: true,
                 accountStatus: 'active',
-                dateJoined: String(supaAuthData.user.created_at || new Date().toISOString()).split('T')[0],
+                dateJoined: String(verifiedSupaUser.created_at || new Date().toISOString()).split('T')[0],
                 avatar: '',
                 walletBalance: 0,
                 createdAt: new Date().toISOString()
@@ -2138,9 +2166,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       // Check if user is trying to log in with a fan or creator account
       if (!matchedAdmin) {
         const db = creatorAppStore.readDB();
-        const nonAdminMatch = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)].find(
-          u => u && u.email?.toLowerCase() === cleanEmail && u.role !== 'admin' && u.role !== 'moderator'
-        );
+        const nonAdminMatch = [...Object.values(db.users), ...Object.values(PLATFORM_ADMIN_ACCOUNTS)]
+          .filter(u => u && !deletedSet.has(u.id.toLowerCase()) && (!u.email || !deletedSet.has(u.email.toLowerCase())))
+          .find(u => u && u.email?.toLowerCase() === cleanEmail && u.role !== 'admin' && u.role !== 'moderator');
         if (nonAdminMatch) {
           return res.status(403).json({
             success: false,
@@ -2214,6 +2242,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     }
 
     const { userKeyOrId } = req.body || {};
+    const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(id => id.toLowerCase()));
     const adminUsers = readAdminUsers(adminUsersPath);
     const db = creatorAppStore.readDB();
     const candidate =
@@ -2222,7 +2251,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       PLATFORM_ADMIN_ACCOUNTS[userKeyOrId] ||
       adminUsers.find(u => u.id === userKeyOrId);
 
-    if (!candidate || (candidate.role !== 'admin' && candidate.role !== 'moderator')) {
+    if (
+      !candidate ||
+      deletedSet.has(String(candidate.id || '').toLowerCase()) ||
+      deletedSet.has(String(candidate.email || '').toLowerCase()) ||
+      (candidate.role !== 'admin' && candidate.role !== 'moderator')
+    ) {
       return res.status(404).json({ success: false, error: 'Target administrator operator not found.' });
     }
 
@@ -2268,9 +2302,24 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         return res.status(400).json({ success: false, error: 'Valid user email is required.' });
       }
 
+      const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(d => d.toLowerCase()));
+      const cleanId = String(id || '').trim();
+      if ((cleanId && deletedSet.has(cleanId.toLowerCase())) || deletedSet.has(cleanEmail)) {
+        return res.status(403).json({
+          success: false,
+          deleted: true,
+          error: 'This account has been permanently removed from ACOVON.'
+        });
+      }
+
       await pullSupabaseCreatorApplications(req);
-      const remoteUser = await fetchSupabaseUserRecord(req, id);
-      const adminHint = await resolveAuthoritativeAdminRecord(req, { userId: id, email: cleanEmail }, remoteUser);
+      const remoteUser = await fetchSupabaseUserRecord(req, cleanId || undefined);
+      const effectiveUidForLookup = cleanId || remoteUser?.uid;
+      const adminHint = await resolveAuthoritativeAdminRecord(
+        req,
+        { userId: effectiveUidForLookup, email: cleanEmail },
+        remoteUser
+      );
       const remoteRole: UserRole | undefined = adminHint.isAdmin
         ? adminHint.role
         : remoteUser?.role === 'creator'
@@ -2278,7 +2327,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         : undefined;
 
       const result = creatorAppStore.syncUserAccount({
-        id,
+        id: cleanId || undefined,
         name,
         username,
         email: cleanEmail,
@@ -2337,6 +2386,13 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       const email = typeof req.query.email === 'string' ? req.query.email : undefined;
       if (!userId && !email) {
         return res.status(400).json({ success: false, error: 'userId or email is required.' });
+      }
+      const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(id => id.toLowerCase()));
+      if (
+        (userId && deletedSet.has(userId.trim().toLowerCase())) ||
+        (email && deletedSet.has(email.trim().toLowerCase()))
+      ) {
+        return res.json({ success: true, found: false, deleted: true });
       }
       await pullSupabaseCreatorApplications(req);
       const remoteUser = userId ? await fetchSupabaseUserRecord(req, userId) : null;
@@ -2398,8 +2454,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     }
 
     try {
+      const deletedUserIds = creatorAppStore.getDeletedUserIds();
+      const deletedSet = new Set(deletedUserIds.map(id => id.toLowerCase()));
       const dbUsers = creatorAppStore.listAllUsersSafe();
-      const adminFileUsers = readAdminUsers(adminUsersPath);
+      const adminFileUsers = readAdminUsers(adminUsersPath).filter(
+        au => !deletedSet.has(au.id.toLowerCase()) && !deletedSet.has(au.email.toLowerCase())
+      );
       const mergedMap = new Map<string, any>();
       dbUsers.forEach(u => mergedMap.set(u.id, u));
       adminFileUsers.forEach(au => {
@@ -2418,7 +2478,8 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       return res.json({
         success: true,
         users: Array.from(mergedMap.values()),
-        creators: creatorAppStore.listDirectoryCreators()
+        creators: creatorAppStore.listDirectoryCreators(),
+        deletedUserIds
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to list users';
@@ -2580,7 +2641,8 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
           statusReason: body.statusReason,
           isVerified: body.isVerified,
           adminPermissionLevel: body.adminPermissionLevel,
-          adminPermissions: body.adminPermissions
+          adminPermissions: body.adminPermissions,
+          bypassApproval: Boolean(body.bypassApproval)
         }
       );
 
@@ -2619,25 +2681,217 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
               updated_at: new Date().toISOString()
             })
             .eq('uid', result.user.id);
+
+          if (result.user.role === 'creator' && (Boolean(body.bypassApproval) || body.role === 'creator')) {
+            await (reqSupabase as any)
+              .from('creator_applications')
+              .update({
+                status: 'approved',
+                reviewed_by: auth.actor.id,
+                reviewed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('user_id', result.user.id);
+          }
         } catch {
           // ignore optional remote sync error
         }
+      }
+
+      if (Boolean(body.bypassApproval)) {
+        appendAuditLog(
+          {
+            id: `audit_force_creator_${Date.now()}`,
+            adminId: auth.actor.id,
+            adminName: auth.actor.name,
+            adminRole: auth.actor.adminPermissionLevel || auth.actor.role,
+            category: 'creator_management',
+            action: 'Force-Converted User to Approved Creator (Bypass Approval)',
+            targetType: 'User',
+            targetId: result.user.id,
+            targetLabel: `${result.user.name} (${result.user.email})`,
+            details: `Administrator bypassed creator application workflow and immediately activated Creator capabilities.`,
+            severity: 'warning',
+            timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+          },
+          adminAuditPath
+        );
       }
 
       broadcastCreatorAppEvent('application_reviewed', {
         decision: result.user.role === 'creator' || result.user.role === 'admin' ? 'approved' : 'updated',
         user: result.user,
         creatorProfile: result.creatorProfile,
+        updatedApplications: result.updatedApplications,
+        notification: result.notification,
+        auditRecord: result.auditRecord,
         userId: result.user.id
       });
 
       return res.json({
         success: true,
         user: result.user,
-        creatorProfile: result.creatorProfile
+        creatorProfile: result.creatorProfile,
+        updatedApplications: result.updatedApplications,
+        notification: result.notification,
+        auditRecord: result.auditRecord
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update user account';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.delete('/api/admin/users/:userId', async (req, res) => {
+    const auth = await resolveAdminActor(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Administrator authentication is required.' });
+    }
+    if (!auth.actor) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only authorized administrators can delete accounts.' });
+    }
+
+    try {
+      const { userId } = req.params;
+      const result = creatorAppStore.deleteUserAccountOnServer(userId, {
+        id: auth.actor.id,
+        name: auth.actor.name,
+        email: auth.actor.email,
+        role: auth.actor.role,
+        adminPermissionLevel: auth.actor.adminPermissionLevel
+      });
+
+      if (!result.ok) {
+        return res.status(result.statusCode).json({ success: false, error: result.error });
+      }
+
+      const deletedEmailLower = (result.deletedUser.email || '').trim().toLowerCase();
+
+      // Remove from admin_users.json
+      const adminUsers = readAdminUsers(adminUsersPath);
+      const filteredAdmins = adminUsers.filter(
+        u =>
+          u.id !== result.deletedUser.id &&
+          u.id !== userId &&
+          (!deletedEmailLower || u.email.toLowerCase() !== deletedEmailLower)
+      );
+      if (filteredAdmins.length !== adminUsers.length) {
+        writeAdminUsers(filteredAdmins, adminUsersPath);
+      }
+
+      // Reset admin_setup.json if it pointed to this deleted admin
+      const setupData = readAdminSetup(adminSetupPath);
+      if (
+        setupData.is_setup_completed &&
+        (setupData.admin_uid === result.deletedUser.id ||
+          setupData.admin_uid === userId ||
+          (deletedEmailLower && setupData.admin_email?.toLowerCase() === deletedEmailLower))
+      ) {
+        writeAdminSetup({ is_setup_completed: false }, adminSetupPath);
+      }
+
+      // Purge user's posts and media references
+      const deletedPostIdsSet = new Set<string>(postStore.deletePostsByCreator(result.deletedUser.id));
+      if (userId !== result.deletedUser.id) {
+        for (const pid of postStore.deletePostsByCreator(userId)) {
+          deletedPostIdsSet.add(pid);
+        }
+      }
+      const deletedPostIds = Array.from(deletedPostIdsSet);
+
+      // Purge relational taxonomy mappings for the deleted user and their posts
+      const taxDb = readTaxonomyDB(taxonomyDbPath);
+      let taxChanged = false;
+      if (taxDb.creatorCountries[result.deletedUser.id]) {
+        delete taxDb.creatorCountries[result.deletedUser.id];
+        taxChanged = true;
+      }
+      if (taxDb.creatorCountries[userId]) {
+        delete taxDb.creatorCountries[userId];
+        taxChanged = true;
+      }
+      for (const pid of deletedPostIds) {
+        if (taxDb.postCountries[pid]) {
+          delete taxDb.postCountries[pid];
+          taxChanged = true;
+        }
+        if (taxDb.postCategories[pid]) {
+          delete taxDb.postCategories[pid];
+          taxChanged = true;
+        }
+      }
+      for (const [pid, meta] of Object.entries(taxDb.postCountries)) {
+        if (meta && (meta.creator_id === result.deletedUser.id || meta.creator_id === userId)) {
+          delete taxDb.postCountries[pid];
+          delete taxDb.postCategories[pid];
+          taxChanged = true;
+        }
+      }
+      if (taxChanged) {
+        writeTaxonomyDB(taxDb, taxonomyDbPath);
+      }
+
+      // Best-effort remote Supabase cleanup
+      const reqSupabase = getRequestSupabaseClient(req);
+      if (reqSupabase) {
+        try {
+          await (reqSupabase as any)
+            .from('creator_applications')
+            .delete()
+            .eq('user_id', result.deletedUser.id);
+          if (deletedEmailLower) {
+            await (reqSupabase as any)
+              .from('creator_applications')
+              .delete()
+              .eq('email', deletedEmailLower);
+          }
+          await (reqSupabase as any)
+            .from('users')
+            .delete()
+            .eq('uid', result.deletedUser.id);
+        } catch {
+          // ignore optional remote cleanup error
+        }
+      }
+
+      appendAuditLog(
+        {
+          id: `audit_user_del_${Date.now()}`,
+          adminId: auth.actor.id,
+          adminName: auth.actor.name,
+          adminRole: auth.actor.adminPermissionLevel || auth.actor.role,
+          category: 'user_management',
+          action: result.wasAdmin ? 'Permanently Deleted Administrator Account' : 'Permanently Deleted User Account',
+          targetType: result.wasAdmin ? 'AdminUser' : 'User',
+          targetId: result.deletedUser.id,
+          targetLabel: `${result.deletedUser.name} (${result.deletedUser.email || result.deletedUser.id})`,
+          details: `Permanently removed account, ${deletedPostIds.length} post(s), and ${result.deletedApplicationIds.length} creator application(s).`,
+          severity: 'critical',
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+        },
+        adminAuditPath
+      );
+
+      const deletedUserIds = creatorAppStore.getDeletedUserIds();
+      broadcastCreatorAppEvent('user_deleted', {
+        userId: result.deletedUser.id,
+        requestedUserId: userId,
+        email: result.deletedUser.email,
+        wasAdmin: result.wasAdmin,
+        deletedPostIds,
+        deletedUserIds
+      });
+
+      return res.json({
+        success: true,
+        deletedUserId: result.deletedUser.id,
+        wasAdmin: result.wasAdmin,
+        deletedPostIds,
+        deletedApplicationIds: result.deletedApplicationIds,
+        deletedUserIds
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete user account';
       return res.status(500).json({ success: false, error: msg });
     }
   });
@@ -3730,7 +3984,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         });
       }
 
-      const db = readTaxonomyDB();
+      const db = readTaxonomyDB(taxonomyDbPath);
       const matchedCategories = categories
         .map((c: string) => resolveCategoryRecord(c, db.categories))
         .filter((r): r is CategoryRecord => Boolean(r && r.is_active));
@@ -3759,7 +4013,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         iso_code: resolvedCountry.iso_code
       };
 
-      writeTaxonomyDB(db);
+      writeTaxonomyDB(db, taxonomyDbPath);
 
       return res.json({
         success: true,
@@ -3800,7 +4054,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         });
       }
 
-      const db = readTaxonomyDB();
+      const db = readTaxonomyDB(taxonomyDbPath);
       const resolvedCountry = resolveCountryRecord(country, db.countries);
       if (!resolvedCountry || !resolvedCountry.is_active) {
         return res.status(400).json({
@@ -3815,7 +4069,7 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         country_name: resolvedCountry.name,
         iso_code: resolvedCountry.iso_code
       };
-      writeTaxonomyDB(db);
+      writeTaxonomyDB(db, taxonomyDbPath);
 
       appendAuditLog({
         id: `audit_creator_country_${Date.now()}`,
@@ -3846,14 +4100,58 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
     }
   });
 
+  // Helper: Resolve admin actor for taxonomy mutations (supports Bearer token or verified admin actorId)
+  const resolveTaxonomyAdminActor = async (
+    req: express.Request,
+    fallbackActorId?: string,
+    fallbackActorName?: string,
+    fallbackActorRole?: string
+  ): Promise<{ id: string; name: string; role: string } | null> => {
+    const tokenAuth = await resolveAdminActor(req);
+    if (tokenAuth.authenticated) {
+      if (tokenAuth.actor && tokenAuth.actor.role === 'admin') {
+        return {
+          id: tokenAuth.actor.id,
+          name: tokenAuth.actor.name,
+          role: tokenAuth.actor.adminPermissionLevel || tokenAuth.actor.role
+        };
+      }
+      return null;
+    }
+    const cleanActorId = String(fallbackActorId || '').trim();
+    if (!cleanActorId) return null;
+    const sessionState = creatorAppStore.getUserSessionState({ userId: cleanActorId });
+    if (sessionState.found && sessionState.user && sessionState.user.role === 'admin') {
+      return {
+        id: sessionState.user.id,
+        name: sessionState.user.name,
+        role: sessionState.user.adminPermissionLevel || sessionState.user.role
+      };
+    }
+    const deletedSet = new Set(creatorAppStore.getDeletedUserIds().map(id => id.toLowerCase()));
+    if (
+      !deletedSet.has(cleanActorId.toLowerCase()) &&
+      PLATFORM_ADMIN_ACCOUNTS[cleanActorId]?.role === 'admin' &&
+      (fallbackActorRole === 'admin' || fallbackActorRole === 'super_admin')
+    ) {
+      return {
+        id: cleanActorId,
+        name: fallbackActorName || PLATFORM_ADMIN_ACCOUNTS[cleanActorId].name,
+        role: fallbackActorRole || 'admin'
+      };
+    }
+    return null;
+  };
+
   // --------------------------------------------------------------------------
   // API: Admin Add Official Category (No Duplicates Allowed)
   // --------------------------------------------------------------------------
-  app.post('/api/admin/categories', (req, res) => {
+  app.post('/api/admin/categories', async (req, res) => {
     try {
       const { actorId, actorName, actorRole, name, description, image, display_order } = req.body || {};
+      const verifiedActor = await resolveTaxonomyAdminActor(req, actorId, actorName, actorRole);
 
-      if (!actorId || (actorRole !== 'admin' && actorRole !== 'super_admin')) {
+      if (!verifiedActor) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Only administrators can add official platform categories.'
@@ -3914,9 +4212,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       appendAuditLog(
         {
           id: `audit_cat_add_${Date.now()}`,
-          adminId: actorId,
-          adminName: actorName || 'Admin',
-          adminRole: actorRole || 'admin',
+          adminId: verifiedActor.id,
+          adminName: verifiedActor.name,
+          adminRole: verifiedActor.role,
           category: 'platform_config',
           action: 'Created Official Platform Category',
           targetType: 'Category',
@@ -3928,6 +4226,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         },
         adminAuditPath
       );
+
+      broadcastCreatorAppEvent('taxonomy_updated', {
+        categories: db.categories,
+        deletedCategoryIds: db.deletedCategoryIds || [],
+        countries: db.countries
+      });
 
       return res.json({
         success: true,
@@ -3944,12 +4248,13 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   // --------------------------------------------------------------------------
   // API: Admin Update Category (Edit Name, Description, Image, Active Status, Order)
   // --------------------------------------------------------------------------
-  app.put('/api/admin/categories/:categoryId', (req, res) => {
+  app.put('/api/admin/categories/:categoryId', async (req, res) => {
     try {
       const { categoryId } = req.params;
       const { actorId, actorName, actorRole, updates } = req.body || {};
+      const verifiedActor = await resolveTaxonomyAdminActor(req, actorId, actorName, actorRole);
 
-      if (!actorId || (actorRole !== 'admin' && actorRole !== 'super_admin')) {
+      if (!verifiedActor) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Only administrators can modify official platform categories.'
@@ -4009,9 +4314,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       appendAuditLog(
         {
           id: `audit_cat_edit_${Date.now()}`,
-          adminId: actorId,
-          adminName: actorName || 'Admin',
-          adminRole: actorRole || 'admin',
+          adminId: verifiedActor.id,
+          adminName: verifiedActor.name,
+          adminRole: verifiedActor.role,
           category: 'platform_config',
           action: 'Updated Official Platform Category',
           targetType: 'Category',
@@ -4024,10 +4329,17 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         adminAuditPath
       );
 
+      broadcastCreatorAppEvent('taxonomy_updated', {
+        categories: db.categories,
+        deletedCategoryIds: db.deletedCategoryIds || [],
+        countries: db.countries
+      });
+
       return res.json({
         success: true,
         category: updated,
-        categories: db.categories
+        categories: db.categories,
+        deletedCategoryIds: db.deletedCategoryIds || []
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update category';
@@ -4038,15 +4350,16 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   // --------------------------------------------------------------------------
   // API: Admin Delete Official Category (Removes & Tombstones Baseline/Custom)
   // --------------------------------------------------------------------------
-  app.delete('/api/admin/categories/:categoryId', (req, res) => {
+  app.delete('/api/admin/categories/:categoryId', async (req, res) => {
     try {
       const { categoryId } = req.params;
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const actorId = String(body.actorId || req.query.actorId || req.headers['x-actor-id'] || '').trim();
       const actorName = String(body.actorName || req.query.actorName || req.headers['x-actor-name'] || 'Admin').trim();
       const actorRole = String(body.actorRole || req.query.actorRole || req.headers['x-actor-role'] || '').trim();
+      const verifiedActor = await resolveTaxonomyAdminActor(req, actorId, actorName, actorRole);
 
-      if (!actorId || (actorRole !== 'admin' && actorRole !== 'super_admin')) {
+      if (!verifiedActor) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Only administrators can delete official platform categories.'
@@ -4079,9 +4392,9 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       appendAuditLog(
         {
           id: `audit_cat_del_${Date.now()}`,
-          adminId: actorId,
-          adminName: actorName || 'Admin',
-          adminRole: actorRole || 'admin',
+          adminId: verifiedActor.id,
+          adminName: verifiedActor.name,
+          adminRole: verifiedActor.role,
           category: 'platform_config',
           action: 'Deleted Official Platform Category',
           targetType: 'Category',
@@ -4093,6 +4406,14 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         },
         adminAuditPath
       );
+
+      broadcastCreatorAppEvent('taxonomy_updated', {
+        categories: db.categories,
+        deletedCategoryIds: db.deletedCategoryIds || [],
+        countries: db.countries,
+        deletedCategoryId: categoryId,
+        deletedCategoryName: target.name
+      });
 
       return res.json({
         success: true,
@@ -4109,19 +4430,20 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
   // --------------------------------------------------------------------------
   // API: Admin Activate / Deactivate Supported Country
   // --------------------------------------------------------------------------
-  app.put('/api/admin/countries/:countryId', (req, res) => {
+  app.put('/api/admin/countries/:countryId', async (req, res) => {
     try {
       const { countryId } = req.params;
       const { actorId, actorName, actorRole, is_active } = req.body || {};
+      const verifiedActor = await resolveTaxonomyAdminActor(req, actorId, actorName, actorRole);
 
-      if (!actorId || (actorRole !== 'admin' && actorRole !== 'super_admin')) {
+      if (!verifiedActor) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Only administrators can activate or deactivate countries.'
         });
       }
 
-      const db = readTaxonomyDB();
+      const db = readTaxonomyDB(taxonomyDbPath);
       const idx = db.countries.findIndex(
         c => c.id === countryId || c.iso_code.toLowerCase() === countryId.toLowerCase()
       );
@@ -4136,13 +4458,13 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         ...db.countries[idx],
         is_active: Boolean(is_active)
       };
-      writeTaxonomyDB(db);
+      writeTaxonomyDB(db, taxonomyDbPath);
 
       appendAuditLog({
         id: `audit_country_toggle_${Date.now()}`,
-        adminId: actorId,
-        adminName: actorName || 'Admin',
-        adminRole: actorRole || 'admin',
+        adminId: verifiedActor.id,
+        adminName: verifiedActor.name,
+        adminRole: verifiedActor.role,
         category: 'platform_config',
         action: db.countries[idx].is_active ? 'Activated Supported Country' : 'Deactivated Supported Country',
         targetType: 'Country',
@@ -4151,6 +4473,12 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
         details: `Set country "${db.countries[idx].name}" status to ${db.countries[idx].is_active ? 'Active' : 'Inactive'}. Existing creator and video records preserved.`,
         severity: 'info',
         timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+      }, adminAuditPath);
+
+      broadcastCreatorAppEvent('taxonomy_updated', {
+        categories: db.categories,
+        deletedCategoryIds: db.deletedCategoryIds || [],
+        countries: db.countries
       });
 
       return res.json({
@@ -4160,193 +4488,6 @@ export function createApp(options?: { dataDir?: string; seedDefaults?: boolean }
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update country status';
-      return res.status(500).json({ success: false, error: msg });
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // API: User Language & Platform Translation Settings (Per-User Independent)
-  // --------------------------------------------------------------------------
-  app.get('/api/translation/settings', (_req, res) => {
-    try {
-      const db = readUserTranslationSettingsDB();
-      return res.json({
-        success: true,
-        settingsByUser: db
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load translation settings';
-      return res.status(500).json({ success: false, error: msg });
-    }
-  });
-
-  app.get('/api/translation/settings/:userId', (req, res) => {
-    try {
-      const userId = (req.params.userId || '').trim();
-      if (!userId) {
-        return res.status(400).json({ success: false, error: 'Missing userId' });
-      }
-      const db = readUserTranslationSettingsDB();
-      const record = normalizeTranslationPreferenceRecord(userId, db[userId] || null);
-      return res.json({
-        success: true,
-        settings: record
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to load user translation settings';
-      return res.status(500).json({ success: false, error: msg });
-    }
-  });
-
-  app.put('/api/translation/settings/:userId', (req, res) => {
-    try {
-      const userId = (req.params.userId || '').trim();
-      if (!userId) {
-        return res.status(400).json({ success: false, error: 'Missing userId' });
-      }
-
-      const {
-        preferred_translation_language,
-        platform_translation_enabled,
-        app_language,
-        app_language_mode
-      } = req.body || {};
-
-      const db = readUserTranslationSettingsDB();
-      const existing = normalizeTranslationPreferenceRecord(userId, db[userId] || null);
-
-      const nextPrefLang =
-        typeof preferred_translation_language === 'string' &&
-        VALID_LANGUAGE_CODES.has(preferred_translation_language)
-          ? preferred_translation_language
-          : existing.preferred_translation_language;
-
-      const nextAppLang =
-        typeof app_language === 'string' && VALID_LANGUAGE_CODES.has(app_language)
-          ? app_language
-          : existing.app_language;
-
-      const nextAppMode =
-        app_language_mode === 'automatic' ||
-        app_language_mode === 'manual' ||
-        app_language_mode === 'english'
-          ? app_language_mode
-          : existing.app_language_mode || 'manual';
-
-      // CRITICAL: Never interpret a missing value as enabled.
-      // Changing app_language or preferred_translation_language alone preserves existing platform_translation_enabled
-      // (which defaults to false).
-      const nextPlatformTranslationEnabled =
-        typeof platform_translation_enabled === 'boolean'
-          ? platform_translation_enabled
-          : existing.explicitly_saved
-          ? existing.platform_translation_enabled === true
-          : false;
-
-      const updated: UserTranslationPreferences = {
-        userId,
-        preferred_translation_language: nextPrefLang,
-        platform_translation_enabled: nextPlatformTranslationEnabled,
-        app_language: nextAppLang,
-        app_language_mode: nextAppMode,
-        explicitly_saved: true,
-        updated_at: new Date().toISOString()
-      };
-
-      db[userId] = updated;
-      writeUserTranslationSettingsDB(db);
-
-      return res.json({
-        success: true,
-        settings: updated
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save user translation settings';
-      return res.status(500).json({ success: false, error: msg });
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // API: Secure Backend Content Translation & Caching Service
-  // Caches translations by (contentRef, sourceLang, targetLang)
-  // Never overwrites original creator content
-  // --------------------------------------------------------------------------
-  app.post('/api/translation/translate', (req, res) => {
-    try {
-      const { contentRef, text, sourceLang, targetLang } = req.body || {};
-      const cleanText = typeof text === 'string' ? text.trim() : '';
-      if (!cleanText) {
-        return res.status(400).json({ success: false, error: 'Text is required for translation' });
-      }
-
-      const detectedSource = detectTextLanguage(cleanText);
-      const resolvedSourceLang: SupportedLanguageCode =
-        typeof sourceLang === 'string' && VALID_LANGUAGE_CODES.has(sourceLang)
-          ? (sourceLang as SupportedLanguageCode)
-          : detectedSource.code;
-
-      const resolvedTargetLang: SupportedLanguageCode =
-        typeof targetLang === 'string' && VALID_LANGUAGE_CODES.has(targetLang)
-          ? (targetLang as SupportedLanguageCode)
-          : 'en';
-
-      const textHash = crypto.createHash('sha1').update(cleanText).digest('hex').slice(0, 16);
-      const resolvedRef =
-        typeof contentRef === 'string' && contentRef.trim()
-          ? `${contentRef.trim()}_${textHash}`
-          : `ref_${textHash}`;
-
-      const cacheKey = `${resolvedRef}::${resolvedSourceLang}::${resolvedTargetLang}`;
-      const cacheDB = readTranslationCacheDB();
-
-      if (cacheDB[cacheKey] && cacheDB[cacheKey].originalTextHash === textHash) {
-        return res.json({
-          success: true,
-          cached: true,
-          cacheKey,
-          contentRef: resolvedRef,
-          detectedSourceLang: resolvedSourceLang,
-          detectedSourceName: detectedSource.englishName,
-          targetLang: resolvedTargetLang,
-          translatedText: cacheDB[cacheKey].translatedText
-        });
-      }
-
-      const translatedText = translateUserGeneratedText(
-        cleanText,
-        resolvedTargetLang,
-        resolvedSourceLang
-      );
-
-      cacheDB[cacheKey] = {
-        cacheKey,
-        contentRef: resolvedRef,
-        sourceLang: resolvedSourceLang,
-        targetLang: resolvedTargetLang,
-        originalTextHash: textHash,
-        translatedText,
-        cachedAt: new Date().toISOString()
-      };
-
-      // Bound cache size
-      const keys = Object.keys(cacheDB);
-      if (keys.length > 2000) {
-        delete cacheDB[keys[0]];
-      }
-      writeTranslationCacheDB(cacheDB);
-
-      return res.json({
-        success: true,
-        cached: false,
-        cacheKey,
-        contentRef: resolvedRef,
-        detectedSourceLang: resolvedSourceLang,
-        detectedSourceName: detectedSource.englishName,
-        targetLang: resolvedTargetLang,
-        translatedText
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Backend translation failed';
       return res.status(500).json({ success: false, error: msg });
     }
   });

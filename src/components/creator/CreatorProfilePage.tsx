@@ -6,7 +6,6 @@ import { SearchableCountrySelector } from '../discovery/DiscoveryFilterBar';
 import { CustomRequestModal } from '../requests/CustomRequestModal';
 import { SubscribeModal } from '../common/SubscribeModal';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
 import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   CheckCircle2, 
@@ -231,14 +230,11 @@ export const CreatorProfilePage: React.FC<CreatorProfilePageProps> = ({
                 </span>
               </div>
 
-              <TranslateContentButton
-                text={creator.bio || ''}
-                contentType="bio"
-                contentRef={`bio_${creator.id}`}
-                renderPrimaryText
-                textClassName="text-xs sm:text-sm text-neutral-300 max-w-xl leading-relaxed pt-1 break-words"
-                className="pt-1"
-              />
+              {creator.bio && (
+                <p className="text-xs sm:text-sm text-neutral-300 max-w-xl leading-relaxed pt-1 break-words">
+                  {creator.bio}
+                </p>
+              )}
             </div>
           </div>
 

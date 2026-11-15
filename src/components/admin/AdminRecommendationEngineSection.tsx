@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { CATEGORIES } from '../../data/mockData';
 import {
   Sparkles,
   Sliders,
@@ -36,7 +35,8 @@ export const AdminRecommendationEngineSection: React.FC = () => {
     adminToggleRecommendationExperimentPause,
     adminResetRecommendationWeightsToDefault,
     getRecommendedPosts,
-    resetFanRecommendations
+    resetFanRecommendations,
+    activeCategories
   } = useApp();
 
   const [subTab, setSubTab] = useState<'configuration' | 'analytics' | 'health'>('configuration');
@@ -146,7 +146,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
 
   // Top recommended categories performance
   const categoryBreakdown = useMemo(() => {
-    const categoriesList = CATEGORIES.filter(c => c !== 'All Categories');
+    const categoriesList = activeCategories.map(c => c.name);
     return categoriesList.map(cat => {
       const catPosts = posts.filter(p => p.categories?.includes(cat));
       const catEvents = engagementEvents.filter(e => e.category === cat);
@@ -162,7 +162,7 @@ export const AdminRecommendationEngineSection: React.FC = () => {
         totalAffinity: Math.round(totalAffinityAcrossFans)
       };
     }).sort((a, b) => b.totalAffinity - a.totalAffinity);
-  }, [posts, engagementEvents, fanInterestProfiles]);
+  }, [activeCategories, posts, engagementEvents, fanInterestProfiles]);
 
   // Live preview of For You and Free Posts top recommendations for currently selected Fan Persona
   const previewForYou = useMemo(() => getRecommendedPosts('for_you', { limit: 4 }), [getRecommendedPosts]);
@@ -689,8 +689,8 @@ export const AdminRecommendationEngineSection: React.FC = () => {
                 className="bg-[#18181f] border border-[#272730] rounded-xl px-3 py-1.5 text-white max-w-full min-w-0"
               >
                 <option value="all">All Categories</option>
-                {CATEGORIES.filter(c => c !== 'All Categories').map(c => (
-                  <option key={c} value={c}>{c}</option>
+                {activeCategories.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
             </div>

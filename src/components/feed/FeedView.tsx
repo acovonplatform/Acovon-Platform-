@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Post, FeedActivityFilterType, RecommendedPostResult } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { PostCard } from './PostCard';
 import { AdBanner } from '../ads/AdBanner';
 import { VerifiedBadge } from '../common/VerifiedBadge';
@@ -279,7 +278,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const userActiveStatuses = isCreator ? getActiveCreatorStatuses(currentUser.id) : [];
 
   const availableCategories = Array.from(
-    new Set(CATEGORIES.filter(c => c !== 'All Categories'))
+    new Set((activeCategories || []).map(c => c.name).filter(Boolean))
   );
 
   const handleToggleColdStartCategory = (cat: string) => {

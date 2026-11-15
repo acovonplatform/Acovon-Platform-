@@ -77,15 +77,13 @@ type AdminSectionId =
   | 'creator_applications'
   | 'recommendation_engine'
   | 'announcement_management'
-  | 'branding_studio'
-  | 'language_management';
+  | 'branding_studio';
 
 import { AdminCreatorVerificationSection } from './AdminCreatorVerificationSection';
 import { AdminCreatorApplicationsSection } from './AdminCreatorApplicationsSection';
 import { AdminRecommendationEngineSection } from './AdminRecommendationEngineSection';
 import { AdminAnnouncementManagementSection } from './AdminAnnouncementManagementSection';
 import { AdminBrandingStudioSection } from './AdminBrandingStudioSection';
-import { AdminLanguageManagementSection } from './AdminLanguageManagementSection';
 import { AdminCategoriesCountriesSection } from './AdminCategoriesCountriesSection';
 
 const ADMIN_ROLE_LABELS: Record<AdminPermissionLevel, { label: string; badgeClass: string; description: string }> = {
@@ -259,6 +257,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
     switchAdminOperator,
     logAdminAction,
     adminUpdateUserAccount,
+    adminForceConvertToCreator,
+    adminDeleteUserAccount,
     adminAddOrPromoteAdmin,
     adminUpdateCreatorControl,
     adminModeratePost,
@@ -290,8 +290,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
     activeBrandingTheme,
     hasBrandingPermission,
     toggleAdminBrandingPermission,
-    supportedLanguages,
-    activeLanguageCode,
+    activeCategories,
+    adminAddCategory,
+    adminDeleteCategory,
     refreshCreatorApplications
   } = useApp();
 
@@ -813,14 +814,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
       icon: Palette,
       badge: activeBrandingTheme.name,
       allowedRoles: ['super_admin', 'admin']
-    },
-    {
-      id: 'language_management',
-      num: '21',
-      label: 'Multilingual & i18n Studio',
-      icon: Globe,
-      badge: `${supportedLanguages.filter(l => l.enabled).length} (${activeLanguageCode.toUpperCase()})`,
-      allowedRoles: ['super_admin', 'admin']
     }
   ];
 
@@ -832,7 +825,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
     { key: 'moderator_clara', id: 'user_mod_1', name: 'Clara Vance', level: 'moderator' as AdminPermissionLevel },
     { key: 'admin_finance', id: 'user_admin_finance', name: 'Henrik Lindqvist', level: 'finance_admin' as AdminPermissionLevel },
     { key: 'admin_support', id: 'user_admin_support', name: 'Sophia Lin', level: 'support_admin' as AdminPermissionLevel }
-  ];
+  ].filter(op =>
+    Object.values(users).some(
+      u => u && (u.id === op.id) && (u.role === 'admin' || u.role === 'moderator' || Boolean(u.adminPermissionLevel))
+    )
+  );
 
   return (
     <div className="min-h-screen bg-[#09090b] text-[#f4f4f5]">
@@ -1785,6 +1782,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                                         Review App
                                       </button>
                                     )}
+                                    {u.role === 'fan' && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const res = await adminForceConvertToCreator(u.id);
+                                          if (res.success) {
+                                            notifyFeedback('success', `Converted ${u.name} (@${u.username}) to an active approved Creator automatically.`);
+                                          } else {
+                                            notifyFeedback('error', res.error || 'Could not convert user to Creator.');
+                                          }
+                                        }}
+                                        className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-300 rounded-lg cursor-pointer text-[11px] font-semibold"
+                                        title="Force-convert user to Creator and bypass application approval"
+                                      >
+                                        Make Creator
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => setSelectedUserDetailId(u.id)}
@@ -1849,6 +1863,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                                         Restore Account
                                       </button>
                                     )}
+                                    {hasAdminPermission(['super_admin', 'admin']) &&
+                                      u.id !== currentUser.id &&
+                                      (u.adminPermissionLevel !== 'super_admin' ||
+                                        activeAdminPermissionLevel === 'super_admin') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setConfirmDialog({
+                                              title: `Permanently Delete @${u.username}`,
+                                              description: `This permanently deletes ${u.name} (${u.email}) along with their creator profile, posts, stories, and creator applications. This action cannot be undone.`,
+                                              confirmLabel: 'Delete Account Permanently',
+                                              danger: true,
+                                              onConfirm: async () => {
+                                                const res = await adminDeleteUserAccount(u.id);
+                                                if (res.success) {
+                                                  if (selectedUserDetailId === u.id) {
+                                                    setSelectedUserDetailId(null);
+                                                  }
+                                                  notifyFeedback('success', `Permanently deleted account @${u.username}.`);
+                                                } else {
+                                                  notifyFeedback('error', res.error || 'Could not delete account.');
+                                                }
+                                              }
+                                            });
+                                          }}
+                                          className="px-2.5 py-1 bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-500/40 rounded-lg cursor-pointer text-[11px] flex items-center gap-1"
+                                          title="Permanently delete user account"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          <span>Delete</span>
+                                        </button>
+                                      )}
                                   </div>
                                 </td>
                               </tr>
@@ -1995,6 +2041,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                             </select>
                           </div>
                         )}
+                        {inspectedUser.role === 'fan' && (
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-neutral-400">Instant Creator Upgrade:</span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await adminForceConvertToCreator(inspectedUser.id);
+                                if (res.success) {
+                                  notifyFeedback(
+                                    'success',
+                                    `Force-converted ${inspectedUser.name} to an approved Creator (approval bypassed).`
+                                  );
+                                } else {
+                                  notifyFeedback('error', res.error || 'Could not convert user to Creator.');
+                                }
+                              }}
+                              className="px-3 py-1 rounded-lg bg-emerald-600/25 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-300 font-semibold cursor-pointer"
+                            >
+                              Make Creator (Bypass Approval)
+                            </button>
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-neutral-400">Verified Badge:</span>
                           <button
@@ -2036,6 +2104,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                             Ban Account
                           </button>
                         </div>
+                        {hasAdminPermission(['super_admin', 'admin']) &&
+                          inspectedUser.id !== currentUser.id &&
+                          (inspectedUser.adminPermissionLevel !== 'super_admin' ||
+                            activeAdminPermissionLevel === 'super_admin') && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#272730]">
+                              <span className="text-neutral-400">Permanent Deletion:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmDialog({
+                                    title: `Permanently Delete ${inspectedUser.name}`,
+                                    description: `Deletes ${inspectedUser.email}, creator profile, posts, stories, and creator applications permanently.`,
+                                    confirmLabel: 'Delete Account Permanently',
+                                    danger: true,
+                                    onConfirm: async () => {
+                                      const res = await adminDeleteUserAccount(inspectedUser.id);
+                                      if (res.success) {
+                                        setSelectedUserDetailId(null);
+                                        notifyFeedback('success', `Deleted account ${inspectedUser.name} permanently.`);
+                                      } else {
+                                        notifyFeedback('error', res.error || 'Could not delete account.');
+                                      }
+                                    }
+                                  });
+                                }}
+                                className="px-3 py-1 rounded-lg bg-rose-900/70 hover:bg-rose-800 border border-rose-500/40 text-rose-100 font-semibold cursor-pointer flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete Account</span>
+                              </button>
+                            </div>
+                          )}
                       </div>
 
                       {/* User Subscriptions */}
@@ -3974,32 +4074,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
 
               {/* Content, Video & Livestream Categories Management */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 text-xs">
-                {/* Creator / Content Categories */}
+                {/* Official Platform Categories (Live Taxonomy Synced Across Entire Platform) */}
                 <div className="bg-[#121216] border border-[#232329] rounded-2xl p-5 space-y-3">
-                  <div className="font-bold text-white">Creator &amp; Content Categories ({platformConfig.contentCategories.length})</div>
+                  <div className="font-bold text-white">Official Platform Categories ({activeCategories.length})</div>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={newCategoryInput}
                       onChange={e => setNewCategoryInput(e.target.value)}
-                      placeholder="Add content category..."
+                      placeholder="Add official category..."
                       className="flex-1 bg-[#18181f] border border-[#272730] rounded-lg px-3 py-1.5 text-white"
                     />
                     <button
-                      onClick={() => {
+                      type="button"
+                      onClick={async () => {
                         const clean = newCategoryInput.trim();
                         if (!clean) return;
-                        if (platformConfig.contentCategories.some(c => c.toLowerCase() === clean.toLowerCase())) {
-                          notifyFeedback('error', `Category "${clean}" already exists.`);
-                          return;
-                        }
-                        const res = updatePlatformConfig({
-                          contentCategories: [...platformConfig.contentCategories, clean]
-                        });
+                        const res = await adminAddCategory({ name: clean });
                         if (res.success) {
                           setNewCategoryInput('');
-                          notifyFeedback('success', 'Added content category.');
-                        } else notifyFeedback('error', res.error || 'Unauthorized');
+                          notifyFeedback('success', `Added official category "${clean}" across the entire platform.`);
+                        } else {
+                          notifyFeedback('error', res.error || 'Could not add category.');
+                        }
                       }}
                       className="px-3 py-1.5 bg-[#d4af37] text-black font-semibold rounded-lg cursor-pointer"
                     >
@@ -4007,16 +4104,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                    {Array.from(new Set(platformConfig.contentCategories)).map(cat => (
-                      <div key={cat} className="p-2 bg-[#18181f] rounded-lg flex items-center justify-between">
-                        <span className="text-neutral-200">{cat}</span>
+                    {activeCategories.map(cat => (
+                      <div key={cat.id} className="p-2 bg-[#18181f] rounded-lg flex items-center justify-between">
+                        <span className="text-neutral-200">{cat.name}</span>
                         <button
-                          onClick={() => {
-                            updatePlatformConfig({
-                              contentCategories: platformConfig.contentCategories.filter(c => c !== cat)
-                            });
+                          type="button"
+                          onClick={async () => {
+                            const res = await adminDeleteCategory(cat.id);
+                            if (res.success) {
+                              notifyFeedback('success', `Deleted category "${cat.name}" across the entire platform.`);
+                            } else {
+                              notifyFeedback('error', res.error || 'Could not delete category.');
+                            }
                           }}
                           className="text-neutral-500 hover:text-rose-400 cursor-pointer"
+                          title={`Delete ${cat.name} platform-wide`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -4465,11 +4567,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
                                       notifyFeedback('error', res.error || 'Permission denied.');
                                     }
                                   }}
-                                  className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/30 text-rose-300 rounded-xl cursor-pointer text-[11px] font-medium"
+                                  className="px-3 py-1.5 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/30 text-amber-300 rounded-xl cursor-pointer text-[11px] font-medium"
                                 >
                                   Demote Admin
                                 </button>
                               )}
+
+                              {!isSelf &&
+                                canManageAdmins &&
+                                (level !== 'super_admin' || activeAdminPermissionLevel === 'super_admin') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmDialog({
+                                        title: `Delete Administrator ${adm.name}`,
+                                        description: `Permanently deletes administrator account ${adm.email} and revokes all Control Panel, Creator, and authentication access. This cannot be undone.`,
+                                        confirmLabel: 'Delete Admin Permanently',
+                                        danger: true,
+                                        onConfirm: async () => {
+                                          const res = await adminDeleteUserAccount(adm.id);
+                                          if (res.success) {
+                                            notifyFeedback('success', `Deleted administrator account ${adm.email}.`);
+                                          } else {
+                                            notifyFeedback('error', res.error || 'Could not delete administrator account.');
+                                          }
+                                        }
+                                      });
+                                    }}
+                                    className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-200 rounded-xl cursor-pointer text-[11px] font-medium flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Delete Admin</span>
+                                  </button>
+                                )}
                             </div>
                           </div>
                         );
@@ -5147,13 +5277,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit, initialS
           ================================================================== */}
           {activeSection === 'branding_studio' && (
             <AdminBrandingStudioSection />
-          )}
-
-          {/* ==================================================================
-              SECTION 21: MULTILINGUAL & I18N MANAGEMENT STUDIO
-          ================================================================== */}
-          {activeSection === 'language_management' && (
-            <AdminLanguageManagementSection />
           )}
           </AdminSectionErrorBoundary>
         </div>

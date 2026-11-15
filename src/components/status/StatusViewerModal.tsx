@@ -7,7 +7,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { CreatorStatus } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 
 interface StatusViewerModalProps {
   initialCreatorId: string;
@@ -589,13 +589,9 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
                   onClick={(e) => e.stopPropagation()}
                   className="max-w-xs flex flex-col items-center gap-3 z-20"
                 >
-                  <TranslateContentButton
-                    text={resolvedTextContent}
-                    contentType="status"
-                    contentRef={`status_${currentStatus.id}`}
-                    renderPrimaryText
-                    textClassName="text-white font-serif text-xl sm:text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words"
-                  />
+                  <p data-ugc="true" className="text-white font-serif text-xl sm:text-2xl md:text-3xl leading-relaxed tracking-wide drop-shadow-lg break-words">
+                    {resolvedTextContent}
+                  </p>
                 </div>
                 <div className="mt-6 text-xs text-amber-200/80 font-mono uppercase tracking-widest">
                   ACOVON MOMENTS
@@ -642,17 +638,14 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({
               onClick={(e) => e.stopPropagation()}
               className="absolute bottom-0 inset-x-0 z-20 px-4 pt-3 pb-2 bg-gradient-to-t from-black/85 via-black/50 to-transparent text-white text-sm text-center leading-relaxed flex flex-col items-center"
             >
-              <TranslateContentButton
+              <CollapsibleDescriptionText
                 text={currentStatus.caption}
-                contentType="status"
-                contentRef={`status_caption_${currentStatus.id}`}
-                renderPrimaryText
-                collapsible
+                compact
                 linkify
+                resetKey={currentStatus.id}
                 variant="overlay"
                 maxExpandedHeightClass="max-h-[24vh] overflow-y-auto"
                 textClassName="drop-shadow-md font-medium max-w-sm mx-auto text-white"
-                compact
               />
             </div>
           )}

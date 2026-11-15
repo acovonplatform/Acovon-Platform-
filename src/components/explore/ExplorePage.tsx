@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CreatorProfile, Post } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import { matchesCategoryIdentifier, matchesCountryIdentifier } from '../../data/globalTaxonomy';
 import { DiscoveryFilterBar } from '../discovery/DiscoveryFilterBar';
 import { AdBanner } from '../ads/AdBanner';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
+import { CollapsibleDescriptionText } from '../common/CollapsibleDescriptionText';
 import { 
   Search, 
   Video, 
@@ -548,14 +547,11 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
                           </div>
                         </div>
 
-                        <TranslateContentButton
+                        <CollapsibleDescriptionText
                           text={post.content}
-                          contentType="post"
-                          contentRef={`explore_card_${post.id}`}
-                          renderPrimaryText
-                          collapsible
                           compact
                           linkify
+                          resetKey={post.id}
                           textClassName="text-xs text-neutral-300 leading-relaxed"
                         />
 
@@ -716,14 +712,11 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
 
             {/* Caption & Metadata */}
             <div className="p-5 space-y-3">
-              <TranslateContentButton
+              <CollapsibleDescriptionText
                 text={activePreviewPost.content}
-                contentType="post"
-                contentRef={`explore_preview_${activePreviewPost.id}`}
-                renderPrimaryText
-                collapsible
                 compact
                 linkify
+                resetKey={activePreviewPost.id}
                 maxExpandedHeightClass="max-h-[28vh] overflow-y-auto"
                 textClassName="text-sm text-neutral-200 leading-relaxed"
               />

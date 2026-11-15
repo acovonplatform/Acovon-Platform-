@@ -2,7 +2,6 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { useApp } from '../../context/AppContext';
 import { ChatAttachmentItem, CustomVideoRequest, ChatMessage } from '../../types';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { TranslateContentButton } from '../common/TranslateContentButton';
 import {
   uploadUserFileToSupabase,
   deleteSupabaseFileByPath
@@ -1537,18 +1536,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = '' }) =
 
                     {/* Message Caption / Description */}
                     {msg.content && (
-                      isMine ? (
-                        <p className="text-xs text-neutral-200 leading-relaxed">{msg.content}</p>
-                      ) : (
-                        <TranslateContentButton
-                          text={msg.content}
-                          contentType="message"
-                          contentRef={`msg_att_${msg.id}`}
-                          renderPrimaryText
-                          textClassName="text-xs text-neutral-200 leading-relaxed"
-                          compact
-                        />
-                      )
+                      <p data-ugc="true" className="text-xs text-neutral-200 leading-relaxed whitespace-pre-line break-words">
+                        {msg.content}
+                      </p>
                     )}
 
                     {/* Attachment Cards Grid */}
@@ -1758,19 +1748,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialRecipientId = '' }) =
                       className="w-full rounded-lg mb-1.5 object-cover max-h-52 cursor-pointer"
                     />
                   )}
-                  {isMine ? (
-                    <p data-ugc="true" className="leading-relaxed whitespace-pre-line">{msg.content}</p>
-                  ) : (
-                    msg.content && (
-                      <TranslateContentButton
-                        text={msg.content}
-                        contentType="message"
-                        contentRef={`msg_${msg.id}`}
-                        renderPrimaryText
-                        textClassName="leading-relaxed whitespace-pre-line"
-                        compact
-                      />
-                    )
+                  {msg.content && (
+                    <p data-ugc="true" className="leading-relaxed whitespace-pre-line break-words">
+                      {msg.content}
+                    </p>
                   )}
                   <div
                     className={`text-[10px] text-right flex items-center justify-end gap-1 ${

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { LivestreamAccessMode, CreatorProfile, RecordingMode, ReplayPermission } from '../../types';
-import { CATEGORIES } from '../../data/mockData';
 import {
   X,
   Radio,
@@ -31,7 +30,8 @@ export const CreateLivestreamModal: React.FC = () => {
     currentUser,
     activeRole,
     isCurrentUserApprovedCreator,
-    creators
+    creators,
+    activeCategories
   } = useApp();
 
   const isCreator =
@@ -51,7 +51,12 @@ export const CreateLivestreamModal: React.FC = () => {
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[1] || 'Fashion & Luxury');
+  const [category, setCategory] = useState(activeCategories[0]?.name || '');
+  useEffect(() => {
+    if (activeCategories.length > 0 && !activeCategories.some(c => c.name === category)) {
+      setCategory(activeCategories[0].name);
+    }
+  }, [activeCategories, category]);
   const [tagsInput, setTagsInput] = useState('LiveMasterclass, StudioBehindTheScenes');
   const [accessMode, setAccessMode] = useState<LivestreamAccessMode>('public');
   
@@ -493,8 +498,8 @@ export const CreateLivestreamModal: React.FC = () => {
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white focus:outline-none focus:border-[#d4af37]"
                 >
-                  {CATEGORIES.filter(c => c !== 'All Categories').map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                  {activeCategories.map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
                   ))}
                 </select>
               </div>
