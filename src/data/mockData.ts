@@ -52,127 +52,10 @@ export const INITIAL_COMMISSION_SETTINGS: CommissionSettings = {
   minWithdrawalAmount: 50.00
 };
 
-// Operational platform administrator accounts (zero pre-seeded wallet balances, no demo avatars)
-export const PLATFORM_ADMIN_ACCOUNTS: Record<string, User> = {
-  admin_root: {
-    id: 'user_admin_1',
-    name: 'Julian Sterling',
-    username: 'acovon_superadmin',
-    email: 'julian.sterling@acovon.com',
-    role: 'admin',
-    adminPermissionLevel: 'super_admin',
-    accountStatus: 'active',
-    avatar: '',
-    bio: 'ACOVON Super Administrator & Executive Director of Platform Operations.',
-    walletBalance: 0,
-    isVerified: true,
-    is18PlusConfirmed: true,
-    dateJoined: '2024-01-01',
-    country: 'Switzerland',
-    lastLoginAt: '',
-    adminPermissions: [
-      'all_privileges',
-      'manage_platform_branding',
-      'role_assignment',
-      'commission_control',
-      'payout_release',
-      'emergency_killswitch'
-    ]
-  },
-  admin_ops: {
-    id: 'user_admin_2',
-    name: 'Evelyn Cross',
-    username: 'evelyn_ops_admin',
-    email: 'evelyn.cross@acovon.com',
-    role: 'admin',
-    adminPermissionLevel: 'admin',
-    accountStatus: 'active',
-    avatar: '',
-    bio: 'Senior Platform Administrator — User, Creator & Content Operations.',
-    walletBalance: 0,
-    isVerified: true,
-    is18PlusConfirmed: true,
-    dateJoined: '2024-03-10',
-    country: 'United States',
-    lastLoginAt: '',
-    adminPermissions: [
-      'user_management',
-      'creator_management',
-      'content_management',
-      'live_management',
-      'promotions_management',
-      'manage_platform_branding'
-    ]
-  },
-  moderator_clara: {
-    id: 'user_mod_1',
-    name: 'Clara Vance',
-    username: 'clara_trust_safety',
-    email: 'moderation@acovon.com',
-    role: 'moderator',
-    adminPermissionLevel: 'moderator',
-    accountStatus: 'active',
-    avatar: '',
-    bio: 'Trust & Safety Moderator, Creator Identity & Compliance Lead.',
-    walletBalance: 0,
-    isVerified: true,
-    is18PlusConfirmed: true,
-    dateJoined: '2024-06-15',
-    country: 'United Kingdom',
-    lastLoginAt: '',
-    adminPermissions: [
-      'content_moderation',
-      'report_resolution',
-      'creator_verification',
-      'live_moderation'
-    ]
-  },
-  admin_finance: {
-    id: 'user_admin_finance',
-    name: 'Henrik Lindqvist',
-    username: 'henrik_treasury',
-    email: 'finance@acovon.com',
-    role: 'admin',
-    adminPermissionLevel: 'finance_admin',
-    accountStatus: 'active',
-    avatar: '',
-    bio: 'Finance & Treasury Administrator — Payouts, Escrow, Ledger Audits & Refunds.',
-    walletBalance: 0,
-    isVerified: true,
-    is18PlusConfirmed: true,
-    dateJoined: '2024-04-20',
-    country: 'Sweden',
-    lastLoginAt: '',
-    adminPermissions: [
-      'financial_ledger',
-      'payout_approval',
-      'refund_issuance',
-      'dispute_resolution'
-    ]
-  },
-  admin_support: {
-    id: 'user_admin_support',
-    name: 'Sophia Lin',
-    username: 'sophia_concierge',
-    email: 'support@acovon.com',
-    role: 'admin',
-    adminPermissionLevel: 'support_admin',
-    accountStatus: 'active',
-    avatar: '',
-    bio: 'Creator & Patron Support Lead — Dispute Concierge & Account Recovery.',
-    walletBalance: 0,
-    isVerified: true,
-    is18PlusConfirmed: true,
-    dateJoined: '2024-08-01',
-    country: 'Singapore',
-    lastLoginAt: '',
-    adminPermissions: [
-      'support_tickets',
-      'account_recovery',
-      'dispute_mediation'
-    ]
-  }
-};
+export const PLATFORM_OWNER_EMAIL = 'acovonplatform@gmail.com';
+
+// Operational platform administrator accounts (provisioned dynamically via owner login or Admin Team Management)
+export const PLATFORM_ADMIN_ACCOUNTS: Record<string, User> = {};
 
 export const MOCK_USERS: Record<string, User> = {};
 
@@ -316,7 +199,7 @@ export const INITIAL_VERIFICATION_SETTINGS: VerificationSettings = {
   isActive: true,
   isPublished: true,
   updatedAt: '2026-11-03 08:00:00',
-  updatedByAdmin: 'Julian Sterling (Super Admin)'
+  updatedByAdmin: 'Platform Owner (Super Admin)'
 };
 
 export const MOCK_CREATOR_VERIFICATION_RECORDS: CreatorVerificationRecord[] = [];

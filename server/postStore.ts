@@ -1115,6 +1115,48 @@ export class AuthoritativePostStore {
     return removedHere;
   }
 
+  updateCreatorMetadataOnPosts(
+    creatorId: string,
+    updates: { creatorName?: string; creatorUsername?: string; creatorAvatar?: string }
+  ): number {
+    if (!creatorId) return 0;
+    const db = this.readPostsDB();
+    let updatedCount = 0;
+
+    const patchPost = (post?: Post): boolean => {
+      if (!post || post.creatorId !== creatorId) return false;
+      let changed = false;
+      if (updates.creatorName !== undefined && updates.creatorName !== post.creatorName) {
+        post.creatorName = updates.creatorName;
+        changed = true;
+      }
+      if (updates.creatorUsername !== undefined && updates.creatorUsername !== post.creatorUsername) {
+        post.creatorUsername = updates.creatorUsername;
+        changed = true;
+      }
+      if (updates.creatorAvatar !== undefined && updates.creatorAvatar !== post.creatorAvatar) {
+        post.creatorAvatar = updates.creatorAvatar;
+        changed = true;
+      }
+      return changed;
+    };
+
+    for (const post of Object.values(db.createdPosts)) {
+      if (patchPost(post)) updatedCount += 1;
+    }
+    for (const post of Object.values(db.updatedPosts)) {
+      if (patchPost(post)) updatedCount += 1;
+    }
+    for (const post of Object.values(db.archivedPostsForPurchasers)) {
+      if (patchPost(post)) updatedCount += 1;
+    }
+
+    if (updatedCount > 0) {
+      this.writePostsDB(db);
+    }
+    return updatedCount;
+  }
+
   auditPostIntegrity(): PostAuditReport {
     const db = this.readPostsDB();
     const revDb = this.readRevisionsDB();

@@ -34,6 +34,7 @@ export interface User {
   creatorApprovedAt?: string;
   creatorRejectionReason?: string;
   avatar: string;
+  coverImage?: string;
   bio?: string;
   walletBalance: number;
   isVerified?: boolean;

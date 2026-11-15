@@ -12,7 +12,36 @@ import {
   User,
   UserRole
 } from '../src/types';
-import { isRemovedDemoAccount, PLATFORM_ADMIN_ACCOUNTS } from '../src/data/mockData';
+import { isRemovedDemoAccount, PLATFORM_OWNER_EMAIL } from '../src/data/mockData';
+
+const LEGACY_SEEDED_ADMIN_IDS = new Set([
+  'user_admin_1',
+  'user_admin_2',
+  'user_mod_1',
+  'user_admin_finance',
+  'user_admin_support',
+  'admin_root',
+  'admin_ops',
+  'moderator_clara',
+  'admin_finance',
+  'admin_support'
+]);
+
+const LEGACY_SEEDED_ADMIN_EMAILS = new Set([
+  'julian.sterling@acovon.com',
+  'evelyn.cross@acovon.com',
+  'clara.vance@acovon.com',
+  'henrik.lindqvist@acovon.com',
+  'sophia.lin@acovon.com',
+  'admin@acovon.com'
+]);
+
+function isLegacySeededAdminRecord(record?: { id?: string; email?: string } | null): boolean {
+  if (!record) return false;
+  const id = String(record.id || '').trim().toLowerCase();
+  const email = String(record.email || '').trim().toLowerCase();
+  return (id !== '' && LEGACY_SEEDED_ADMIN_IDS.has(id)) || (email !== '' && LEGACY_SEEDED_ADMIN_EMAILS.has(email));
+}
 
 export interface CreatorApplicationsDB {
   users: Record<string, User>;
@@ -234,23 +263,9 @@ export class AuthoritativeCreatorApplicationStore {
     }
   }
 
-  private createInitialDB(seedDefaults: boolean): CreatorApplicationsDB {
-    if (!seedDefaults) {
-      return {
-        users: {},
-        creators: [],
-        applications: [],
-        notifications: [],
-        auditLogs: [],
-        deletedUserIds: [],
-        updatedAt: new Date().toISOString()
-      };
-    }
-
-    const seededUsers: Record<string, User> = deepClone(PLATFORM_ADMIN_ACCOUNTS);
-
+  private createInitialDB(_seedDefaults: boolean): CreatorApplicationsDB {
     return {
-      users: seededUsers,
+      users: {},
       creators: [],
       applications: [],
       notifications: [],
@@ -284,7 +299,12 @@ export class AuthoritativeCreatorApplicationStore {
             ) {
               continue;
             }
-            if (isRemovedDemoAccount(u) || isRemovedDemoAccount({ id: k })) {
+            if (
+              isRemovedDemoAccount(u) ||
+              isRemovedDemoAccount({ id: k }) ||
+              isLegacySeededAdminRecord(u) ||
+              isLegacySeededAdminRecord({ id: k })
+            ) {
               purgedRemovedDemo = true;
               deletedSet.add(u.id.toLowerCase());
               deletedSet.add(k.toLowerCase());
@@ -299,7 +319,7 @@ export class AuthoritativeCreatorApplicationStore {
                 if (!c || !c.id) return false;
                 const cEmail = normalizeEmail(c.email);
                 if (deletedSet.has(c.id.toLowerCase()) || (cEmail && deletedSet.has(cEmail))) return false;
-                if (isRemovedDemoAccount(c)) {
+                if (isRemovedDemoAccount(c) || isLegacySeededAdminRecord(c)) {
                   purgedRemovedDemo = true;
                   deletedSet.add(c.id.toLowerCase());
                   if (cEmail) deletedSet.add(cEmail);
@@ -524,6 +544,7 @@ export class AuthoritativeCreatorApplicationStore {
     const username = user.username || app?.username || normalizeUsername(cleanEmail.split('@')[0]);
     const email = user.email || app?.email || `${username}@acovon.com`;
     const avatar = user.avatar || app?.avatar || app?.selfieUrl || DEFAULT_AVATAR;
+    const coverImage = user.coverImage || DEFAULT_COVER;
     const tierPrice = Number(appData?.monthlyTierPrice) > 0 ? Number(appData?.monthlyTierPrice) : 14.99;
     const category = appData?.category || 'Fashion & Luxury';
     const bio = appData?.bio || 'Official ACOVON verified creator.';
@@ -533,6 +554,9 @@ export class AuthoritativeCreatorApplicationStore {
     );
     const existingCreator = existingCreatorIdx >= 0 ? db.creators[existingCreatorIdx] : undefined;
 
+    const resolvedAvatar = existingCreator?.avatar || avatar || DEFAULT_AVATAR;
+    const resolvedCover = existingCreator?.coverImage || coverImage || DEFAULT_COVER;
+
     const creatorProfile: CreatorProfile = existingCreator
       ? {
           ...existingCreator,
@@ -540,7 +564,8 @@ export class AuthoritativeCreatorApplicationStore {
           name: existingCreator.name || displayName,
           username: existingCreator.username || username,
           email,
-          avatar: existingCreator.avatar || avatar,
+          avatar: resolvedAvatar,
+          coverImage: resolvedCover,
           bio: appData?.bio || existingCreator.bio || bio,
           category: appData?.category || existingCreator.category || category,
           role: 'creator',
@@ -560,8 +585,8 @@ export class AuthoritativeCreatorApplicationStore {
           name: displayName,
           username,
           email,
-          avatar,
-          coverImage: DEFAULT_COVER,
+          avatar: resolvedAvatar,
+          coverImage: resolvedCover,
           bio,
           category,
           role: 'creator',
@@ -622,6 +647,7 @@ export class AuthoritativeCreatorApplicationStore {
     username?: string;
     email: string;
     avatar?: string;
+    coverImage?: string;
     dateJoined?: string;
     country?: string;
     is18PlusConfirmed?: boolean;
@@ -642,7 +668,17 @@ export class AuthoritativeCreatorApplicationStore {
       email: cleanEmail
     });
 
-    const isRemoteAdmin = input.remoteRole === 'admin' || input.remoteRole === 'moderator' || Boolean(input.remoteAdminLevel);
+    const isPlatformOwner = cleanEmail === normalizeEmail(PLATFORM_OWNER_EMAIL);
+    const isRemoteAdmin =
+      isPlatformOwner ||
+      input.remoteRole === 'admin' ||
+      input.remoteRole === 'moderator' ||
+      Boolean(input.remoteAdminLevel);
+
+    const safeInputAvatar =
+      input.avatar && !input.avatar.startsWith('blob:') ? input.avatar : '';
+    const safeInputCover =
+      input.coverImage && !input.coverImage.startsWith('blob:') ? input.coverImage : '';
 
     if (existing) {
       const existingIsAdmin = isAdminUserRecord(existing.user);
@@ -652,11 +688,15 @@ export class AuthoritativeCreatorApplicationStore {
         !existingIsAdmin &&
         !promoteFromRemoteAdmin;
 
-      const resolvedAdminLevel: AdminPermissionLevel | undefined = promoteFromRemoteAdmin
+      const resolvedAdminLevel: AdminPermissionLevel | undefined = isPlatformOwner
+        ? 'super_admin'
+        : promoteFromRemoteAdmin
         ? (input.remoteAdminLevel || existing.user.adminPermissionLevel || (input.remoteRole === 'moderator' ? 'moderator' : 'admin'))
         : existing.user.adminPermissionLevel;
 
-      const resolvedRole: UserRole = promoteFromRemoteAdmin
+      const resolvedRole: UserRole = isPlatformOwner
+        ? 'admin'
+        : promoteFromRemoteAdmin
         ? (resolvedAdminLevel === 'moderator' ? 'moderator' : input.remoteRole === 'moderator' ? 'moderator' : 'admin')
         : existingIsAdmin
         ? existing.user.role
@@ -664,18 +704,32 @@ export class AuthoritativeCreatorApplicationStore {
         ? 'creator'
         : existing.user.role;
 
-      const resolvedAdminPermissions =
-        promoteFromRemoteAdmin && Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
-          ? [...input.remoteAdminPermissions]
-          : existing.user.adminPermissions || (resolvedAdminLevel ? getDefaultAdminPermissions(resolvedAdminLevel) : undefined);
+      const resolvedAdminPermissions = isPlatformOwner
+        ? getDefaultAdminPermissions('super_admin')
+        : promoteFromRemoteAdmin && Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
+        ? [...input.remoteAdminPermissions]
+        : existing.user.adminPermissions || (resolvedAdminLevel ? getDefaultAdminPermissions(resolvedAdminLevel) : undefined);
 
       const grantCreatorFields =
         resolvedRole === 'admin' || resolvedRole === 'moderator' || promoteFromRemoteCreator;
 
+      const matchedCreator = this.findCreatorProfile(db, { userId: existing.user.id, email: cleanEmail });
+      const preservedAvatar =
+        existing.user.avatar ||
+        matchedCreator?.avatar ||
+        safeInputAvatar ||
+        DEFAULT_AVATAR;
+      const preservedCover =
+        existing.user.coverImage ||
+        matchedCreator?.coverImage ||
+        safeInputCover ||
+        DEFAULT_COVER;
+
       const updatedUser: User = {
         ...existing.user,
         name: existing.user.name || (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
-        avatar: existing.user.avatar || input.avatar || DEFAULT_AVATAR,
+        avatar: preservedAvatar,
+        ...(preservedCover ? { coverImage: preservedCover } : {}),
         email: cleanEmail || existing.user.email,
         role: resolvedRole,
         ...(resolvedAdminLevel ? { adminPermissionLevel: resolvedAdminLevel } : {}),
@@ -705,11 +759,15 @@ export class AuthoritativeCreatorApplicationStore {
       ? `${baseUsername}_${crypto.randomBytes(2).toString('hex')}`
       : baseUsername;
 
-    const initialAdminLevel: AdminPermissionLevel | undefined = isRemoteAdmin
+    const initialAdminLevel: AdminPermissionLevel | undefined = isPlatformOwner
+      ? 'super_admin'
+      : isRemoteAdmin
       ? (input.remoteAdminLevel || (input.remoteRole === 'moderator' ? 'moderator' : 'admin'))
       : undefined;
 
-    const initialRole: UserRole = isRemoteAdmin
+    const initialRole: UserRole = isPlatformOwner
+      ? 'admin'
+      : isRemoteAdmin
       ? (initialAdminLevel === 'moderator' || input.remoteRole === 'moderator' ? 'moderator' : 'admin')
       : input.remoteRole === 'creator'
       ? 'creator'
@@ -722,13 +780,14 @@ export class AuthoritativeCreatorApplicationStore {
       name: (input.name || '').trim() || cleanEmail.split('@')[0] || 'Member',
       username: finalUsername,
       email: cleanEmail,
-      avatar: input.avatar || DEFAULT_AVATAR,
+      avatar: safeInputAvatar || DEFAULT_AVATAR,
+      ...(safeInputCover ? { coverImage: safeInputCover } : {}),
       role: initialRole,
       ...(initialAdminLevel ? { adminPermissionLevel: initialAdminLevel } : {}),
       ...(initialAdminLevel
         ? {
             adminPermissions:
-              Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
+              !isPlatformOwner && Array.isArray(input.remoteAdminPermissions) && input.remoteAdminPermissions.length > 0
                 ? [...input.remoteAdminPermissions]
                 : getDefaultAdminPermissions(initialAdminLevel)
           }
@@ -1205,6 +1264,8 @@ export class AuthoritativeCreatorApplicationStore {
         if (
           isRemovedDemoAccount(candidate) ||
           isRemovedDemoAccount({ id: key }) ||
+          isLegacySeededAdminRecord(candidate) ||
+          isLegacySeededAdminRecord({ id: key }) ||
           deletedSet.has(key.toLowerCase()) ||
           deletedSet.has(String(candidate.id).toLowerCase()) ||
           (cleanEmail && deletedSet.has(cleanEmail))
@@ -1224,6 +1285,7 @@ export class AuthoritativeCreatorApplicationStore {
         const cleanEmail = normalizeEmail(raw.email);
         if (
           isRemovedDemoAccount(raw) ||
+          isLegacySeededAdminRecord({ id: raw.userId, email: cleanEmail }) ||
           deletedSet.has(String(raw.userId).toLowerCase()) ||
           (cleanEmail && deletedSet.has(cleanEmail))
         ) {
@@ -2604,6 +2666,122 @@ export class AuthoritativeCreatorApplicationStore {
       user: deepClone(newUser),
       creatorProfile: deepClone(creatorProfile),
       promotedExisting: false
+    };
+  }
+
+  public updateUserProfileOnServer(
+    userId: string,
+    updates: Partial<User> & Partial<CreatorProfile> & { email?: string }
+  ):
+    | { ok: true; user?: User; creatorProfile?: CreatorProfile }
+    | { ok: false; statusCode: number; error: string } {
+    const cleanId = String(userId || '').trim();
+    if (!cleanId) {
+      return { ok: false, statusCode: 400, error: 'User ID is required.' };
+    }
+
+    const db = this.readDB();
+    const userEntry = this.findUserEntry(db, { userId: cleanId, email: updates.email });
+    const creatorIdx = db.creators.findIndex(
+      c => c.id === cleanId || (updates.email && normalizeEmail(c.email) === normalizeEmail(updates.email))
+    );
+
+    if (!userEntry && creatorIdx < 0) {
+      return { ok: false, statusCode: 404, error: `User "${cleanId}" not found.` };
+    }
+
+    const sanitizeMediaField = (val: unknown): string | undefined => {
+      if (val === undefined) return undefined;
+      const str = String(val || '').trim();
+      if (str.startsWith('blob:')) return undefined;
+      return str;
+    };
+
+    const nextAvatar = sanitizeMediaField(updates.avatar);
+    const nextCover = sanitizeMediaField(updates.coverImage);
+    const nextName = typeof updates.name === 'string' && updates.name.trim() ? updates.name.trim() : undefined;
+    const nextUsername =
+      typeof updates.username === 'string' && updates.username.trim()
+        ? normalizeUsername(updates.username)
+        : undefined;
+    const nextBio = typeof updates.bio === 'string' ? updates.bio : undefined;
+    const nextCountry = typeof updates.country === 'string' && updates.country.trim() ? updates.country.trim() : undefined;
+    const nextCategory = typeof updates.category === 'string' && updates.category.trim() ? updates.category.trim() : undefined;
+    const nowStr = formatShortTimestamp();
+    const nowIso = new Date().toISOString();
+
+    let updatedUser: User | undefined;
+    if (userEntry) {
+      updatedUser = {
+        ...userEntry.user,
+        ...(nextName !== undefined ? { name: nextName } : {}),
+        ...(nextUsername !== undefined ? { username: nextUsername } : {}),
+        ...(nextBio !== undefined ? { bio: nextBio } : {}),
+        ...(nextCountry !== undefined ? { country: nextCountry } : {}),
+        ...(nextAvatar !== undefined ? { avatar: nextAvatar } : {}),
+        ...(nextCover !== undefined ? { coverImage: nextCover } : {}),
+        ...(updates.socialLinks !== undefined ? { socialLinks: updates.socialLinks } : {}),
+        ...(Array.isArray(updates.categories) ? { categories: updates.categories } : {}),
+        updatedAt: nowStr
+      };
+      db.users[userEntry.key] = updatedUser;
+    }
+
+    let updatedCreator: CreatorProfile | undefined;
+    if (creatorIdx >= 0) {
+      const prevCreator = db.creators[creatorIdx];
+      updatedCreator = {
+        ...prevCreator,
+        ...(nextName !== undefined ? { name: nextName } : {}),
+        ...(nextUsername !== undefined ? { username: nextUsername } : {}),
+        ...(nextBio !== undefined ? { bio: nextBio } : {}),
+        ...(nextCountry !== undefined ? { country: nextCountry } : {}),
+        ...(nextCategory !== undefined ? { category: nextCategory } : {}),
+        ...(nextAvatar !== undefined ? { avatar: nextAvatar } : {}),
+        ...(nextCover !== undefined ? { coverImage: nextCover } : {}),
+        ...(updates.socialLinks !== undefined ? { socialLinks: updates.socialLinks } : {}),
+        ...(Array.isArray(updates.categories) ? { categories: updates.categories } : {}),
+        profileUpdatedAt: nowIso,
+        updatedAt: nowStr
+      };
+      db.creators[creatorIdx] = updatedCreator;
+    } else if (
+      updatedUser &&
+      (updatedUser.role === 'creator' || updatedUser.role === 'admin' || updatedUser.role === 'moderator')
+    ) {
+      updatedCreator = this.ensureCreatorProfile(db, updatedUser);
+      if (nextAvatar !== undefined) updatedCreator.avatar = nextAvatar;
+      if (nextCover !== undefined) updatedCreator.coverImage = nextCover;
+      if (nextBio !== undefined) updatedCreator.bio = nextBio;
+      if (nextCountry !== undefined) updatedCreator.country = nextCountry;
+      if (nextCategory !== undefined) updatedCreator.category = nextCategory;
+      if (updates.socialLinks !== undefined) updatedCreator.socialLinks = updates.socialLinks;
+      if (Array.isArray(updates.categories)) updatedCreator.categories = updates.categories;
+      updatedCreator.profileUpdatedAt = nowIso;
+    }
+
+    // Keep application display snapshots consistent if avatar changed
+    if (nextAvatar !== undefined || nextName !== undefined || nextUsername !== undefined) {
+      const targetEmail = normalizeEmail(updatedUser?.email || updatedCreator?.email || updates.email);
+      db.applications = db.applications.map(app => {
+        const matches = app.userId === cleanId || (targetEmail && normalizeEmail(app.email) === targetEmail);
+        if (!matches) return app;
+        return {
+          ...app,
+          ...(nextAvatar !== undefined ? { avatar: nextAvatar } : {}),
+          ...(nextName !== undefined ? { name: nextName } : {}),
+          ...(nextUsername !== undefined ? { username: nextUsername } : {})
+        };
+      });
+    }
+
+    this.writeDB(db);
+    const safeUser = updatedUser ? deepClone(updatedUser) : undefined;
+    if (safeUser) delete safeUser.passwordHash;
+    return {
+      ok: true,
+      user: safeUser,
+      creatorProfile: updatedCreator ? deepClone(updatedCreator) : undefined
     };
   }
 }
